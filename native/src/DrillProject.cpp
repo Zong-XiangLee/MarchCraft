@@ -14,6 +14,7 @@
 #include <QPageSize>
 #include <QPdfWriter>
 #include <QPolygonF>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QSqlDatabase>
@@ -120,6 +121,94 @@ QVector<QPointF> equalDistancePoints(const QVector<QPointF> &path, int count, bo
         const double t = qFuzzyIsNull(length) ? 0.0 : (target - start) / length;
         result.push_back(work[segment - 1] + (work[segment] - work[segment - 1]) * t);
     }
+    return result;
+}
+
+double polylineLength(const QVector<QPointF> &path, bool closed = false)
+{
+    if (path.size() < 2) return 0.0;
+    double result = 0.0;
+    for (int i = 1; i < path.size(); ++i)
+        result += std::hypot(path[i].x() - path[i - 1].x(), path[i].y() - path[i - 1].y());
+    if (closed && path.first() != path.last())
+        result += std::hypot(path.first().x() - path.last().x(), path.first().y() - path.last().y());
+    return result;
+}
+
+QVector<QPointF> uniformlySampledPath(const QVector<QPointF> &path, bool closed, double spacing)
+{
+    const double length = polylineLength(path, closed);
+    if (path.size() < 2 || length <= 0.0) return path;
+    const int count = qBound(2, qCeil(length / qMax(0.05, spacing)) + (closed ? 0 : 1), 2048);
+    QVector<QPointF> sampled = equalDistancePoints(path, count, closed);
+    if (closed && !sampled.isEmpty()) sampled.push_back(sampled.first());
+    return sampled;
+}
+
+QVector<QPointF> smoothedStroke(const QVector<QPointF> &path, bool closed, int passes)
+{
+    if (path.size() < 3 || passes <= 0) return path;
+    QVector<QPointF> result = path;
+    const bool duplicatedEndpoint = closed && result.first() == result.last();
+    if (duplicatedEndpoint) result.removeLast();
+    for (int pass = 0; pass < passes; ++pass) {
+        QVector<QPointF> next = result;
+        for (int i = 0; i < result.size(); ++i) {
+            if (!closed && (i == 0 || i == result.size() - 1)) continue;
+            const QPointF &previous = result[(i - 1 + result.size()) % result.size()];
+            const QPointF &following = result[(i + 1) % result.size()];
+            next[i] = previous * 0.2 + result[i] * 0.6 + following * 0.2;
+        }
+        result = std::move(next);
+    }
+    if (duplicatedEndpoint && !result.isEmpty()) result.push_back(result.first());
+    return result;
+}
+
+QVector<QPointF> rectanglePerimeterPoints(const QVector<QPointF> &path, int count)
+{
+    if (path.size() < 5 || count < 4) return {};
+    QVector<QPointF> corners{path[0], path[1], path[2], path[3]};
+    QVector<double> lengths(4); double perimeter = 0.0;
+    for (int side = 0; side < 4; ++side) {
+        lengths[side] = std::hypot(corners[(side + 1) % 4].x() - corners[side].x(),
+                                   corners[(side + 1) % 4].y() - corners[side].y());
+        perimeter += lengths[side];
+    }
+    if (perimeter <= 0.0) return {};
+    const int extras = count - 4;
+    QVector<int> interior(4);
+    QVector<double> fractional(4);
+    int assigned = 0;
+    for (int side = 0; side < 4; ++side) {
+        const double exact = extras * lengths[side] / perimeter;
+        interior[side] = qFloor(exact);
+        fractional[side] = exact - interior[side];
+        assigned += interior[side];
+    }
+    while (assigned < extras) {
+        int best = 0;
+        for (int side = 1; side < 4; ++side)
+            if (fractional[side] > fractional[best]) best = side;
+        ++interior[best]; fractional[best] = -1.0; ++assigned;
+    }
+    QVector<QPair<double, QPointF>> ordered;
+    double distance = 0.0;
+    for (int side = 0; side < 4; ++side) {
+        ordered.push_back({distance, corners[side]});
+        const QPointF delta = corners[(side + 1) % 4] - corners[side];
+        for (int item = 1; item <= interior[side]; ++item) {
+            const double t = double(item) / (interior[side] + 1);
+            ordered.push_back({distance + lengths[side] * t, corners[side] + delta * t});
+        }
+        distance += lengths[side];
+    }
+    std::sort(ordered.begin(), ordered.end(), [](const auto &left, const auto &right) {
+        return left.first < right.first;
+    });
+    QVector<QPointF> result;
+    result.reserve(count);
+    for (const auto &entry : ordered) result.push_back(entry.second);
     return result;
 }
 
@@ -1447,7 +1536,7 @@ QVariantMap DrillProject::selectionMetrics() const
 void DrillProject::newProject()
 {
     m_analyticsValid = false;
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     beginResetModel();
     m_performers.clear();
     m_sets = {DrillSet{}};
@@ -1487,7 +1576,7 @@ void DrillProject::newProject()
 
 void DrillProject::loadDemo()
 {
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     if (QFile::exists(QStringLiteral(":/samples/coordinates.json"))) {
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
@@ -1579,6 +1668,10 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
     }
 
     beginResetModel();
+    // Coordinate sheets begin at a zero-count first set. A written hold is a
+    // following set at the same coordinate, with that row's count value.
+    m_openingBehavior = QStringLiteral("move");
+    m_openingCounts = 8;
     m_performers.clear();
     m_sets.clear();
     m_archivedSets.clear();
@@ -2323,9 +2416,27 @@ void DrillProject::moveSet(int from,int to)
     commitSnapshot(before, QStringLiteral("Reorder sets"));
 }
 
+bool DrillProject::setLabelsNeedRenumbering() const
+{
+    int full = 0, subset = 0;
+    for (const auto &set : m_sets) {
+        QString expected;
+        if (!set.subset) {
+            ++full;
+            subset = 0;
+            expected = QString::number(full);
+        } else {
+            ++subset;
+            expected = QString::number(qMax(1, full)) + QChar('A' + qMin(25, subset - 1));
+        }
+        if (set.number.trimmed() != expected) return true;
+    }
+    return false;
+}
+
 void DrillProject::renumberSets()
 {
-    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
+    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){const QString oldNumber=set.number;if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}const QString oldDefault=QStringLiteral("Set %1").arg(oldNumber);if(set.activeVariant().name==oldDefault||set.activeVariant().name==QStringLiteral("New set")||QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"),QRegularExpression::CaseInsensitiveOption).match(set.activeVariant().name).hasMatch())set.activeVariant().name=QStringLiteral("Set %1").arg(set.number);}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
 }
 
 void DrillProject::removeCurrentSet()
@@ -2457,7 +2568,10 @@ void DrillProject::updateCurrentSet(const QString &number, const QString &name,
     const auto before = toJson();
     auto &set = m_sets[m_currentSet];
     set.number = number.trimmed().isEmpty() ? QString::number(m_currentSet + 1) : number.trimmed();
-    set.activeVariant().name = name.trimmed();
+    const QString requestedName = name.trimmed();
+    set.activeVariant().name = requestedName.isEmpty()
+        || QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"), QRegularExpression::CaseInsensitiveOption).match(requestedName).hasMatch()
+        ? QStringLiteral("Set %1").arg(set.number) : requestedName;
     set.activeVariant().caption = caption.trimmed();
     set.measure = measure.trimmed();
     if (m_currentSet == 0) {
@@ -3203,7 +3317,11 @@ void DrillProject::createFormation(const QString &type, const QVariantMap &optio
         path = placements;
     } else return;
     fitPathToField(path, center, canvasMinX(), canvasMaxX(), canvasMinY(), canvasMaxY());
-    if (placements.isEmpty()) placements = equalDistancePoints(path, selected.size(), closed);
+    if (placements.isEmpty()) {
+        placements = kind == QStringLiteral("rectangle")
+            ? rectanglePerimeterPoints(path, selected.size()) : QVector<QPointF>{};
+        if (placements.isEmpty()) placements = equalDistancePoints(path, selected.size(), closed);
+    }
     else {
         QPointF ignored = values.contains(QStringLiteral("centerX")) ? QPointF(values.value(QStringLiteral("centerX")).toDouble(), values.value(QStringLiteral("centerY")).toDouble()) : center;
         fitPathToField(placements, ignored, canvasMinX(), canvasMaxX(), canvasMinY(), canvasMaxY()); path = placements; center = ignored;
@@ -3417,29 +3535,40 @@ void DrillProject::createFreehandFormation(const QVariantList &values, const QSt
 {
     if(m_currentSet<0||selectedCount()<1||values.size()<2)return;
     QVector<QPointF> path;path.reserve(values.size());
-    for(const auto&value:values){const QPointF point=clampPosition(value.toPointF());if(path.isEmpty()||std::hypot(point.x()-path.last().x(),point.y()-path.last().y())>=0.2)path.push_back(point);}
+    for(const auto&value:values){const QPointF point=clampPosition(value.toPointF());if(path.isEmpty()||std::hypot(point.x()-path.last().x(),point.y()-path.last().y())>=0.05)path.push_back(point);}
     if(path.size()<2)return;
-    double total=0.0;for(int i=1;i<path.size();++i)total+=std::hypot(path[i].x()-path[i-1].x(),path[i].y()-path[i-1].y());
-    bool closed=std::hypot(path.first().x()-path.last().x(),path.first().y()-path.last().y())<qMax(1.5,total*0.08);
+    double total=polylineLength(path);
+    // A long, complex stroke must not become a closed loop merely because its
+    // endpoints happen to be several steps apart. Use a local-sized closure
+    // tolerance, then normalize the input so mouse event frequency cannot
+    // change recognition or smoothing.
+    const double closureTolerance=qMin(2.0,qMax(0.65,total*0.025));
+    bool closed=path.size()>=4&&std::hypot(path.first().x()-path.last().x(),path.first().y()-path.last().y())<=closureTolerance;
+    path=uniformlySampledPath(path,closed,0.22);
+    total=polylineLength(path,closed);
     QString recognized=QStringLiteral("freehand");
     if(recognitionMode==QStringLiteral("auto")||recognitionMode==QStringLiteral("straighten")){
         const double direct=std::hypot(path.first().x()-path.last().x(),path.first().y()-path.last().y());
-        if(!closed&&total>0&&direct/total>0.94){path={path.first(),path.last()};recognized=QStringLiteral("line");}
+        if(!closed&&total>0&&direct/total>0.965){path={path.first(),path.last()};recognized=QStringLiteral("line");}
         else if(closed&&recognitionMode==QStringLiteral("auto")){
-            QPointF center;for(const auto&p:path)center+=p;center/=path.size();double mean=0.0;for(const auto&p:path)mean+=std::hypot(p.x()-center.x(),p.y()-center.y());mean/=path.size();double variance=0.0;for(const auto&p:path){const double r=std::hypot(p.x()-center.x(),p.y()-center.y());variance+=(r-mean)*(r-mean);}variance/=path.size();
+            QPointF center;const int uniqueCount=path.first()==path.last()?path.size()-1:path.size();for(int i=0;i<uniqueCount;++i)center+=path[i];center/=uniqueCount;double mean=0.0;for(int i=0;i<uniqueCount;++i)mean+=std::hypot(path[i].x()-center.x(),path[i].y()-center.y());mean/=uniqueCount;double variance=0.0;for(int i=0;i<uniqueCount;++i){const double r=std::hypot(path[i].x()-center.x(),path[i].y()-center.y());variance+=(r-mean)*(r-mean);}variance/=uniqueCount;
             if(mean>1&&std::sqrt(variance)/mean<0.18){path.clear();for(int i=0;i<=128;++i){const double a=2*std::numbers::pi*i/128.0;path.push_back(center+QPointF(std::cos(a)*mean,std::sin(a)*mean));}recognized=QStringLiteral("circle");}
         }
     }
     if(recognized==QStringLiteral("freehand")&&recognitionMode!=QStringLiteral("preserve")){
-        for(int pass=0;pass<2;++pass){QVector<QPointF> smooth;if(!closed)smooth.push_back(path.first());for(int i=0;i<path.size()-1;++i){smooth.push_back(path[i]*0.75+path[i+1]*0.25);smooth.push_back(path[i]*0.25+path[i+1]*0.75);}if(!closed)smooth.push_back(path.last());path=std::move(smooth);}
+        path=smoothedStroke(path,closed,recognitionMode==QStringLiteral("smooth")?3:2);
+        path=uniformlySampledPath(path,closed,0.18);
     }
     QVector<int> selected;for(int i=0;i<m_performers.size();++i)if(m_performers[i].selected)selected.push_back(i);
     QVector<QPointF> targets=equalDistancePoints(path,selected.size(),closed);if(targets.size()!=selected.size())return;
     if(selected.size()>1){double minimum=1e9;for(int i=0;i<targets.size();++i)for(int j=i+1;j<targets.size();++j)minimum=qMin(minimum,std::hypot(targets[i].x()-targets[j].x(),targets[i].y()-targets[j].y()));if(minimum<1.5&&minimum>0){QPointF center;for(const auto&p:path)center+=p;center/=path.size();const double scale=qMin(4.0,1.5/minimum);for(auto&p:path)p=center+(p-center)*scale;fitPathToField(path,center,canvasMinX(),canvasMaxX(),canvasMinY(),canvasMaxY());targets=equalDistancePoints(path,selected.size(),closed);}}
     // Avoid unselected performers by translating the complete drawing to the
     // clearest nearby location. This retains the hand-drawn geometry.
-    QPointF bestOffset;double bestScore=-1e9;
-    for(double dy=-8;dy<=8;dy+=2)for(double dx=-8;dx<=8;dx+=2){double clearance=1000;bool inside=true;for(const auto&t:targets){const QPointF candidate=t+QPointF(dx,dy);if(candidate.x()<canvasMinX()||candidate.x()>canvasMaxX()||candidate.y()<canvasMinY()||candidate.y()>canvasMaxY()){inside=false;break;}for(int row=0;row<m_performers.size();++row)if(!m_performers[row].selected&&m_performers[row].visible){const QPointF p=placementAt(row,m_currentSet).position;clearance=qMin(clearance,std::hypot(candidate.x()-p.x(),candidate.y()-p.y()));}}if(!inside)continue;const double score=qMin(clearance,8.0)-0.08*std::hypot(dx,dy);if(score>bestScore){bestScore=score;bestOffset={dx,dy};}}
+    auto clearanceAt=[&](const QPointF &offset){double clearance=1000;for(const auto&t:targets){const QPointF candidate=t+offset;if(candidate.x()<canvasMinX()||candidate.x()>canvasMaxX()||candidate.y()<canvasMinY()||candidate.y()>canvasMaxY())return -1.0;for(int row=0;row<m_performers.size();++row)if(!m_performers[row].selected&&m_performers[row].visible){const QPointF p=placementAt(row,m_currentSet).position;clearance=qMin(clearance,std::hypot(candidate.x()-p.x(),candidate.y()-p.y()));}}return clearance;};
+    QPointF bestOffset;const double originalClearance=clearanceAt({});double bestScore=originalClearance;
+    // Keep accurate strokes exactly where they were drawn. Only search for a
+    // nearby translation when the original destinations actually collide.
+    if(originalClearance>=0.0&&originalClearance<1.5)for(double dy=-6;dy<=6;dy+=1)for(double dx=-6;dx<=6;dx+=1){const QPointF offset{dx,dy};const double clearance=clearanceAt(offset);if(clearance<0)continue;const double score=qMin(clearance,6.0)-0.35*std::hypot(dx,dy);if(score>bestScore+0.05){bestScore=score;bestOffset=offset;}}
     for(auto&p:path)p+=bestOffset;for(auto&p:targets)p+=bestOffset;
     const QVector<int> assignment = assignedTargetIndices(selected, targets, closed, movementMode);
     const auto before=toJson();auto&variant=m_sets[m_currentSet].activeVariant();QSet<QString> selectedIds;for(int row:selected)selectedIds.insert(m_performers[row].id);QSet<QString> replacedGroups;
