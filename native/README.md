@@ -5,7 +5,7 @@ MarchCraft is a native marching-band drill editor prototype written in C++20 wit
 Version 0.6 expands the offline Drill Clinic with path-sampled performer, instrument,
 and moving-prop clearance checks plus previewable fixes. It also adds live set-card
 reordering with insertion feedback and timing reconstruction, and configurable opening
-sets that either hold for a chosen number of counts or begin moving immediately.
+sets whose counts match coordinate-sheet rows; a hold is represented by consecutive sets with identical coordinates.
 Formation and freehand optimization still run in the background and require an explicit
 Apply action before project data changes.
 
@@ -25,7 +25,7 @@ Apply action before project data changes.
 - Persisted colored-symbol, compact-dot, and black-dot marker presets with adjustable sizing
 - Constant-speed arc-length playback with uninterrupted whole-show timing
 - Tabbed performer/field configuration, optional step grid, step/yard display units, shape resize/rotation handles, and a live horizontally draggable set timeline with an insertion marker
-- Opening-set hold counts are configurable independently from the first moving transition; “move immediately” remains available for shows that begin in motion
+- New and imported shows begin with a zero-count opening set, matching coordinate sheets. Optional legacy opening holds remain available; ordinary holds use consecutive identical-coordinate sets.
 - Freehand formation drawing for letters and organic forms, with cleanup/recognition, equal-spacing distribution, collision-aware placement, and shortest/balanced/expressive move assignment
 - High-school, college, professional, and indoor field geometry
 - Native MIDI/MusicXML measure, meter, tempo, and track import; compact music timeline; bundled FluidSynth MIDI playback; anchored rehearsal audio

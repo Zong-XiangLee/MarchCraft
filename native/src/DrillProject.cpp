@@ -14,6 +14,7 @@
 #include <QPageSize>
 #include <QPdfWriter>
 #include <QPolygonF>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QSqlDatabase>
@@ -1447,7 +1448,7 @@ QVariantMap DrillProject::selectionMetrics() const
 void DrillProject::newProject()
 {
     m_analyticsValid = false;
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     beginResetModel();
     m_performers.clear();
     m_sets = {DrillSet{}};
@@ -1487,7 +1488,7 @@ void DrillProject::newProject()
 
 void DrillProject::loadDemo()
 {
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     if (QFile::exists(QStringLiteral(":/samples/coordinates.json"))) {
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
@@ -1579,6 +1580,10 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
     }
 
     beginResetModel();
+    // Coordinate sheets begin at a zero-count first set. A written hold is a
+    // following set at the same coordinate, with that row's count value.
+    m_openingBehavior = QStringLiteral("move");
+    m_openingCounts = 8;
     m_performers.clear();
     m_sets.clear();
     m_archivedSets.clear();
@@ -2323,9 +2328,27 @@ void DrillProject::moveSet(int from,int to)
     commitSnapshot(before, QStringLiteral("Reorder sets"));
 }
 
+bool DrillProject::setLabelsNeedRenumbering() const
+{
+    int full = 0, subset = 0;
+    for (const auto &set : m_sets) {
+        QString expected;
+        if (!set.subset) {
+            ++full;
+            subset = 0;
+            expected = QString::number(full);
+        } else {
+            ++subset;
+            expected = QString::number(qMax(1, full)) + QChar('A' + qMin(25, subset - 1));
+        }
+        if (set.number.trimmed() != expected) return true;
+    }
+    return false;
+}
+
 void DrillProject::renumberSets()
 {
-    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
+    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){const QString oldNumber=set.number;if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}const QString oldDefault=QStringLiteral("Set %1").arg(oldNumber);if(set.activeVariant().name==oldDefault||set.activeVariant().name==QStringLiteral("New set")||QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"),QRegularExpression::CaseInsensitiveOption).match(set.activeVariant().name).hasMatch())set.activeVariant().name=QStringLiteral("Set %1").arg(set.number);}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
 }
 
 void DrillProject::removeCurrentSet()
@@ -2457,7 +2480,10 @@ void DrillProject::updateCurrentSet(const QString &number, const QString &name,
     const auto before = toJson();
     auto &set = m_sets[m_currentSet];
     set.number = number.trimmed().isEmpty() ? QString::number(m_currentSet + 1) : number.trimmed();
-    set.activeVariant().name = name.trimmed();
+    const QString requestedName = name.trimmed();
+    set.activeVariant().name = requestedName.isEmpty()
+        || QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"), QRegularExpression::CaseInsensitiveOption).match(requestedName).hasMatch()
+        ? QStringLiteral("Set %1").arg(set.number) : requestedName;
     set.activeVariant().caption = caption.trimmed();
     set.measure = measure.trimmed();
     if (m_currentSet == 0) {
