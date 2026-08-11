@@ -253,25 +253,8 @@ Item {
             }
         }
 
-        // Four vertical one-yard inserts in every five-yard interval at each sideline.
-        Repeater3D {
-            model: root.insertColumnCount * 2
-            delegate: Model {
-                required property int index
-                readonly property int column: index % root.insertColumnCount
-                readonly property bool backSide: index >= root.insertColumnCount
-                readonly property real markLength: 24.0 / 22.5
-                source: "#Cube"
-                 position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
-                                      backSide
-                                      ? -drillProject.fieldDepthSteps / 2 + markLength / 2
-                                      : drillProject.fieldDepthSteps / 2 - markLength / 2)
-                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
-                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
-            }
-        }
-
-        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
+        // Four vertical one-yard inserts in every five-yard interval on each hash row.
+        // They extend outward so the hashes are on their closest, inward ends.
         Repeater3D {
             model: root.insertColumnCount * 2
             delegate: Model {
@@ -279,8 +262,28 @@ Item {
                 readonly property int column: index % root.insertColumnCount
                 readonly property bool backHash: index >= root.insertColumnCount
                 readonly property real markLength: 24.0 / 22.5
+                readonly property real hashZ: drillProject.fieldDepthSteps / 2
+                                                   - (backHash ? drillProject.backHashSteps
+                                                               : drillProject.frontHashSteps)
                 source: "#Cube"
                  position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
+                                      hashZ + (backHash ? -markLength / 2 : markLength / 2))
+                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
+                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
+            }
+        }
+
+        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
+        Repeater3D {
+            model: (Math.floor(drillProject.fieldWidthSteps / 8) + 1) * 2
+            delegate: Model {
+                required property int index
+                readonly property int yardLineCount: Math.floor(drillProject.fieldWidthSteps / 8) + 1
+                readonly property int yardLine: index % yardLineCount
+                readonly property bool backHash: index >= yardLineCount
+                readonly property real markLength: 24.0 / 22.5
+                source: "#Cube"
+                 position: Qt.vector3d(yardLine * 8 - 80, 0.012,
                                       drillProject.fieldDepthSteps / 2
                                       - (backHash ? drillProject.backHashSteps
                                                   : drillProject.frontHashSteps))
