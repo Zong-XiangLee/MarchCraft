@@ -58,6 +58,14 @@ Item {
                                  : drillProject.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
         }
 
+        HumanGeometry {
+            id: sharedHumanGeometry
+            detailLevel: drillProject.graphicsProfile === "presentation" ? 0
+                       : drillProject.graphicsProfile === "performance" ? 2
+                       : drillProject.graphicsProfile === "automatic"
+                         ? (drillProject.performerCount > 150 ? 1 : 0) : 1
+        }
+
         Node {
             id: cameraOrigin
             eulerRotation: root.cameraBaseRotation
@@ -309,11 +317,16 @@ Item {
                 required property string equipmentAssetId
                 required property real performerHeightMeters
                 required property real setDistance
+                required property real travelHeading
+                required property real travelStepsPerCount
+                required property string locomotionMode
+                required property real gaitPhase
                 position: Qt.vector3d(fieldX - 80, 0,
                                       drillProject.fieldDepthSteps / 2 - fieldY)
                 eulerRotation.y: -facing
 
-                Mannequin3D {
+                HumanPerformer3D {
+                    geometrySource: sharedHumanGeometry
                     metersPerStep: drillProject.metersPerStep
                     heightMeters: performerNode.performerHeightMeters
                     uniformColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
@@ -322,8 +335,11 @@ Item {
                     instrumentAssetId: performerNode.instrumentAssetId
                     equipmentAssetId: performerNode.equipmentAssetId
                     selected: performerNode.isSelected
-                    marching: performerNode.setDistance > 0.01 && drillProject.playbackActive
-                    animationPhase: drillProject.playhead * Math.max(1, drillProject.currentSetCounts) * Math.PI
+                    marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
+                    gaitPhase: performerNode.gaitPhase
+                    transitionProgress: drillProject.playhead
+                    travelStepsPerCount: performerNode.travelStepsPerCount
+                    locomotionMode: performerNode.locomotionMode
                     debugOverlay: drillProject.debug3D
                 }
             }

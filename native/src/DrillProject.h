@@ -136,6 +136,10 @@ public:
         FacingRole,
         SelectedRole,
         SetDistanceRole,
+        TravelHeadingRole,
+        TravelStepsPerCountRole,
+        LocomotionModeRole,
+        GaitPhaseRole,
         TotalDistanceRole,
         WarningRole,
         VisibleRole,
@@ -483,6 +487,7 @@ private:
     MarchCraft::Placement placementAt(int performerIndex, int setIndex) const;
     QPointF interpolatedPosition(int performerIndex) const;
     double interpolatedFacing(int performerIndex) const;
+    MarchCraft::AnimationState animationStateAt(int performerIndex) const;
     QPointF pathPosition(int performerIndex, int destinationSet, double progress) const;
     double pathDistance(int performerIndex, int destinationSet) const;
     double transitionDistance(int performerIndex, int destinationSet) const;

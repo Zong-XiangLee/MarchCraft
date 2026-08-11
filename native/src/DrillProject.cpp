@@ -37,6 +37,7 @@
 #include <utility>
 
 using MarchCraft::DrillSet;
+using MarchCraft::AnimationState;
 using MarchCraft::Performer;
 using MarchCraft::Placement;
 
@@ -672,6 +673,10 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
+    case TravelHeadingRole: return animationStateAt(index.row()).travelDirectionDegrees;
+    case TravelStepsPerCountRole: return animationStateAt(index.row()).travelStepsPerCount;
+    case LocomotionModeRole: return animationStateAt(index.row()).locomotion;
+    case GaitPhaseRole: return animationStateAt(index.row()).normalizedTime;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
@@ -729,7 +734,10 @@ QHash<int, QByteArray> DrillProject::roleNames() const
             {ColorRole, "performerColor"}, {NotesRole, "notes"}, {XRole, "fieldX"},
             {YRole, "fieldY"}, {FromXRole, "fromX"}, {FromYRole, "fromY"},
             {FacingRole, "facing"}, {SelectedRole, "isSelected"},
-            {SetDistanceRole, "setDistance"}, {TotalDistanceRole, "totalDistance"},
+            {SetDistanceRole, "setDistance"}, {TravelHeadingRole, "travelHeading"},
+            {TravelStepsPerCountRole, "travelStepsPerCount"},
+            {LocomotionModeRole, "locomotionMode"}, {GaitPhaseRole, "gaitPhase"},
+            {TotalDistanceRole, "totalDistance"},
             {WarningRole, "hasWarning"}, {VisibleRole, "performerVisible"},
             {LockedRole, "performerLocked"}, {BodyRigRole, "bodyRigId"},
             {UniformRole, "uniformId"}, {SkinPaletteRole, "skinPaletteId"},
@@ -4588,6 +4596,56 @@ double DrillProject::interpolatedFacing(int performerIndex) const
     double result = std::fmod(start + delta * m_playhead, 360.0);
     if (result < 0.0) result += 360.0;
     return result;
+}
+
+AnimationState DrillProject::animationStateAt(int performerIndex) const
+{
+    AnimationState state;
+    const int counts = currentSetCounts();
+    if (counts > 0) {
+        state.normalizedTime = std::fmod(m_playhead * counts / 2.0, 1.0);
+        if (state.normalizedTime < 0.0)
+            state.normalizedTime += 1.0;
+    }
+    if (!m_playbackActive || m_currentSet <= 0 || counts <= 0)
+        return state;
+
+    const Placement destination = placementAt(performerIndex, m_currentSet);
+    const Placement origin = placementAt(performerIndex, m_currentSet - 1);
+    const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
+
+    constexpr double sampleRadius = 0.001;
+    const double beforeProgress = std::max(0.0, m_playhead - sampleRadius);
+    const double afterProgress = std::min(1.0, m_playhead + sampleRadius);
+    const QPointF before = pathPosition(performerIndex, m_currentSet, beforeProgress);
+    const QPointF after = pathPosition(performerIndex, m_currentSet, afterProgress);
+    const QPointF delta = after - before;
+    const double sampleProgress = afterProgress - beforeProgress;
+    const double sampleDistance = std::hypot(delta.x(), delta.y());
+
+    // A counted hold remains at attention. A facing-only transition receives a
+    // planted direction-change pose, while the delayed portion of a move is idle.
+    if (sampleProgress <= 0.0 || sampleDistance <= 1e-7) {
+        if (facingDelta > 0.5 && std::hypot(destination.position.x() - origin.position.x(),
+                                            destination.position.y() - origin.position.y()) <= 1e-5)
+            state.locomotion = QStringLiteral("direction_change");
+        return state;
+    }
+
+    state.travelStepsPerCount = sampleDistance / sampleProgress / counts;
+    state.travelDirectionDegrees = std::fmod(std::atan2(delta.x(), delta.y()) * 180.0 / std::numbers::pi + 360.0, 360.0);
+    const double facing = interpolatedFacing(performerIndex);
+    const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
+    const double absoluteRelative = std::abs(relative);
+    if (absoluteRelative <= 45.0)
+        state.locomotion = QStringLiteral("march.forward");
+    else if (absoluteRelative >= 135.0)
+        state.locomotion = QStringLiteral("march.backward");
+    else if (relative > 0.0)
+        state.locomotion = QStringLiteral("slide.right");
+    else
+        state.locomotion = QStringLiteral("slide.left");
+    return state;
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const

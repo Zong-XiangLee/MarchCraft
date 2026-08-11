@@ -20,7 +20,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Music | Native MIDI/MusicXML timing and track import, compact selectable measure timeline, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
-| 3D | Meter-based Y-up world; grounded articulated mannequins; body-rig, skin, uniform-color, and instrument/equipment attributes; configurable rehearsal/stadium/gym/arena environments; lighting and quality presets; props; press-box, overhead, and field cameras; ground-contact diagnostics |
+| 3D | Meter-based Y-up world; grounded skinned human performers with path-aware straight-leg marching, backward motion, slides, turns, and three LODs; body-rig, skin, and future equipment socket attributes; configurable rehearsal/stadium/gym/arena environments; lighting and quality presets; props; press-box, overhead, and field cameras; ground-contact diagnostics |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 97 sets |
 

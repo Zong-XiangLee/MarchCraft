@@ -33,7 +33,7 @@ Required clips are `idle`, `march.forward`, `march.backward`, `slide.left`, `sli
 - LOD0: presentation model for close cameras.
 - LOD1: reduced-bone, reduced-material model for normal field viewing.
 - LOD2: rigid or aggressively reduced model for press-box viewing.
-- The application may substitute the built-in mannequin beyond LOD2.
+- LOD2 keeps the weighted human silhouette with aggressively reduced geometry for press-box and performance views.
 
 ## Export and validation
 
@@ -47,3 +47,12 @@ Export GLB/glTF 2.0 with skins, animations, normals, tangents, and PBR textures.
 - license and attribution metadata.
 
 Qt's build-time asset importer should generate optimized runtime meshes and LODs. User-supplied GLB files are intentionally unsupported in the initial catalog.
+
+## Canonical human performer
+
+The original CC BY 4.0 human source is preserved under `Models/`. Run
+`native/scripts/assets/build_human_performer.py` to reproduce the grounded,
+skinned runtime GLB without third-party Python packages. The conditioner writes
+the canonical 1.75-meter, Y-up asset and all in-place drill clips. When Blender
+is available, `import_human_performer_blender.py` imports that conditioned GLB
+and saves an editable `.blend` for manual weight and pose refinement.

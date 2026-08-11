@@ -11,6 +11,11 @@
 #include <QtTest>
 
 namespace {
+bool closeTo(double actual, double expected)
+{
+    return qAbs(actual - expected) < 0.0001;
+}
+
 void append16(QByteArray &data, quint16 value)
 {
     data.append(char((value >> 8) & 0xff)); data.append(char(value & 0xff));
@@ -140,6 +145,68 @@ private slots:
         QCOMPARE(project.data(project.index(0, 0), DrillProject::SetDistanceRole).toDouble(), 0.0);
         project.redo();
         QCOMPARE(project.data(project.index(0, 0), DrillProject::SetDistanceRole).toDouble(), 5.0);
+    }
+
+    void performerMotionRolesFollowTravelAndFacing()
+    {
+        auto motionFor = [](double dx, double dy, double facing = 0.0,
+                            const QString &pathType = QStringLiteral("direct"), double playhead = 0.5) {
+            DrillProject project;
+            project.newProject();
+            project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
+                                 QStringLiteral("Brass"), 40.0, 40.0);
+            project.selectPerformer(0, false);
+            project.faceSelected(facing);
+            project.addSet(QStringLiteral("Set 2"), 8);
+            project.nudgeSelected(dx, dy);
+            project.faceSelected(facing);
+            project.setSelectedTransitionPath(pathType, {});
+            project.setPlaybackActive(true);
+            project.setPlayhead(playhead);
+            QVariantMap result;
+            const QModelIndex index = project.index(0, 0);
+            result.insert(QStringLiteral("mode"), project.data(index, DrillProject::LocomotionModeRole));
+            result.insert(QStringLiteral("heading"), project.data(index, DrillProject::TravelHeadingRole));
+            result.insert(QStringLiteral("stride"), project.data(index, DrillProject::TravelStepsPerCountRole));
+            result.insert(QStringLiteral("phase"), project.data(index, DrillProject::GaitPhaseRole));
+            return result;
+        };
+
+        const auto forward = motionFor(0.0, 8.0);
+        QCOMPARE(forward.value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
+        QVERIFY(qAbs(forward.value(QStringLiteral("heading")).toDouble()) < 0.01);
+        QVERIFY(qAbs(forward.value(QStringLiteral("stride")).toDouble() - 1.0) < 0.01);
+
+        QCOMPARE(motionFor(8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.right"));
+        QCOMPARE(motionFor(-8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.left"));
+        QCOMPARE(motionFor(0.0, -8.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
+        QCOMPARE(motionFor(8.0, 0.0, 90.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
+
+        const auto halfCycle = motionFor(0.0, 8.0, 0.0, QStringLiteral("direct"), 0.125);
+        QVERIFY(qAbs(halfCycle.value(QStringLiteral("phase")).toDouble() - 0.5) < 0.001);
+        QCOMPARE(motionFor(0.0, 8.0, 0.0, QStringLiteral("delayed"), 0.10)
+                     .value(QStringLiteral("mode")).toString(), QStringLiteral("idle"));
+        QCOMPARE(motionFor(0.0, 8.0, 0.0, QStringLiteral("delayed"), 0.50)
+                     .value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
+    }
+
+    void countedHoldIsIdleAndFacingChangeIsPlanted()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 40.0, 40.0);
+        project.selectPerformer(0, false);
+        project.addSet(QStringLiteral("Hold"), 8);
+        project.setPlaybackActive(true);
+        project.setPlayhead(0.5);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::LocomotionModeRole).toString(),
+                 QStringLiteral("idle"));
+        project.setPlaybackActive(false);
+        project.faceSelected(90.0);
+        project.setPlaybackActive(true);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::LocomotionModeRole).toString(),
+                 QStringLiteral("direction_change"));
     }
 
     void audienceCoordinateSemantics()
