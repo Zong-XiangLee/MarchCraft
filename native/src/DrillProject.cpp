@@ -1541,6 +1541,7 @@ void DrillProject::newProject()
     m_performers.clear();
     m_sets = {DrillSet{}};
     m_archivedSets.clear();
+    m_sets[0].number = QStringLiteral("1");
     m_sets[0].activeVariant().name = QStringLiteral("Set 1");
     m_sets[0].counts = 0;
     m_sets[0].stepMultiplier = 0.0;

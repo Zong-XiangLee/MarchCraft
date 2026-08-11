@@ -720,8 +720,8 @@ private slots:
         QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 12);
         QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 8);
         QCOMPARE(project.currentSetIndex(), 2); QCOMPARE(project.selectedSetStartIndex(), 2); QCOMPARE(project.selectedSetEndIndex(), 2);
-        QCOMPARE(project.setInfo(0).value(QStringLiteral("openingBehavior")).toString(), QStringLiteral("hold"));
-        QCOMPARE(project.setInfo(0).value(QStringLiteral("counts")).toInt(), 8);
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("openingBehavior")).toString(), QStringLiteral("move"));
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("counts")).toInt(), 0);
         QVERIFY(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong() > 0);
         QVERIFY(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong()
             > project.setInfo(1).value(QStringLiteral("startTick")).toLongLong());
