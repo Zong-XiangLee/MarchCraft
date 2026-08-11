@@ -21,3 +21,6 @@ Thumbs.db
 # Python caches
 __pycache__/
 *.py[cod]
+
+# Local Codex configuration
+.codex/config.toml
