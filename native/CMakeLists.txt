@@ -95,6 +95,15 @@ target_compile_definitions(marchcraft PRIVATE
 
 if(WIN32)
     set_target_properties(marchcraft PROPERTIES WIN32_EXECUTABLE TRUE)
+    # A build-tree executable must be runnable on its own, not only from a Qt
+    # developer shell. Bundle the Qt DLLs, plugins, and QML imports beside it.
+    get_filename_component(MARCHCRAFT_QT_BIN "${Qt6_DIR}/../../../bin" ABSOLUTE)
+    add_custom_command(TARGET marchcraft POST_BUILD
+        COMMAND "${MARCHCRAFT_QT_BIN}/windeployqt.exe"
+                --release
+                --qmldir "${CMAKE_CURRENT_SOURCE_DIR}/qml"
+                "$<TARGET_FILE:marchcraft>"
+        VERBATIM)
 endif()
 
 if(WIN32 AND MARCHCRAFT_SYNC_PRODUCTION_PREVIEW)
