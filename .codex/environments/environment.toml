@@ -47,129 +47,16 @@ Write-Host "Compiler: $cxxCompiler"
 Write-Host "Qt: $qtRoot"'''
 
 [[actions]]
-name = "Build and Run MarchCraft"
-icon = "run"
-command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$PWD\\native\\scripts\\build-and-run.ps1\""
-
-[[actions]]
 name = "Test MarchCraft"
 icon = "test"
-command = '''
-$ErrorActionPreference = "Stop"
-
-$originalProject = if ($env:CODEX_SOURCE_TREE_PATH) {
-    $env:CODEX_SOURCE_TREE_PATH
-} else {
-    "C:\Users\Andrew\Downloads\CoordinateSample"
-}
-
-$workspace = if ($env:CODEX_WORKTREE_PATH) {
-    $env:CODEX_WORKTREE_PATH
-} else {
-    $PWD.Path
-}
-
-$sdk = Join-Path $originalProject "native"
-$build = Join-Path $workspace "native\build-worktree-mingw"
-
-$compilerBin = Join-Path $sdk ".qt\Tools\mingw1310_64\bin"
-$qtBin = Join-Path $sdk ".qt\6.8.3\mingw_64\bin"
-
-$ctestCandidates = @(
-    (Join-Path $sdk ".tools\bin\ctest.exe"),
-    (Join-Path $sdk ".tools\cmake\data\bin\ctest.exe"),
-    "C:\Program Files\CMake\bin\ctest.exe"
-)
-
-$ctest = $ctestCandidates |
-    Where-Object { Test-Path -LiteralPath $_ } |
-    Select-Object -First 1
-
-if (-not $ctest) {
-    $locations = $ctestCandidates -join "`n"
-    throw "CTest could not be found. Checked:`n$locations"
-}
-
-if (-not (Test-Path -LiteralPath $build)) {
-    throw "The MarchCraft build directory does not exist: $build`nRun Build and Run MarchCraft first."
-}
-
-$cache = Join-Path $build "CMakeCache.txt"
-
-if (-not (Test-Path -LiteralPath $cache)) {
-    throw "MarchCraft has not been configured: $cache`nRun Build and Run MarchCraft first."
-}
-
-$testExecutable = Join-Path $build "marchcraft_tests.exe"
-
-if (-not (Test-Path -LiteralPath $testExecutable)) {
-    throw "The test executable does not exist: $testExecutable`nRun Build and Run MarchCraft first."
-}
-
-$env:PATH = "$compilerBin;$qtBin;$env:PATH"
-$env:QT_QPA_PLATFORM = "offscreen"
-
-Write-Host "Workspace: $workspace"
-Write-Host "Build directory: $build"
-Write-Host "Using CTest: $ctest"
-Write-Host "Qt platform: $env:QT_QPA_PLATFORM"
-Write-Host "Running MarchCraft tests..."
-
-& $ctest `
-    --test-dir $build `
-    --output-on-failure `
-    --verbose
-
-if ($LASTEXITCODE -ne 0) {
-    throw "MarchCraft tests failed with exit code $LASTEXITCODE."
-}
-
-Write-Host "All MarchCraft tests passed."'''
+command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$PWD\\native\\scripts\\test.ps1\""
 
 [[actions]]
 name = "Create 3d Preview"
 icon = "tool"
-command = '''
-$ErrorActionPreference = "Stop"
+command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$PWD\\native\\scripts\\create-3d-preview.ps1\""
 
-$originalProject = if ($env:CODEX_SOURCE_TREE_PATH) {
-    $env:CODEX_SOURCE_TREE_PATH
-} else {
-    "C:\Users\Andrew\Downloads\CoordinateSample"
-}
-
-$sdk = Join-Path $originalProject "native"
-$compilerBin = Join-Path $sdk ".qt\Tools\mingw1310_64\bin"
-$qtBin = Join-Path $sdk ".qt\6.8.3\mingw_64\bin"
-
-$build = Join-Path $workspace "native\build-worktree-mingw"
-$executable = Join-Path $build "marchcraft.exe"
-$preview = Join-Path $build "marchcraft-preview.png"
-
-if (-not (Test-Path $executable)) {
-    throw "MarchCraft is not built. Run Build MarchCraft first."
-}
-
-$env:PATH = "$compilerBin;$qtBin;$env:PATH"
-
-if (Test-Path $preview) {
-    Remove-Item -LiteralPath $preview -Force
-}
-
-Write-Host "Generating MarchCraft 3D preview..."
-
-& $executable `
-    --screenshot $preview `
-    --3d `
-    --3d-view field
-
-if ($LASTEXITCODE -ne 0) {
-    throw "Preview generation failed with exit code $LASTEXITCODE."
-}
-
-if (-not (Test-Path $preview)) {
-    throw "MarchCraft exited without creating the preview image."
-}
-
-Write-Host "Preview created successfully:"
-Write-Host $preview'''
+[[actions]]
+name = "Build and Run MarchCraft"
+icon = "run"
+command = "powershell.exe -NoProfile -ExecutionPolicy Bypass -File \"$PWD\\native\\scripts\\build-and-run.ps1\""

@@ -22,15 +22,20 @@ function Invoke-Checked {
     }
 }
 
-if ([string]::IsNullOrWhiteSpace($env:CODEX_SOURCE_TREE_PATH)) {
-    throw "CODEX_SOURCE_TREE_PATH must point to the shared MarchCraft source tree."
-}
-
-$sharedSourceTree = [System.IO.Path]::GetFullPath($env:CODEX_SOURCE_TREE_PATH)
 $worktree = if ([string]::IsNullOrWhiteSpace($env:CODEX_WORKTREE_PATH)) {
     [System.IO.Path]::GetFullPath((Get-Location).Path)
 } else {
     [System.IO.Path]::GetFullPath($env:CODEX_WORKTREE_PATH)
+}
+
+$sharedSourceTree = if (-not [string]::IsNullOrWhiteSpace($env:CODEX_SOURCE_TREE_PATH)) {
+    [System.IO.Path]::GetFullPath($env:CODEX_SOURCE_TREE_PATH)
+} else {
+    $commonGitDirectory = (& git -C $worktree rev-parse --path-format=absolute --git-common-dir).Trim()
+    if ($LASTEXITCODE -ne 0 -or [string]::IsNullOrWhiteSpace($commonGitDirectory)) {
+        throw "Unable to locate the shared MarchCraft checkout from $worktree."
+    }
+    [System.IO.Path]::GetFullPath((Split-Path -Parent $commonGitDirectory))
 }
 
 $sharedNative = Join-Path $sharedSourceTree "native"
@@ -41,7 +46,17 @@ $compilerBin = Join-Path $sharedNative ".qt\Tools\mingw1310_64\bin"
 $qtRoot = Join-Path $sharedNative ".qt\6.8.3\mingw_64"
 $qtBin = Join-Path $qtRoot "bin"
 
-$cmake = Join-Path $sharedNative ".tools\bin\cmake.exe"
+$cmakeCandidates = @(
+    (Join-Path $sharedNative ".tools\bin\cmake.exe"),
+    (Join-Path $sharedNative ".tools\cmake\data\bin\cmake.exe"),
+    "C:\Program Files\CMake\bin\cmake.exe"
+)
+$cmake = $cmakeCandidates | Where-Object {
+    Test-Path -LiteralPath $_ -PathType Leaf
+} | Select-Object -First 1
+if ([string]::IsNullOrWhiteSpace($cmake)) {
+    throw "CMake was not found. Checked: $($cmakeCandidates -join ', ')"
+}
 $cCompiler = Join-Path $compilerBin "gcc.exe"
 $cxxCompiler = Join-Path $compilerBin "g++.exe"
 $makeProgram = Join-Path $compilerBin "mingw32-make.exe"
@@ -65,6 +80,8 @@ foreach ($requiredFile in $requiredFiles) {
 
 $env:PATH = "$compilerBin;$qtBin;$env:PATH"
 
+Write-Host "Shared toolchain checkout: $sharedSourceTree"
+Write-Host "Current worktree: $worktree"
 Write-Host "Configuring MarchCraft in $build"
 Invoke-Checked -FilePath $cmake -ArgumentList @(
     "-S", $source,
@@ -81,6 +98,7 @@ Invoke-Checked -FilePath $cmake -ArgumentList @(
 Write-Host "Building MarchCraft"
 Invoke-Checked -FilePath $cmake -ArgumentList @(
     "--build", $build,
+    "--target", "marchcraft",
     "--parallel", "2"
 ) -FailureMessage "MarchCraft compilation failed"
 
