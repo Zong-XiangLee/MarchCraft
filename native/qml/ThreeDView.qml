@@ -273,7 +273,7 @@ Item {
             }
         }
 
-        // One horizontal two-foot hash on every five-yard line at both hash rows.
+        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
         Repeater3D {
             model: (Math.floor(drillProject.fieldWidthSteps / 8) + 1) * 2
             delegate: Model {
