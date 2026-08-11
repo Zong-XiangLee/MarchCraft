@@ -12,19 +12,39 @@ Item {
     property string hoverCoordinate: ""
     property bool spaceHeld: false
     property bool drawMode: false
+    property string shapeDrawMode: ""
     property var selectionBounds: drillProject.selectedBounds()
     property int selectedShapeIndex: drillProject.selectedShapeIndex()
     signal performerActivated(int row)
     signal contextMenuRequested(real screenX, real screenY, int performerRow)
     signal freehandCompleted(var points)
+    signal shapeCompleted(string kind, point start, point end)
+    signal shapeDrawingCanceled()
 
     function toCanvasX(fieldX) { return (fieldX - drillProject.canvasMinX) * field.sx }
     function toCanvasY(fieldY) { return (drillProject.canvasMaxY - fieldY) * field.sy }
     function toFieldX(canvasX) { return canvasX / field.sx + drillProject.canvasMinX }
     function toFieldY(canvasY) { return drillProject.canvasMaxY - canvasY / field.sy }
+    function snapLineEndpoint(start, end) {
+        if (!root.snapEnabled) return end
+        const dx = end.x - start.x, dy = end.y - start.y
+        const length = Math.hypot(dx, dy)
+        if (length < 1) return end
+        const angle = Math.atan2(dy, dx)
+        const rightAngle = Math.round(angle / (Math.PI / 2)) * (Math.PI / 2)
+        const delta = Math.atan2(Math.sin(angle - rightAngle), Math.cos(angle - rightAngle))
+        return Math.abs(delta) <= Math.PI / 12
+            ? Qt.point(start.x + Math.cos(rightAngle) * length, start.y + Math.sin(rightAngle) * length)
+            : end
+    }
 
     focus: true
     Keys.onPressed: function(event) {
+        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && root.shapeDrawMode.length > 0) {
+            root.shapeDrawingCanceled()
+            event.accepted = true
+            return
+        }
         if (event.key === Qt.Key_Space) {
             root.spaceHeld = true
             event.accepted = true
@@ -208,13 +228,13 @@ Item {
 
             Canvas {
                 id: gridCanvas
-                anchors.fill: parent; z: 0.5; visible: drillProject.showFieldGrid
+                anchors.fill: parent; z: 0.5; visible: drillProject.showFieldGrid || root.shapeDrawMode.length > 0
                 antialiasing: false
                 onPaint: {
                     const ctx = getContext("2d"); ctx.reset()
-                    if (!drillProject.showFieldGrid) return
+                    if (!drillProject.showFieldGrid && root.shapeDrawMode.length === 0) return
                     ctx.strokeStyle = drillProject.fieldGridColor
-                    ctx.globalAlpha = drillProject.fieldGridOpacity
+                    ctx.globalAlpha = drillProject.showFieldGrid ? drillProject.fieldGridOpacity : 0.24
                     ctx.lineWidth = 1
                     const step = drillProject.fieldGridInterval
                     for (let x = Math.ceil(drillProject.canvasMinX / step) * step; x <= drillProject.canvasMaxX; x += step) {
@@ -225,6 +245,7 @@ Item {
                     }
                 }
                 Connections { target: drillProject; function onEditorSettingsChanged() { gridCanvas.requestPaint() } function onProjectChanged() { gridCanvas.requestPaint() } }
+                Connections { target: root; function onShapeDrawModeChanged() { gridCanvas.requestPaint() } }
                 onWidthChanged: requestPaint(); onHeightChanged: requestPaint()
             }
 
@@ -361,31 +382,44 @@ Item {
                 property var lassoPoints: []
                 onPressed: function(mouse) {
                     if (mouse.button === Qt.RightButton) {
+                        if (root.shapeDrawMode.length > 0 || root.drawMode) {
+                            selecting = false
+                            lassoPoints = []
+                            shapePreviewCanvas.requestPaint()
+                            lassoCanvas.requestPaint()
+                            root.shapeDrawingCanceled()
+                            return
+                        }
                         const p = mapToItem(root, mouse.x, mouse.y)
                         root.contextMenuRequested(p.x, p.y, -1)
                         return
                     }
                     root.forceActiveFocus()
                     selecting = true
-                    lasso = root.drawMode || (mouse.modifiers & Qt.ShiftModifier) !== 0
+                    lasso = root.drawMode || (root.shapeDrawMode.length === 0 && (mouse.modifiers & Qt.ShiftModifier) !== 0)
                     startPoint = Qt.point(mouse.x, mouse.y)
                     currentPoint = startPoint
                     lassoPoints = [Qt.point(root.toFieldX(mouse.x), root.toFieldY(mouse.y))]
                     lassoCanvas.requestPaint()
+                    shapePreviewCanvas.requestPaint()
                 }
                 onPositionChanged: function(mouse) {
                     if (!selecting) return
                     currentPoint = Qt.point(mouse.x, mouse.y)
+                    if (root.shapeDrawMode === "line")
+                        currentPoint = root.snapLineEndpoint(startPoint, currentPoint)
                     if (lasso) {
                         const next = Qt.point(root.toFieldX(mouse.x), root.toFieldY(mouse.y))
                         const previous = lassoPoints[lassoPoints.length - 1]
-                        if (!previous || Math.hypot(next.x - previous.x, next.y - previous.y) > 0.35) {
+                        const sampleSpacing = Math.max(0.06, 2.0 / Math.max(field.sx, field.sy))
+                        if (!previous || Math.hypot(next.x - previous.x, next.y - previous.y) >= sampleSpacing) {
                             const copy = lassoPoints.slice()
                             copy.push(next)
                             lassoPoints = copy
                             lassoCanvas.requestPaint()
                         }
                     }
+                    if (root.shapeDrawMode.length > 0) shapePreviewCanvas.requestPaint()
                     root.hoverCoordinate = Math.round(root.toFieldX(mouse.x) * 4) / 4 + ", " +
                         Math.round(root.toFieldY(mouse.y) * 4) / 4 + " steps"
                 }
@@ -396,6 +430,18 @@ Item {
                         selecting = false; lassoPoints = []; lassoCanvas.requestPaint(); return
                     }
                     currentPoint = Qt.point(mouse.x, mouse.y)
+                    if (root.shapeDrawMode.length > 0) {
+                        const start = Qt.point(root.toFieldX(startPoint.x), root.toFieldY(startPoint.y))
+                        const rawEnd = Qt.point(root.toFieldX(currentPoint.x), root.toFieldY(currentPoint.y))
+                        const end = root.shapeDrawMode === "line"
+                            ? root.snapLineEndpoint(start, rawEnd) : rawEnd
+                        if (Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >= 5)
+                            root.shapeCompleted(root.shapeDrawMode, start, end)
+                        selecting = false
+                        lassoPoints = []
+                        shapePreviewCanvas.requestPaint()
+                        return
+                    }
                     const dx = currentPoint.x - startPoint.x
                     const dy = currentPoint.y - startPoint.y
                     const additive = (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
@@ -411,22 +457,115 @@ Item {
                     selecting = false
                     lassoPoints = []
                     lassoCanvas.requestPaint()
+                    shapePreviewCanvas.requestPaint()
                 }
                 onCanceled: {
                     selecting = false
                     lassoPoints = []
                     lassoCanvas.requestPaint()
+                    shapePreviewCanvas.requestPaint()
                 }
                 onDoubleClicked: {
+                    if (root.shapeDrawMode.length > 0 || root.drawMode) return
                     const fx = root.toFieldX(mouse.x)
                     const fy = root.toFieldY(mouse.y)
                     drillProject.addPerformer("P" + (drillProject.performerCount + 1), "Unassigned", "Unassigned", fx, fy)
                 }
             }
 
+            Canvas {
+                id: shapePreviewCanvas
+                anchors.fill: parent
+                z: 6
+                visible: selectionArea.selecting && root.shapeDrawMode.length > 0
+                antialiasing: true
+                onPaint: {
+                    const ctx = getContext("2d")
+                    ctx.reset()
+                    if (!visible) return
+                    const x1 = selectionArea.startPoint.x, y1 = selectionArea.startPoint.y
+                    const x2 = selectionArea.currentPoint.x, y2 = selectionArea.currentPoint.y
+                    const dx = x2 - x1, dy = y2 - y1
+                    const radius = Math.hypot(dx, dy)
+                    ctx.strokeStyle = "#fbbf24"
+                    ctx.fillStyle = "#18fbbf24"
+                    ctx.lineWidth = 2.5
+                    ctx.setLineDash([7, 4])
+                    ctx.beginPath()
+                    if (root.shapeDrawMode === "line") {
+                        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
+                    } else if (root.shapeDrawMode === "rectangle") {
+                        ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(dx), Math.abs(dy))
+                    } else if (root.shapeDrawMode === "triangle") {
+                        ctx.moveTo((x1 + x2) / 2, Math.min(y1, y2))
+                        ctx.lineTo(Math.min(x1, x2), Math.max(y1, y2))
+                        ctx.lineTo(Math.max(x1, x2), Math.max(y1, y2))
+                        ctx.closePath()
+                    } else if (root.shapeDrawMode === "circle") {
+                        ctx.arc(x1, y1, radius, 0, Math.PI * 2)
+                    } else if (root.shapeDrawMode === "arc") {
+                        const heading = Math.atan2(dy, dx)
+                        ctx.arc(x1, y1, radius, heading - Math.PI / 2, heading + Math.PI / 2)
+                    } else if (root.shapeDrawMode === "ellipse") {
+                        ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(dx) / 2, Math.abs(dy) / 2, 0, 0, Math.PI * 2)
+                    } else if (root.shapeDrawMode === "diamond") {
+                        ctx.moveTo((x1 + x2) / 2, Math.min(y1, y2)); ctx.lineTo(Math.max(x1, x2), (y1 + y2) / 2)
+                        ctx.lineTo((x1 + x2) / 2, Math.max(y1, y2)); ctx.lineTo(Math.min(x1, x2), (y1 + y2) / 2); ctx.closePath()
+                    } else if (root.shapeDrawMode === "polygon" || root.shapeDrawMode === "star") {
+                        const n = root.shapeDrawMode === "star" ? 10 : 6, r = Math.max(Math.abs(dx), Math.abs(dy)) / 2
+                        for (let i = 0; i < n; ++i) { const a = -Math.PI / 2 + i * Math.PI * 2 / n, rr = root.shapeDrawMode === "star" && i % 2 ? r * .45 : r; if (!i) ctx.moveTo((x1+x2)/2 + Math.cos(a)*rr, (y1+y2)/2 + Math.sin(a)*rr); else ctx.lineTo((x1+x2)/2 + Math.cos(a)*rr, (y1+y2)/2 + Math.sin(a)*rr) } ctx.closePath()
+                    } else if (root.shapeDrawMode === "block") {
+                        ctx.rect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(dx), Math.abs(dy))
+                    }
+                    ctx.stroke()
+                    // Show live performer destinations while drawing, so the
+                    // tool behaves like a formation preview rather than a
+                    // bare hashed guide.
+                    const count = drillProject.selectedCount
+                    if (count > 0) {
+                        const previewPoint = function(px, py) {
+                            ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2)
+                            ctx.fillStyle = "#fbbf24"; ctx.fill()
+                            ctx.lineWidth = 1; ctx.strokeStyle = "#14231d"; ctx.stroke()
+                        }
+                        if (root.shapeDrawMode === "line") {
+                            for (let i = 0; i < count; ++i) {
+                                const t = count === 1 ? 0.5 : i / (count - 1)
+                                previewPoint(x1 + dx * t, y1 + dy * t)
+                            }
+                        } else if (root.shapeDrawMode === "rectangle") {
+                            const left = Math.min(x1, x2), right = Math.max(x1, x2)
+                            const top = Math.min(y1, y2), bottom = Math.max(y1, y2)
+                            const perimeter = 2 * ((right - left) + (bottom - top))
+                            for (let i = 0; i < count; ++i) {
+                                let distance = perimeter * i / count
+                                if (distance <= right - left) previewPoint(left + distance, top)
+                                else if ((distance -= right - left) <= bottom - top) previewPoint(right, top + distance)
+                                else if ((distance -= bottom - top) <= right - left) previewPoint(right - distance, bottom)
+                                else { distance -= right - left; previewPoint(left, bottom - distance) }
+                            }
+                        } else if (root.shapeDrawMode === "circle" || root.shapeDrawMode === "arc") {
+                            const heading = Math.atan2(dy, dx)
+                            const startAngle = root.shapeDrawMode === "circle" ? 0 : heading - Math.PI / 2
+                            const sweep = root.shapeDrawMode === "circle" ? Math.PI * 2 : Math.PI
+                            for (let i = 0; i < count; ++i) {
+                                const t = root.shapeDrawMode === "circle" ? i / count : (count === 1 ? 0.5 : i / (count - 1))
+                                const angle = startAngle + sweep * t
+                                previewPoint(x1 + Math.cos(angle) * radius, y1 + Math.sin(angle) * radius)
+                            }
+                        }
+                    }
+                    ctx.setLineDash([])
+                    ctx.lineWidth = 1.5
+                    ctx.beginPath(); ctx.moveTo(x1 - 8, y1); ctx.lineTo(x1 + 8, y1)
+                    ctx.moveTo(x1, y1 - 8); ctx.lineTo(x1, y1 + 8); ctx.stroke()
+                    ctx.beginPath(); ctx.arc(x1, y1, 3.5, 0, Math.PI * 2); ctx.fill()
+                }
+            }
+
             Rectangle {
                 z: 6
-                visible: selectionArea.selecting && !selectionArea.lasso && !root.drawMode
+                visible: selectionArea.selecting && !selectionArea.lasso && !root.drawMode && root.shapeDrawMode.length === 0
                 x: Math.min(selectionArea.startPoint.x, selectionArea.currentPoint.x)
                 y: Math.min(selectionArea.startPoint.y, selectionArea.currentPoint.y)
                 width: Math.abs(selectionArea.currentPoint.x - selectionArea.startPoint.x)
@@ -438,7 +577,7 @@ Item {
 
             Rectangle {
                 id: selectionBox; z: 5; color: "transparent"; border.color: "#fbbf24"; border.width: 1
-                visible: root.selectedShapeIndex >= 0 && Object.keys(root.selectionBounds).length > 0
+                visible: root.shapeDrawMode.length === 0 && !root.drawMode && root.selectedShapeIndex >= 0 && Object.keys(root.selectionBounds).length > 0
                 x: root.toCanvasX(root.selectionBounds.left || 0) - 7
                 y: root.toCanvasY(root.selectionBounds.bottom || 0) - 7
                 width: (root.selectionBounds.right - root.selectionBounds.left) * field.sx + 14
@@ -453,10 +592,19 @@ Item {
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.CrossCursor; preventStealing: true
                         property real startAngle
-                        onPressed: function(mouse) { const p=mapToItem(field,mouse.x,mouse.y); startAngle=Math.atan2(root.toFieldY(p.y)-root.selectionBounds.centerY,root.toFieldX(p.x)-root.selectionBounds.centerX)*180/Math.PI; drillProject.beginRotate() }
-                        onPositionChanged: function(mouse) { if(!pressed)return; const p=mapToItem(field,mouse.x,mouse.y); let a=Math.atan2(root.toFieldY(p.y)-root.selectionBounds.centerY,root.toFieldX(p.x)-root.selectionBounds.centerX)*180/Math.PI-startAngle; if(mouse.modifiers & Qt.ShiftModifier)a=Math.round(a/15)*15; drillProject.previewRotate(a) }
-                        onReleased: drillProject.endRotate(); onCanceled: drillProject.endRotate()
+                        property real startingRotation: 0
+                        onPressed: function(mouse) { const p=mapToItem(field,mouse.x,mouse.y);startAngle=Math.atan2(root.toFieldY(p.y)-root.selectionBounds.centerY,root.toFieldX(p.x)-root.selectionBounds.centerX)*180/Math.PI;const info=drillProject.shapeInfo(root.selectedShapeIndex);startingRotation=Number(info.rotation||0);rotationReadout.angle=startingRotation;rotationReadout.visible=true;drillProject.beginRotate() }
+                        onPositionChanged: function(mouse) { if(!pressed)return;const p=mapToItem(field,mouse.x,mouse.y);let delta=Math.atan2(root.toFieldY(p.y)-root.selectionBounds.centerY,root.toFieldX(p.x)-root.selectionBounds.centerX)*180/Math.PI-startAngle;let finalAngle=startingRotation+delta;if(mouse.modifiers&Qt.ShiftModifier)finalAngle=Math.round(finalAngle/15)*15;else if(root.snapEnabled){const ninety=Math.round(finalAngle/90)*90;if(Math.abs(finalAngle-ninety)<=15)finalAngle=ninety}rotationReadout.angle=finalAngle;drillProject.previewRotate(finalAngle-startingRotation) }
+                        onReleased: { rotationReadout.visible=false; drillProject.endRotate() }
+                        onCanceled: { rotationReadout.visible=false; drillProject.endRotate() }
                     }
+                }
+                Rectangle {
+                    id: rotationReadout
+                    property real angle: 0
+                    visible: false; width: 58; height: 24; radius: 5; color: "#d914231d"; border.color: "#fbbf24"
+                    anchors.horizontalCenter: parent.horizontalCenter; y: -73
+                    Text { anchors.centerIn: parent; text: Math.round(parent.angle) + " deg"; color: "#fde68a"; font.pixelSize: 11; font.bold: true }
                 }
                 Repeater {
                     model: [{right:false,bottom:false},{right:true,bottom:false},{right:false,bottom:true},{right:true,bottom:true}]
@@ -587,7 +735,7 @@ Item {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         hoverEnabled: true
-                        enabled: !root.spaceHeld && !marcher.performerLocked && !root.drawMode
+                        enabled: !root.spaceHeld && !marcher.performerLocked && !root.drawMode && root.shapeDrawMode.length === 0
                         preventStealing: true
                         property point pressField
                         property point startPosition

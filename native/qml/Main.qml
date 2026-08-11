@@ -29,6 +29,7 @@ ApplicationWindow {
         property bool inspectorCollapsed: false
         property bool timelineCollapsed: false
         property bool timelineMaximized: false
+        property var quickShapes: ["line", "rectangle", "circle", "triangle"]
     }
 
     onQa3DViewChanged: {
@@ -47,9 +48,23 @@ ApplicationWindow {
         })
     }
     property bool freehandDrawing: false
+    property string shapeDrawing: ""
+    property var quickShapes: workspaceSettings.quickShapes
     property string freehandMovementMode: "rehearsalSafe"
     property string freehandRecognitionMode: "auto"
     property bool freehandCreateGroup: false
+    function setShapeTool(kind) {
+        freehandDrawing = false
+        shapeDrawing = kind
+    }
+    function toggleQuickShape(kind) {
+        var next = quickShapes.slice()
+        var index = next.indexOf(kind)
+        if (index >= 0) next.splice(index, 1)
+        else next.push(kind)
+        quickShapes = next
+        workspaceSettings.quickShapes = next
+    }
     function stopPlayback() { transport.stop() }
     function playCurrentTransition() { transport.playCurrentTransition() }
     function playWholeShow() { transport.playFromSelection() }
@@ -150,7 +165,52 @@ ApplicationWindow {
             ToolSeparator {}
             Button { text: "+ Performer"; onClicked: { performerDialog.editing = false; performerDialog.open() } }
             Button { text: "+ Batch"; onClicked: batchDialog.open() }
-            Button { text: "Shape"; enabled: drillProject.selectedCount > 0; onClicked: formationDialog.open() }
+            Button {
+                text: "Shapes"
+                enabled: drillProject.selectedCount > 0
+                onClicked: { window.shapeDrawing = ""; formationDialog.open() }
+            }
+            Repeater {
+                model: window.quickShapes
+                delegate: ToolButton {
+                    required property string modelData
+                    property string toolKind: modelData
+                    implicitWidth: 34
+                    implicitHeight: 32
+                    enabled: drillProject.selectedCount > 0
+                    highlighted: window.shapeDrawing === toolKind
+                    ToolTip.text: "Draw " + toolKind
+                    ToolTip.visible: hovered
+                    contentItem: Canvas {
+                        id: quickShapeIcon
+                        anchors.fill: parent
+                        property string kind: toolKind
+                        onKindChanged: requestPaint()
+                        Component.onCompleted: requestPaint()
+                        onPaint: {
+                            const ctx = getContext("2d")
+                            ctx.reset(); ctx.strokeStyle = "#d8e9df"; ctx.lineWidth = 2.2
+                            ctx.lineCap = "round"; ctx.lineJoin = "round"
+                            const w = width, h = height
+                            ctx.beginPath()
+                            if (kind === "line") { ctx.moveTo(7, h - 7); ctx.lineTo(w - 7, 7) }
+                            else if (kind === "rectangle") ctx.rect(7, 7, w - 14, h - 14)
+                            else if (kind === "circle") ctx.arc(w / 2, h / 2, Math.min(w, h) / 2 - 7, 0, Math.PI * 2)
+                            else if (kind === "triangle") { ctx.moveTo(w / 2, 6); ctx.lineTo(7, h - 7); ctx.lineTo(w - 7, h - 7); ctx.closePath() }
+                            else if (kind === "arc") ctx.arc(w / 2, h / 2 + 2, Math.min(w, h) / 2 - 7, Math.PI, Math.PI * 2)
+                            else if (kind === "ellipse") ctx.ellipse(w / 2, h / 2, w / 2 - 7, h / 2 - 7, 0, 0, Math.PI * 2)
+                            else if (kind === "diamond") { ctx.moveTo(w / 2, 6); ctx.lineTo(w - 7, h / 2); ctx.lineTo(w / 2, h - 7); ctx.lineTo(7, h / 2); ctx.closePath() }
+                            else if (kind === "polygon" || kind === "star") {
+                                const n = kind === "star" ? 10 : 6, r = Math.min(w, h) / 2 - 7
+                                for (let i = 0; i < n; ++i) { const a = -Math.PI / 2 + i * Math.PI * 2 / n, rr = kind === "star" && i % 2 ? r * .45 : r; if (!i) ctx.moveTo(w/2 + Math.cos(a)*rr, h/2 + Math.sin(a)*rr); else ctx.lineTo(w/2 + Math.cos(a)*rr, h/2 + Math.sin(a)*rr) } ctx.closePath()
+                            } else if (kind === "spiral") { for (let i = 0; i <= 24; ++i) { const a = i * Math.PI * 2 / 12, r = 2 + i * (Math.min(w,h)-14) / 48; if (!i) ctx.moveTo(w/2, h/2); else ctx.lineTo(w/2 + Math.cos(a)*r, h/2 + Math.sin(a)*r) } }
+                            else if (kind === "block") { for (let i = 1; i < 3; ++i) { ctx.moveTo(7 + i*(w-14)/3, 7); ctx.lineTo(7 + i*(w-14)/3, h-7); ctx.moveTo(7, 7 + i*(h-14)/3); ctx.lineTo(w-7, 7 + i*(h-14)/3) } ctx.rect(7,7,w-14,h-14) }
+                            ctx.stroke()
+                        }
+                    }
+                    onClicked: window.setShapeTool(toolKind)
+                }
+            }
             Button { text: window.freehandDrawing ? "Draw on field…" : "Freehand"; enabled: drillProject.selectedCount > 0; highlighted: window.freehandDrawing; onClicked: freehandDialog.open() }
             ToolButton { text: "Snap"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Snap selection to one-step grid"; ToolTip.visible: hovered; onClicked: drillProject.snapSelected(1) }
             ToolButton { text: "Mirror"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Mirror selection side-to-side"; ToolTip.visible: hovered; onClicked: drillProject.mirrorSelected(true) }
@@ -316,6 +376,7 @@ ApplicationWindow {
                 FieldView {
                     id: fieldView
                     drawMode: window.freehandDrawing
+                    shapeDrawMode: window.shapeDrawing
                     showPaths: drillProject.showTransitionPaths
                     showShapeGuides: drillProject.showShapeGuides
                     onPerformerActivated: function(row) { window.activePerformer = row; inspector.refresh() }
@@ -331,6 +392,39 @@ ApplicationWindow {
                         freehandPreviewDialog.applied = false
                         freehandPreviewDialog.open()
                     }
+                    onShapeCompleted: function(kind, start, end) {
+                        if (kind === "line") {
+                            drillProject.distributeLine(start.x, start.y, end.x, end.y)
+                        } else if (kind === "rectangle") {
+                            drillProject.distributeRectangle(Math.min(start.x, end.x), Math.min(start.y, end.y),
+                                                             Math.abs(end.x - start.x), Math.abs(end.y - start.y))
+                        } else if (kind === "triangle") {
+                            drillProject.createFormation("triangle", {
+                                centerX: (start.x + end.x) / 2,
+                                centerY: (start.y + end.y) / 2,
+                                width: Math.max(2, Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y)))
+                            })
+                        } else if (kind === "ellipse" || kind === "diamond" || kind === "polygon" || kind === "star" || kind === "spiral" || kind === "block") {
+                            const width = Math.max(2, Math.abs(end.x - start.x))
+                            const height = Math.max(2, Math.abs(end.y - start.y))
+                            const centerX = (start.x + end.x) / 2, centerY = (start.y + end.y) / 2
+                            const size = Math.max(width, height)
+                            if (kind === "ellipse") drillProject.createFormation("ellipse", { centerX: centerX, centerY: centerY, width: width, height: height })
+                            else if (kind === "diamond") drillProject.createFormation("diamond", { centerX: centerX, centerY: centerY, width: size })
+                            else if (kind === "polygon") drillProject.createFormation("polygon", { centerX: centerX, centerY: centerY, width: size, sides: 6 })
+                            else if (kind === "star") drillProject.createFormation("star", { centerX: centerX, centerY: centerY, width: size, points: 5 })
+                            else if (kind === "spiral") drillProject.createFormation("spiral", { centerX: centerX, centerY: centerY, width: size, outerRadius: size / 2, turns: 1.5 })
+                            else drillProject.createFormation("block", { centerX: centerX, centerY: centerY, rows: Math.max(1, Math.ceil(Math.sqrt(drillProject.selectedCount))), spacing: Math.max(1, Math.min(width, height) / Math.max(1, Math.ceil(Math.sqrt(drillProject.selectedCount)))) })
+                        } else {
+                            const radius = Math.hypot(end.x - start.x, end.y - start.y)
+                            if (kind === "circle") drillProject.distributeArc(start.x, start.y, radius, 0, 360)
+                            else {
+                                const heading = Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
+                                drillProject.distributeArc(start.x, start.y, radius, heading - 90, heading + 90)
+                            }
+                        }
+                    }
+                    onShapeDrawingCanceled: { window.shapeDrawing = ""; window.freehandDrawing = false }
                 }
                 ThreeDView { id: threeDView }
             }
@@ -613,7 +707,7 @@ ApplicationWindow {
                     Button { text: "Bulk edit selection…"; visible: drillProject.selectedCount > 0; enabled: visible; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: bulkEditDialog.open() }
                     RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProject.selectedCount > 1
                         Label { text: drillProject.selectedCount + " performers"; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true }
-                        Button { text: "Optimizeâ€¦"; onClicked: formationDialog.open() }
+                        Button { text: "Optimize..."; onClicked: formationDialog.open() }
                     }
                     Label { text: "FORMATION METRICS"; font.bold: true; color: "#9fb1a7"; Layout.leftMargin: 12; visible: drillProject.selectedCount > 1 }
                     GridLayout {
@@ -722,7 +816,11 @@ ApplicationWindow {
         }
     }
 
-    FormationDialog { id: formationDialog; anchors.centerIn: Overlay.overlay; onSettingsRequested: settingsDialog.open() }
+    FormationDialog {
+        id: formationDialog
+        anchors.centerIn: Overlay.overlay
+        onSettingsRequested: settingsDialog.open()
+    }
 
     Dialog {
         id: freehandDialog; title: "Freehand formation"; modal: true; anchors.centerIn: Overlay.overlay; width: 480
@@ -735,7 +833,7 @@ ApplicationWindow {
             ComboBox { id: movementMode; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Rehearsal safe",value:"rehearsalSafe"},{text:"Shortest total",value:"shortest"},{text:"Preserve form order",value:"preserveOrder"},{text:"Even effort",value:"evenEffort"},{text:"Feature move",value:"featureMove"},{text:"Roster order",value:"rosterOrder"}]; currentIndex: 0; onActivated: window.freehandMovementMode=currentValue }
             CheckBox { text: "Create as group"; checked: window.freehandCreateGroup; onToggled: window.freehandCreateGroup=checked }
             Label { text: "The stroke is smoothed, spaced by equal arc length, expanded if necessary, and shifted locally to avoid unselected performers."; color: "#8fa197"; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            Button { text: "Start drawing"; highlighted: true; Layout.alignment: Qt.AlignRight; onClicked: { window.freehandRecognitionMode=recognitionMode.currentValue;window.freehandMovementMode=movementMode.currentValue;window.freehandDrawing=true;freehandDialog.close() } }
+            Button { text: "Start drawing"; highlighted: true; Layout.alignment: Qt.AlignRight; onClicked: { window.shapeDrawing="";window.freehandRecognitionMode=recognitionMode.currentValue;window.freehandMovementMode=movementMode.currentValue;window.freehandDrawing=true;freehandDialog.close() } }
         }
     }
 
@@ -837,7 +935,7 @@ ApplicationWindow {
         standardButtons: Dialog.Close
         onOpened: placementMode.currentIndex = placementMode.indexOfValue(drillProject.shapePlacementMode)
         contentItem: ColumnLayout {
-            TabBar { id: configureTabs; Layout.fillWidth: true; TabButton { text: "Performers" } TabButton { text: "Field & Grid" } TabButton { text: "Overlays" } TabButton { text: "Formations" } TabButton { text: "Drill Clinic" } }
+            TabBar { id: configureTabs; Layout.fillWidth: true; TabButton { text: "Performers" } TabButton { text: "Field & Grid" } TabButton { text: "Overlays" } TabButton { text: "Formations" } TabButton { text: "Quick Actions" } TabButton { text: "Drill Clinic" } }
             StackLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; currentIndex: configureTabs.currentIndex
                 GridLayout {
@@ -887,6 +985,25 @@ ApplicationWindow {
                     Label { text: "Formation placement"; font.bold: true }
                     ComboBox { id: placementMode; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Selection centered",value:"selection"},{text:"Nearest open space",value:"openSpace"},{text:"Field centered",value:"fieldCenter"}]; onActivated: drillProject.shapePlacementMode=currentValue }
                     Label { text: "Default spacing: four marching steps"; color: "#8fa197" }
+                    Item { Layout.fillHeight: true }
+                }
+                ColumnLayout {
+                    Label { text: "Shape quick actions"; font.bold: true; font.pixelSize: 16 }
+                    Label { text: "Check a shape to show its icon beside the Shapes button in the field toolbar."; color: "#8fa197"; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                    Repeater {
+                        model: [{text: "Line", kind: "line"}, {text: "Circle", kind: "circle"},
+                                {text: "Arc", kind: "arc"}, {text: "Ellipse", kind: "ellipse"},
+                                {text: "Rectangle", kind: "rectangle"}, {text: "Triangle", kind: "triangle"},
+                                {text: "Diamond", kind: "diamond"}, {text: "Regular polygon", kind: "polygon"},
+                                {text: "Star", kind: "star"}, {text: "Spiral", kind: "spiral"},
+                                {text: "Block grid", kind: "block"}]
+                        delegate: CheckBox {
+                            required property var modelData
+                            text: modelData.text
+                            checked: window.quickShapes.indexOf(modelData.kind) >= 0
+                            onClicked: window.toggleQuickShape(modelData.kind)
+                        }
+                    }
                     Item { Layout.fillHeight: true }
                 }
                 GridLayout {

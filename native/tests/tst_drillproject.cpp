@@ -498,6 +498,65 @@ private slots:
         QCOMPARE(project.formatDistance(1.6, 1), QStringLiteral("1.6 st"));
     }
 
+    void sparseFreehandUsesWholeStrokeAndComplexStrokeStaysOpen()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("F"), 3, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll();
+        const QVariantList stroke{QPointF(20, 20), QPointF(70, 20), QPointF(70, 60),
+                                  QPointF(25, 60), QPointF(23, 20)};
+        project.createFreehandFormation(stroke, QStringLiteral("rosterOrder"), false, QStringLiteral("preserve"));
+        const QVariantMap shape = project.shapeInfo(0);
+        QVERIFY(!shape.value(QStringLiteral("closed")).toBool());
+        const QVariantList points = shape.value(QStringLiteral("points")).toList();
+        QVERIFY(points.size() > 100);
+        QVERIFY(std::hypot(points.first().toPointF().x() - 20.0,
+                           points.first().toPointF().y() - 20.0) < 0.1);
+        QVERIFY(std::hypot(points.last().toPointF().x() - 23.0,
+                           points.last().toPointF().y() - 20.0) < 0.1);
+
+        QSet<QString> destinations;
+        for (int row = 0; row < project.performerCount(); ++row) {
+            const QPointF point(project.data(project.index(row, 0), DrillProject::XRole).toDouble(),
+                                project.data(project.index(row, 0), DrillProject::YRole).toDouble());
+            destinations.insert(QStringLiteral("%1,%2").arg(point.x(), 0, 'f', 1).arg(point.y(), 0, 'f', 1));
+        }
+        QVERIFY(destinations.contains(QStringLiteral("20.0,20.0")));
+        QVERIFY(destinations.contains(QStringLiteral("23.0,20.0")));
+    }
+
+    void directDragShapeKeepsFullLengthWithFewPerformers()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("L"), 2, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll();
+        project.distributeLine(20, 30, 100, 30);
+        QSet<int> xCoordinates;
+        for (int row = 0; row < project.performerCount(); ++row)
+            xCoordinates.insert(qRound(project.data(project.index(row, 0), DrillProject::XRole).toDouble()));
+        QVERIFY(xCoordinates.contains(20));
+        QVERIFY(xCoordinates.contains(100));
+    }
+
+    void rectangleDistributionRetainsExactCorners()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("R"), 4, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll();
+        project.distributeRectangle(20, 30, 40, 20);
+        QSet<QString> corners;
+        for (int row = 0; row < project.performerCount(); ++row) {
+            const QPointF point(project.data(project.index(row, 0), DrillProject::XRole).toDouble(),
+                                project.data(project.index(row, 0), DrillProject::YRole).toDouble());
+            corners.insert(QStringLiteral("%1,%2").arg(point.x(), 0, 'f', 1).arg(point.y(), 0, 'f', 1));
+        }
+        QCOMPARE(corners.size(), 4);
+        QVERIFY(corners.contains(QStringLiteral("20.0,30.0")));
+        QVERIFY(corners.contains(QStringLiteral("60.0,30.0")));
+        QVERIFY(corners.contains(QStringLiteral("60.0,50.0")));
+        QVERIFY(corners.contains(QStringLiteral("20.0,50.0")));
+    }
+
     void formationOptimizerPreviewAndApply()
     {
         DrillProject project; project.newProject();
