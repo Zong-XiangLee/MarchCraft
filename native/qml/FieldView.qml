@@ -666,13 +666,16 @@ Item {
                     required property bool performerVisible
                     required property bool performerLocked
                     required property real facing
+                    readonly property real visualSize: Math.max(drillProject.markerGeometry === "dot" ? 4 : 7,
+                        drillProject.performerMarkerSize * root.zoom
+                        * (drillProject.markerGeometry === "dot" ? 0.42
+                           : drillProject.performerMarkerStyle === "compact" ? 0.78 : 1.0))
                     z: 2
                     visible: performerVisible
                     opacity: performerLocked ? 0.55 : 1.0
                     x: root.toCanvasX(fieldX) - width / 2
                     y: root.toCanvasY(fieldY) - height / 2
-                    width: Math.max(7, drillProject.performerMarkerSize * root.zoom
-                                    * (drillProject.performerMarkerStyle === "compact" ? 0.78 : 1.0))
+                    width: Math.max(14, visualSize)
                     height: width
 
                     Rectangle {
@@ -690,30 +693,44 @@ Item {
                     }
 
                     Rectangle {
-                        anchors.fill: parent
-                        radius: drillProject.markerGeometry === "circle" ? width / 2 : 1
+                        id: markerBody
+                        anchors.centerIn: parent
+                        width: marcher.visualSize
+                        height: width
+                        radius: drillProject.markerGeometry === "circle" || drillProject.markerGeometry === "dot" ? width / 2 : 1
                         rotation: drillProject.markerGeometry === "diamond" ? 45 : 0
                         scale: drillProject.markerGeometry === "diamond" ? 0.76 : 1
                         color: drillProject.performerMarkerStyle === "black" || drillProject.markerFillColor === "black" ? "#080b0a"
                              : drillProject.markerFillColor === "section" ? marcher.performerColor : drillProject.markerFillColor
-                        border.width: marcher.isSelected ? Math.max(3, drillProject.markerOutlineWidth) : (marcher.hasWarning ? Math.max(2, drillProject.markerOutlineWidth) : drillProject.markerOutlineWidth)
+                        border.width: drillProject.markerGeometry === "dot"
+                            ? (marcher.isSelected ? 1.5 : marcher.hasWarning ? 1 : Math.min(0.75, drillProject.markerOutlineWidth))
+                            : (marcher.isSelected ? Math.max(3, drillProject.markerOutlineWidth) : (marcher.hasWarning ? Math.max(2, drillProject.markerOutlineWidth) : drillProject.markerOutlineWidth))
                         border.color: marcher.isSelected ? "#fbbf24" : (marcher.hasWarning ? drillProject.markerWarningColor : drillProject.markerOutlineColor)
-                        Rectangle {
-                            visible: drillProject.markerFacingVisible
-                            anchors.horizontalCenter: parent.horizontalCenter
-                            y: -5
-                            width: 2; height: 8
-                            color: drillProject.markerFacingColor
-                            rotation: marcher.facing
-                            transformOrigin: Item.Bottom
-                        }
                         Text {
-                            visible: drillProject.performerMarkerStyle === "colored"
+                            visible: drillProject.performerMarkerStyle === "colored" && drillProject.markerGeometry !== "dot"
                             anchors.centerIn: parent
                             text: marcher.symbol || "•"
                             color: "#07110d"
                             font.bold: true
                             font.pixelSize: Math.max(8, 10 * root.zoom)
+                        }
+                    }
+                    Item {
+                        id: facingIndicator
+                        visible: drillProject.markerFacingVisible
+                        anchors.centerIn: markerBody
+                        width: marcher.visualSize
+                        height: width
+                        // 0 = front field (the bottom/audience edge), 180 = back field.
+                        // Negating the stored clockwise field heading also maps 90 to Side 2.
+                        rotation: -marcher.facing
+                        Rectangle {
+                            anchors.horizontalCenter: parent.horizontalCenter
+                            y: parent.height - 0.5
+                            width: drillProject.markerGeometry === "dot" ? 1.5 : 2
+                            height: Math.max(3.5, parent.height * (drillProject.markerGeometry === "dot" ? 0.65 : 0.48))
+                            radius: width / 2
+                            color: drillProject.markerFacingColor
                         }
                     }
                     Label {
