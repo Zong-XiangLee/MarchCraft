@@ -271,7 +271,7 @@ Item {
             }
         }
 
-        // Matching vertical short-yardage marks on the two regulation hash rows.
+        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
         Repeater3D {
             model: root.insertColumnCount * 2
             delegate: Model {
@@ -284,7 +284,7 @@ Item {
                                       drillProject.fieldDepthSteps / 2
                                       - (backHash ? drillProject.backHashSteps
                                                   : drillProject.frontHashSteps))
-                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
+                scale: Qt.vector3d(markLength / 100, 0.0003, 0.0018)
                 materials: PrincipledMaterial { baseColor: "#eef5f0"; roughness: 0.88 }
             }
         }

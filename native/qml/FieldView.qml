@@ -174,19 +174,22 @@ Item {
 
                     // There are four one-yard inserts between adjacent five-yard lines.
                     // At 8-to-5 they fall at 1.6-step intervals, never on the full yard line.
-                    // All short-yardage marks run vertically, perpendicular to the sidelines.
-                    ctx.lineWidth = Math.max(1, 0.18 * field.sx)
+                    // Sideline inserts run inward; the two-foot hashes run parallel to the sidelines.
                     const hashRows = [drillProject.frontHashSteps, drillProject.backHashSteps]
-                    const markLength = (24.0 / 22.5) * field.sy
+                    const markLengthSteps = 24.0 / 22.5
+                    const insertLength = markLengthSteps * field.sy
+                    const hashLength = markLengthSteps * field.sx
                     for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
                         const x = drillProject.fieldInsertStep(column) * field.sx
-                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, markLength); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x, h - markLength); ctx.stroke()
+                        ctx.lineWidth = Math.max(1, 0.18 * field.sx)
+                        ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, insertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, h); ctx.lineTo(x, h - insertLength); ctx.stroke()
+                        ctx.lineWidth = Math.max(1, 0.18 * field.sy)
                         for (let hashIndex = 0; hashIndex < hashRows.length; ++hashIndex) {
                             const hashY = (drillProject.fieldDepthSteps - hashRows[hashIndex]) * field.sy
                             ctx.beginPath()
-                            ctx.moveTo(x, hashY - markLength / 2)
-                            ctx.lineTo(x, hashY + markLength / 2)
+                            ctx.moveTo(x - hashLength / 2, hashY)
+                            ctx.lineTo(x + hashLength / 2, hashY)
                             ctx.stroke()
                         }
                     }
