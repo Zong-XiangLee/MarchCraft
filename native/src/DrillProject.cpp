@@ -492,7 +492,6 @@ void DrillProject::setPerformerMarkerSize(int value)
 
 #define EDITOR_STRING_SETTER(Method, Member, Key) \
 void DrillProject::Method(const QString &value) { if (value == Member) return; Member = value; QSettings().setValue(QStringLiteral(Key), value); emit editorSettingsChanged(); }
-EDITOR_STRING_SETTER(setMarkerGeometry, m_markerGeometry, "view/markerGeometry")
 EDITOR_STRING_SETTER(setMarkerFillColor, m_markerFillColor, "view/markerFillColor")
 EDITOR_STRING_SETTER(setMarkerOutlineColor, m_markerOutlineColor, "view/markerOutlineColor")
 EDITOR_STRING_SETTER(setMarkerLabelMode, m_markerLabelMode, "view/markerLabelMode")
@@ -501,6 +500,17 @@ EDITOR_STRING_SETTER(setMarkerFacingColor, m_markerFacingColor, "view/markerFaci
 EDITOR_STRING_SETTER(setMarkerWarningColor, m_markerWarningColor, "view/markerWarningColor")
 EDITOR_STRING_SETTER(setFieldGridColor, m_fieldGridColor, "view/fieldGridColor")
 #undef EDITOR_STRING_SETTER
+
+void DrillProject::setMarkerGeometry(const QString &value)
+{
+    static const QSet<QString> valid{QStringLiteral("dot"), QStringLiteral("circle"),
+        QStringLiteral("square"), QStringLiteral("diamond")};
+    const QString next = valid.contains(value) ? value : QStringLiteral("circle");
+    if (next == m_markerGeometry) return;
+    m_markerGeometry = next;
+    QSettings().setValue(QStringLiteral("view/markerGeometry"), next);
+    emit editorSettingsChanged();
+}
 
 void DrillProject::setMarkerOutlineWidth(int value) { value = qBound(0, value, 5); if (value == m_markerOutlineWidth) return; m_markerOutlineWidth = value; QSettings().setValue(QStringLiteral("view/markerOutlineWidth"), value); emit editorSettingsChanged(); }
 void DrillProject::setMarkerFacingVisible(bool value) { if (value == m_markerFacingVisible) return; m_markerFacingVisible = value; QSettings().setValue(QStringLiteral("view/markerFacingVisible"), value); emit editorSettingsChanged(); }
@@ -658,7 +668,7 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case YRole: return displayed.y();
     case FromXRole: return from.position.x();
     case FromYRole: return from.position.y();
-    case FacingRole: return placement.facing;
+    case FacingRole: return m_playbackActive ? interpolatedFacing(index.row()) : placement.facing;
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
@@ -4296,6 +4306,7 @@ QVariantMap DrillProject::performerInfo(int row) const
             {QStringLiteral("instrument"), person.instrument}, {QStringLiteral("section"), person.section},
             {QStringLiteral("notes"), person.notes}, {QStringLiteral("coordinate"), coordinateFor(row)},
             {QStringLiteral("color"), person.color.name(QColor::HexRgb)},
+            {QStringLiteral("facing"), placementAt(row, m_currentSet).facing},
             {QStringLiteral("visible"), person.visible}, {QStringLiteral("locked"), person.locked},
             {QStringLiteral("bodyRigId"), person.appearance.bodyRigId},
             {QStringLiteral("uniformId"), person.appearance.uniformId},
@@ -4564,6 +4575,19 @@ QPointF DrillProject::interpolatedPosition(int performerIndex) const
 {
     if (m_currentSet <= 0 || m_playhead >= 1.0) return placementAt(performerIndex, m_currentSet).position;
     return pathPosition(performerIndex, m_currentSet, m_playhead);
+}
+
+double DrillProject::interpolatedFacing(int performerIndex) const
+{
+    const double destination = placementAt(performerIndex, m_currentSet).facing;
+    if (m_currentSet <= 0 || m_playhead >= 1.0) return destination;
+    const double start = placementAt(performerIndex, m_currentSet - 1).facing;
+    // Turn along the shortest arc so a 350-to-10 degree change passes through
+    // front field instead of spinning almost a full revolution.
+    const double delta = std::fmod(destination - start + 540.0, 360.0) - 180.0;
+    double result = std::fmod(start + delta * m_playhead, 360.0);
+    if (result < 0.0) result += 360.0;
+    return result;
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const
