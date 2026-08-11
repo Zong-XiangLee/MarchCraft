@@ -358,6 +358,7 @@ public:
     Q_INVOKABLE void insertSetAt(int index);
     Q_INVOKABLE void archiveSetAt(int index);
     Q_INVOKABLE void moveSet(int from, int to);
+    Q_INVOKABLE bool setLabelsNeedRenumbering() const;
     Q_INVOKABLE void renumberSets();
     Q_INVOKABLE void removeCurrentSet();
     Q_INVOKABLE void createVariant(const QString &name = {}, const QString &caption = {});
@@ -585,7 +586,7 @@ private:
     QSet<QString> m_dismissedClinicIssues;
     QVariantMap m_pendingSuggestion;
     QSet<QString> m_highlightedClinicProps;
-    QString m_openingBehavior{QStringLiteral("hold")};
+    QString m_openingBehavior{QStringLiteral("move")};
     int m_openingCounts = 8;
     MarchCraft::VenueConfiguration m_venue;
     QVector<MarchCraft::PropInstance> m_props;

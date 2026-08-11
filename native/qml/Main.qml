@@ -566,6 +566,11 @@ ApplicationWindow {
                                     onClicked: {
                                         drillProject.selectSetRange(index, (Qt.application.keyboardModifiers & Qt.ShiftModifier) !== 0)
                                     }
+                                    onDoubleClicked: {
+                                        drillProject.currentSetIndex = index
+                                        setDialog.editing = true
+                                        setDialog.open()
+                                    }
                                     MouseArea {
                                         anchors.fill: parent; acceptedButtons: Qt.RightButton; propagateComposedEvents: true
                                         onClicked: function(mouse) { setContextMenu.setIndex=index; drillProject.currentSetIndex=index; const p=mapToItem(window.contentItem,mouse.x,mouse.y); setContextMenu.popup(p.x,p.y) }
@@ -581,7 +586,7 @@ ApplicationWindow {
                                             } else if(setStrip.dragFrom >= 0) {
                                                 const from=setStrip.dragFrom, target=setStrip.targetIndex()
                                                 setStrip.dragFrom=-1; setStrip.dropSlot=-1; setStrip.draggedLabel=""
-                                                if(target!==from){drillProject.moveSet(from,target);renumberDialog.open()}
+                                                if(target!==from){drillProject.moveSet(from,target);if(drillProject.setLabelsNeedRenumbering())renumberDialog.open()}
                                             }
                                         }
                                     }
@@ -933,12 +938,12 @@ ApplicationWindow {
     Menu {
         id: setContextMenu; property int setIndex: -1
         MenuItem { text: "Edit set"; onTriggered: { drillProject.currentSetIndex=setContextMenu.setIndex; setDialog.editing=true; setDialog.open() } }
-        MenuItem { text: "Copy set"; onTriggered: { drillProject.duplicateSetAt(setContextMenu.setIndex); renumberDialog.open() } }
-        MenuItem { text: "Add before"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex); renumberDialog.open() } }
-        MenuItem { text: "Add after"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex+1); renumberDialog.open() } }
+        MenuItem { text: "Copy set"; onTriggered: { drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        MenuItem { text: "Add before"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        MenuItem { text: "Add after"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         MenuItem { text: "Create variant"; onTriggered: { drillProject.currentSetIndex=setContextMenu.setIndex; variantDialog.open() } }
         MenuSeparator {}
-        MenuItem { text: "Delete set"; enabled: drillProject.setCount>1; onTriggered: { drillProject.archiveSetAt(setContextMenu.setIndex); renumberDialog.open() } }
+        MenuItem { text: "Delete set"; enabled: drillProject.setCount>1; onTriggered: { drillProject.archiveSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
     }
 
     Dialog {
@@ -1174,7 +1179,8 @@ ApplicationWindow {
         onOpened: {
             const s = editing ? drillProject.setInfo(drillProject.currentSetIndex) : ({})
             setNumber.text = s.number || String(drillProject.setCount + 1)
-            setName.text = s.name || "Set " + (drillProject.setCount + 1)
+            const defaultNumber = s.number || String(drillProject.setCount + 1)
+            setName.text = !s.name || /^Set \\d+[A-Z]?$/i.test(s.name) || s.name === "New set" ? "Set " + defaultNumber : s.name
             setCaption.text = s.caption || ""
             setMeasure.text = s.measure || ""
             setCounts.value = s.opening ? drillProject.openingCounts : (s.counts || 8)
@@ -1184,7 +1190,7 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             Label { text: "Set number" }
             TextField { id: setNumber; Layout.fillWidth: true; placeholderText: "1A" }
-            Label { text: "Set name" }
+            Label { text: "Set name (double-click a set card to customize)" }
             TextField { id: setName; Layout.fillWidth: true }
             Label { text: "Caption" }
             TextField { id: setCaption; Layout.fillWidth: true; placeholderText: "Optional description" }
@@ -1192,8 +1198,9 @@ ApplicationWindow {
             TextField { id: setMeasure; Layout.fillWidth: true; placeholderText: "17–20" }
             Label { text: "Opening behavior"; visible: setDialog.editing && drillProject.currentSetIndex === 0 }
             ComboBox { id: openingBehavior; visible: setDialog.editing && drillProject.currentSetIndex === 0; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Hold at Set 1",value:"hold"},{text:"Start moving immediately",value:"move"}] }
-            Label { text: setDialog.editing && drillProject.currentSetIndex === 0 ? "Opening hold counts" : "Incoming transition counts"; visible: !(setDialog.editing && drillProject.currentSetIndex === 0 && openingBehavior.currentValue === "move") }
+            Label { text: setDialog.editing && drillProject.currentSetIndex === 0 ? "Opening hold counts" : "Counts"; visible: !(setDialog.editing && drillProject.currentSetIndex === 0 && openingBehavior.currentValue === "move") }
             SpinBox { id: setCounts; from: 1; to: 2048; editable: true; Layout.fillWidth: true; visible: !(setDialog.editing && drillProject.currentSetIndex === 0 && openingBehavior.currentValue === "move") }
+            Label { visible: !(setDialog.editing && drillProject.currentSetIndex === 0); Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#8fa197"; text: "For a hold, use two consecutive sets with identical coordinates and enter the hold duration here." }
             Label { visible: setDialog.editing && drillProject.currentSetIndex === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#8fa197"; text: openingBehavior.currentValue === "hold" ? "The entire ensemble remains at Set 1 for these counts before the show clock and music begin moving." : "Playback begins the Set 1 to Set 2 transition immediately, with no opening standstill." }
             CheckBox { id: setSubset; text: "This is a subset" }
             RowLayout {
