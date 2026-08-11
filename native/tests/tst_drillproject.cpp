@@ -554,7 +554,7 @@ private slots:
         const QString path = temporary.filePath(QStringLiteral("clinic.marchcraft")); QVERIFY(project.saveProject(path));
         DrillProject restored; QVERIFY(restored.loadProject(path)); QCOMPARE(restored.capabilityProfile(), QStringLiteral("beginner"));
         restored.selectAll(); const int beforeSets = restored.setCount();
-        const auto suggestions = restored.suggestNextSet(); QCOMPARE(suggestions.size(), 3);
+        const auto suggestions = restored.suggestNextSet(); QCOMPARE(suggestions.size(), 11);
         const auto candidate = suggestions.first().toMap();
         restored.previewFormation(candidate.value(QStringLiteral("type")).toString(),
             candidate.value(QStringLiteral("options")).toMap(), QStringLiteral("rehearsalSafe"));

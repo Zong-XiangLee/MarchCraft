@@ -549,11 +549,20 @@ ApplicationWindow {
                     property var person: ({})
                     property string clinicSeverityFilter: "all"
                     property string clinicTypeFilter: "all"
+                    property bool nextSetSuggestionsExpanded: false
+                    property var nextSetCandidates: []
                     function refresh() { person = drillProject.performerInfo(window.activePerformer) }
+                    function refreshNextSetCandidates() { nextSetCandidates = drillProject.suggestNextSet() }
                     Connections {
                         target: drillProject
-                        function onCurrentSetChanged() { inspector.refresh() }
-                        function onSelectionChanged() { inspector.refresh() }
+                        function onCurrentSetChanged() {
+                            inspector.refresh()
+                            if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
+                        }
+                        function onSelectionChanged() {
+                            inspector.refresh()
+                            if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
+                        }
                     }
 
                     RowLayout { Layout.fillWidth: true; Layout.margins: 8
@@ -703,7 +712,53 @@ ApplicationWindow {
                     }
                     RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                         Button { text: "Scan show"; Layout.fillWidth: true; onClicked: drillProject.scanShow() }
-                        Button { text: "Suggest next set"; enabled: drillProject.selectedCount > 1; Layout.fillWidth: true; onClicked: nextSetSuggestionDialog.open() }
+                        Button {
+                            text: inspector.nextSetSuggestionsExpanded ? "Hide next-set ideas" : "Suggest next set"
+                            enabled: drillProject.selectedCount > 1
+                            Layout.fillWidth: true
+                            onClicked: {
+                                inspector.nextSetSuggestionsExpanded = !inspector.nextSetSuggestionsExpanded
+                                if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
+                            }
+                        }
+                    }
+                    ColumnLayout {
+                        visible: inspector.nextSetSuggestionsExpanded
+                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                        spacing: 6
+                        Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#9fb1a7"; Layout.fillWidth: true }
+                        Label {
+                            text: "Ranked for spacing and reachable movement. Preview one directly on the field before applying it."
+                            wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#a9bbb1"; font.pixelSize: 11
+                        }
+                        Repeater {
+                            model: inspector.nextSetCandidates
+                            delegate: Frame {
+                                required property var modelData
+                                Layout.fillWidth: true; padding: 8
+                                background: Rectangle { color: "#111b20"; border.color: "#2c3d46"; radius: 6 }
+                                RowLayout {
+                                    anchors.fill: parent; spacing: 8
+                                    ColumnLayout {
+                                        Layout.fillWidth: true; spacing: 2
+                                        Label { text: modelData.label; font.bold: true; Layout.fillWidth: true }
+                                        Label { text: modelData.detail; color: "#9fb1a7"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                        Label { text: "Clinic score " + Number(modelData.score).toFixed(1); color: "#6f8d80"; font.pixelSize: 10 }
+                                    }
+                                    Button {
+                                        text: drillProject.formationPreviewBusy ? "Optimizing..." : "Preview"
+                                        enabled: !drillProject.formationPreviewBusy
+                                        onClicked: drillProject.requestFormationPreview(modelData.type, modelData.options, "rehearsalSafe")
+                                    }
+                                }
+                            }
+                        }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Button { text: "Cancel preview"; enabled: drillProject.formationPreviewActive; onClicked: drillProject.cancelFormationPreview() }
+                            Item { Layout.fillWidth: true }
+                            Button { text: "Apply preview"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: drillProject.commitFormationPreview() }
+                        }
                     }
                     Item { Layout.preferredHeight: 12 }
                 }
@@ -760,36 +815,6 @@ ApplicationWindow {
             RowLayout { Layout.alignment: Qt.AlignRight
                 Button { text: "Cancel"; onClicked: freehandPreviewDialog.close() }
                 Button { text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { freehandPreviewDialog.applied = drillProject.commitFormationPreview(); freehandPreviewDialog.close() } }
-            }
-        }
-    }
-
-    Dialog {
-        id: nextSetSuggestionDialog
-        property var candidates: []
-        title: "Drill Clinic / next-set ideas"; modal: true; anchors.centerIn: Overlay.overlay; width: 520
-        standardButtons: Dialog.Close
-        onOpened: candidates = drillProject.suggestNextSet()
-        onClosed: drillProject.cancelFormationPreview()
-        contentItem: ColumnLayout {
-            Label { text: "Three safe starting points, ranked for spacing and reachable movement. Preview before accepting."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#a9bbb1" }
-            Repeater {
-                model: nextSetSuggestionDialog.candidates
-                delegate: Frame {
-                    required property var modelData
-                    Layout.fillWidth: true
-                    RowLayout { anchors.fill: parent
-                        ColumnLayout { Layout.fillWidth: true
-                            Label { text: modelData.label; font.bold: true }
-                            Label { text: "Clinic score " + Number(modelData.score).toFixed(1); color: "#8fa197" }
-                        }
-                        Button { text: drillProject.formationPreviewBusy ? "Optimizing..." : "Preview"; enabled: !drillProject.formationPreviewBusy; onClicked: drillProject.requestFormationPreview(modelData.type, modelData.options, "rehearsalSafe") }
-                    }
-                }
-            }
-            RowLayout { Layout.alignment: Qt.AlignRight
-                Button { text: "Cancel preview"; enabled: drillProject.formationPreviewActive; onClicked: drillProject.cancelFormationPreview() }
-                Button { text: "Apply preview"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { drillProject.commitFormationPreview(); nextSetSuggestionDialog.close() } }
             }
         }
     }
