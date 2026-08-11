@@ -15,7 +15,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Animation | Set-to-set or continuous whole-show playback with visible marcher paths and per-set count/BPM timing |
 | Roster | Add, edit, remove, batch-create, search, multi-select, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, and mark subsets |
-| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, customizable markers, persistent shape library, adaptive spirals, and equal-distance distribution |
+| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and equal-distance distribution |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
 | Music | Native MIDI/MusicXML timing and track import, compact selectable measure timeline, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |

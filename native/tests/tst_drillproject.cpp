@@ -378,6 +378,24 @@ private slots:
         QCOMPARE(project.selectedCount(), 0);
     }
 
+    void performerFacingIsPerSetAndInterpolatesShortestTurn()
+    {
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll(); project.faceSelected(350.0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::FacingRole).toDouble(), 350.0);
+        project.addSet(QStringLiteral("Set 2"), 8);
+        project.faceSelected(10.0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::FacingRole).toDouble(), 10.0);
+        project.setPlaybackActive(true); project.setPlayhead(0.5);
+        QVERIFY(closeTo(project.data(project.index(0, 0), DrillProject::FacingRole).toDouble(), 0.0));
+        project.setPlaybackActive(false); project.setCurrentSetIndex(0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::FacingRole).toDouble(), 350.0);
+
+        project.setMarkerGeometry(QStringLiteral("dot"));
+        QCOMPARE(project.markerGeometry(), QStringLiteral("dot"));
+    }
+
     void variantGroupsClickAndPersistence()
     {
         QTemporaryDir temporary;

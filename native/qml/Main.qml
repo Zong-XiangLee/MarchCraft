@@ -686,7 +686,17 @@ ApplicationWindow {
                             Label { text: Number(inspector.person.directionChange || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
                             Label { text: "Incoming path"; color: "#8fa197" }
                             Label { text: inspector.person.pathType || "direct"; Layout.alignment: Qt.AlignRight }
+                            Label { text: "Facing at this set"; color: "#8fa197" }
+                            Label { text: Number(inspector.person.facing || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
                         }
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Button { text: "Front"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(0); inspector.refresh() } }
+                            Button { text: "Back"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(180); inspector.refresh() } }
+                            Button { text: "S1"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(270); inspector.refresh() } }
+                            Button { text: "S2"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(90); inspector.refresh() } }
+                        }
+                        Label { text: "Facing is saved independently for each set."; color: "#71847a"; font.pixelSize: 10 }
                         Button { text: "Edit performer…"; enabled: window.activePerformer >= 0; Layout.fillWidth: true; onClicked: { performerDialog.editing = true; performerDialog.open() } }
                         Button {
                             text: "Uniform color…"
@@ -719,6 +729,13 @@ ApplicationWindow {
                     }
                     Button { text: "Auto-label selection"; visible: false; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: drillProject.autoLabel("P") }
                     Button { text: "Bulk edit selection…"; visible: drillProject.selectedCount > 0; enabled: visible; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: bulkEditDialog.open() }
+                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProject.selectedCount > 1
+                        Label { text: "Facing at this set"; color: "#8fa197"; Layout.fillWidth: true }
+                        Button { text: "Front"; onClicked: drillProject.faceSelected(0) }
+                        Button { text: "Back"; onClicked: drillProject.faceSelected(180) }
+                        Button { text: "S1"; onClicked: drillProject.faceSelected(270) }
+                        Button { text: "S2"; onClicked: drillProject.faceSelected(90) }
+                    }
                     RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProject.selectedCount > 1
                         Label { text: drillProject.selectedCount + " performers"; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true }
                         Button { text: "Optimize..."; onClicked: formationDialog.open() }
@@ -971,7 +988,12 @@ ApplicationWindow {
                 GridLayout {
                     columns: 2
                     Label { text: "Marker shape" }
-                    ComboBox { Layout.fillWidth: true; model: ["circle","square","diamond"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProject.markerGeometry)); onActivated: drillProject.markerGeometry=currentText }
+                    ComboBox {
+                        Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                        model: [{text:"Dot (compact)",value:"dot"},{text:"Circle",value:"circle"},{text:"Square",value:"square"},{text:"Diamond",value:"diamond"}]
+                        Component.onCompleted: currentIndex=Math.max(0,indexOfValue(drillProject.markerGeometry))
+                        onActivated: drillProject.markerGeometry=currentValue
+                    }
                     Label { text: "Fill" }
                     TextField { Layout.fillWidth: true; text: drillProject.markerFillColor; placeholderText: "section, black, or #RRGGBB"; onEditingFinished: drillProject.markerFillColor=text }
                     Label { text: "Size" }
@@ -1150,9 +1172,11 @@ ApplicationWindow {
             TextField { id: bulkInstrument; placeholderText: "Instrument (unchanged)"; Layout.fillWidth: true }
             TextField { id: bulkSection; placeholderText: "Section (unchanged)"; Layout.fillWidth: true }
             TextField { id: bulkColor; placeholderText: "Color, e.g. #38bdf8 (unchanged)"; Layout.fillWidth: true }
-            RowLayout {
-                Label { text: "Facing" }
-                SpinBox { id: bulkFacing; from: 0; to: 359; value: 0; editable: true; Layout.fillWidth: true }
+            CheckBox { id: bulkFacingEnabled; text: "Change facing for this set" }
+            ComboBox {
+                id: bulkFacing; Layout.fillWidth: true; enabled: bulkFacingEnabled.checked
+                textRole: "text"; valueRole: "value"
+                model: [{text:"Front field (0 deg)",value:0},{text:"Side 2 (90 deg)",value:90},{text:"Back field (180 deg)",value:180},{text:"Side 1 (270 deg)",value:270}]
             }
             CheckBox { id: bulkVisibilityEnabled; text: "Change visibility" }
             CheckBox { id: bulkVisible; text: "Visible"; checked: true; enabled: bulkVisibilityEnabled.checked }
@@ -1162,7 +1186,7 @@ ApplicationWindow {
                 text: "Apply to " + drillProject.selectedCount + " performers"; highlighted: true; Layout.alignment: Qt.AlignRight
                 onClicked: {
                     drillProject.updateSelectedPerformers(bulkInstrument.text, bulkSection.text, bulkColor.text,
-                                                          bulkFacing.value,
+                                                          bulkFacingEnabled.checked ? bulkFacing.currentValue : Number.NaN,
                                                           bulkVisibilityEnabled.checked ? (bulkVisible.checked ? 1 : 0) : -1,
                                                           bulkLockEnabled.checked ? (bulkLocked.checked ? 1 : 0) : -1)
                     bulkEditDialog.close()
