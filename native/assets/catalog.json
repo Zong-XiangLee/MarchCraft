@@ -1,6 +1,17 @@
 {
   "schemaVersion": 1,
   "coordinateContract": { "units": "meters", "upAxis": "+Y", "forwardAxis": "-Z", "groundPlaneY": 0 },
+  "humanPerformer": {
+    "runtimeAsset": "qrc:/performer/human_performer.glb",
+    "sourceAsset": "Models/HUMAN.blend",
+    "author": "vistaalienprime",
+    "sourceUrl": "https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e",
+    "license": "CC-BY-4.0",
+    "canonicalHeightMeters": 1.75,
+    "triangleCount": 33240,
+    "lodTriangleCounts": [33240, 20227, 4879],
+    "rigFamily": "marchcraft.canonical.v1"
+  },
   "assets": [
     { "id": "performer.body.standard", "kind": "bodyRig", "version": 1, "label": "Standard", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.75, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
     { "id": "performer.body.tall", "kind": "bodyRig", "version": 1, "label": "Tall", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.91, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },

@@ -40,11 +40,22 @@ qt_add_qml_module(marchcraft
         qml/Main.qml
         qml/FieldView.qml
         qml/ThreeDView.qml
-        qml/Mannequin3D.qml
+        qml/HumanPerformer3D.qml
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
         qml/MusicPanel.qml
+    SOURCES
+        src/HumanGeometry.cpp
+        src/HumanGeometry.h
+)
+
+# qt_add_qml_module generates a type-registration translation unit that includes
+# registered C++ type headers by basename (for example, <HumanGeometry.h>).
+# Expose src/ so that generated file can see the header as well as our own
+# translation units.
+target_include_directories(marchcraft PRIVATE
+    "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
 
 set(MARCHCRAFT_SAMPLE_JSON "${CMAKE_CURRENT_SOURCE_DIR}/../data/coordinates.json")
@@ -58,6 +69,20 @@ qt_add_resources(marchcraft "marchcraft_catalog"
     PREFIX "/catalog"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
+
+set(MARCHCRAFT_HUMAN_GLB "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer.glb")
+set(MARCHCRAFT_HUMAN_GLB_LOD1 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod1.glb")
+set(MARCHCRAFT_HUMAN_GLB_LOD2 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod2.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB}" PROPERTIES
+    QT_RESOURCE_ALIAS "human_performer.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD1}" PROPERTIES
+    QT_RESOURCE_ALIAS "human_performer_lod1.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD2}" PROPERTIES
+    QT_RESOURCE_ALIAS "human_performer_lod2.glb")
+qt_add_resources(marchcraft "marchcraft_performer"
+    PREFIX "/performer"
+    FILES "${MARCHCRAFT_HUMAN_GLB}" "${MARCHCRAFT_HUMAN_GLB_LOD1}"
+          "${MARCHCRAFT_HUMAN_GLB_LOD2}")
 
 add_custom_command(TARGET marchcraft POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
