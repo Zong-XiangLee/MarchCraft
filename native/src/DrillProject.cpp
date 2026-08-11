@@ -14,6 +14,7 @@
 #include <QPageSize>
 #include <QPdfWriter>
 #include <QPolygonF>
+#include <QRegularExpression>
 #include <QSaveFile>
 #include <QSettings>
 #include <QSqlDatabase>
@@ -1535,7 +1536,7 @@ QVariantMap DrillProject::selectionMetrics() const
 void DrillProject::newProject()
 {
     m_analyticsValid = false;
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     beginResetModel();
     m_performers.clear();
     m_sets = {DrillSet{}};
@@ -1575,7 +1576,7 @@ void DrillProject::newProject()
 
 void DrillProject::loadDemo()
 {
-    m_openingBehavior = QStringLiteral("hold"); m_openingCounts = 8;
+    m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     if (QFile::exists(QStringLiteral(":/samples/coordinates.json"))) {
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
@@ -1667,6 +1668,10 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
     }
 
     beginResetModel();
+    // Coordinate sheets begin at a zero-count first set. A written hold is a
+    // following set at the same coordinate, with that row's count value.
+    m_openingBehavior = QStringLiteral("move");
+    m_openingCounts = 8;
     m_performers.clear();
     m_sets.clear();
     m_archivedSets.clear();
@@ -2411,9 +2416,27 @@ void DrillProject::moveSet(int from,int to)
     commitSnapshot(before, QStringLiteral("Reorder sets"));
 }
 
+bool DrillProject::setLabelsNeedRenumbering() const
+{
+    int full = 0, subset = 0;
+    for (const auto &set : m_sets) {
+        QString expected;
+        if (!set.subset) {
+            ++full;
+            subset = 0;
+            expected = QString::number(full);
+        } else {
+            ++subset;
+            expected = QString::number(qMax(1, full)) + QChar('A' + qMin(25, subset - 1));
+        }
+        if (set.number.trimmed() != expected) return true;
+    }
+    return false;
+}
+
 void DrillProject::renumberSets()
 {
-    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
+    const auto before=toJson();int full=0,subset=0;for(auto&set:m_sets){const QString oldNumber=set.number;if(!set.subset){++full;subset=0;set.number=QString::number(full);}else{++subset;set.number=QString::number(qMax(1,full))+QChar('A'+qMin(25,subset-1));}const QString oldDefault=QStringLiteral("Set %1").arg(oldNumber);if(set.activeVariant().name==oldDefault||set.activeVariant().name==QStringLiteral("New set")||QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"),QRegularExpression::CaseInsensitiveOption).match(set.activeVariant().name).hasMatch())set.activeVariant().name=QStringLiteral("Set %1").arg(set.number);}emit setsChanged();commitSnapshot(before,QStringLiteral("Renumber sets"));
 }
 
 void DrillProject::removeCurrentSet()
@@ -2545,7 +2568,10 @@ void DrillProject::updateCurrentSet(const QString &number, const QString &name,
     const auto before = toJson();
     auto &set = m_sets[m_currentSet];
     set.number = number.trimmed().isEmpty() ? QString::number(m_currentSet + 1) : number.trimmed();
-    set.activeVariant().name = name.trimmed();
+    const QString requestedName = name.trimmed();
+    set.activeVariant().name = requestedName.isEmpty()
+        || QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"), QRegularExpression::CaseInsensitiveOption).match(requestedName).hasMatch()
+        ? QStringLiteral("Set %1").arg(set.number) : requestedName;
     set.activeVariant().caption = caption.trimmed();
     set.measure = measure.trimmed();
     if (m_currentSet == 0) {
@@ -4154,19 +4180,37 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
 QVariantList DrillProject::suggestNextSet()
 {
     QVariantList candidates; if (selectedCount() < 2) return candidates;
-    const QStringList types{QStringLiteral("line"),QStringLiteral("arc"),QStringLiteral("block"),QStringLiteral("circle")};
-    for (const QString &type : types) {
+    struct SuggestionSpec { const char *type; const char *label; const char *detail; };
+    // Keep the clinic broad enough to offer both rehearsal-friendly foundations
+    // and more expressive choices. The inspector is scrollable, so these do not
+    // need to be artificially limited to the old three-item modal.
+    const QVector<SuggestionSpec> suggestions{
+        {"line", "Safe line", "A clean, readable reset with the smallest form complexity."},
+        {"arc", "Safe arc", "An open curve that preserves visual flow while leaving a clear front."},
+        {"block", "Safe block", "A compact, evenly spaced grid for a stable visual statement."},
+        {"circle", "Safe circle", "A balanced closed form with equal visual weight in every direction."},
+        {"ellipse", "Safe ellipse", "A stretched circle that can carry direction across the field."},
+        {"rectangle", "Safe rectangle", "A crisp perimeter with strong corners and clear staging lanes."},
+        {"triangle", "Safe triangle", "A focused, directional form that creates a natural point of emphasis."},
+        {"diamond", "Safe diamond", "A centered angular form that reads well from the stands."},
+        {"polygon", "Safe polygon", "A rounded geometric form with more sides for a softer transition."},
+        {"star", "Safe star", "A feature shape for moments that call for a more decorative picture."},
+        {"spiral", "Safe spiral", "An energetic, expanding path for a featured transition."}
+    };
+    for (const auto &suggestion : suggestions) {
+        const QString type = QString::fromLatin1(suggestion.type);
         auto defaults = formationDefaults(type, QStringLiteral("selection"));
         defaults.insert(QStringLiteral("insertAsNextSet"), true);
         const auto estimate = formationEstimate(type, defaults);
         const double score = estimate.value(QStringLiteral("estimatedSpacing")).toDouble() * 10.0
             - estimate.value(QStringLiteral("currentAverageMove")).toDouble();
         candidates.push_back(QVariantMap{{QStringLiteral("id"),QStringLiteral("next:%1").arg(type)},
-            {QStringLiteral("type"),type},{QStringLiteral("label"),QStringLiteral("Safe %1").arg(type)},
+            {QStringLiteral("type"),type},{QStringLiteral("label"),QString::fromLatin1(suggestion.label)},
+            {QStringLiteral("detail"),QString::fromLatin1(suggestion.detail)},
             {QStringLiteral("score"),score},{QStringLiteral("options"),defaults}});
     }
     std::stable_sort(candidates.begin(),candidates.end(),[](const QVariant&a,const QVariant&b){return a.toMap().value(QStringLiteral("score")).toDouble()>b.toMap().value(QStringLiteral("score")).toDouble();});
-    while(candidates.size()>3)candidates.removeLast(); return candidates;
+    return candidates;
 }
 
 QVariantMap DrillProject::setInfo(int index) const

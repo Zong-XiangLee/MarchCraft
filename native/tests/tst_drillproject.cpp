@@ -448,6 +448,16 @@ private slots:
         project.archiveSetAt(1); QCOMPARE(project.setCount(),3); QCOMPARE(project.archivedSetCount(),1);
     }
 
+    void setRenumberPromptIsOnlyNeededForBrokenLabels()
+    {
+        DrillProject project; project.newProject(); project.addSet(QStringLiteral("Set 2"), 8); project.addSet(QStringLiteral("Set 3"), 8);
+        QVERIFY(!project.setLabelsNeedRenumbering());
+        project.archiveSetAt(2); QVERIFY(!project.setLabelsNeedRenumbering());
+        project.addSet(QStringLiteral("Set 3"), 8); project.archiveSetAt(1); QVERIFY(project.setLabelsNeedRenumbering());
+        project.renumberSets(); QVERIFY(!project.setLabelsNeedRenumbering());
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("name")).toString(), QStringLiteral("Set 2"));
+    }
+
     void galaxySpiralRemainsStableAtManyTurns()
     {
         DrillProject project; project.newProject();
@@ -613,7 +623,7 @@ private slots:
         const QString path = temporary.filePath(QStringLiteral("clinic.marchcraft")); QVERIFY(project.saveProject(path));
         DrillProject restored; QVERIFY(restored.loadProject(path)); QCOMPARE(restored.capabilityProfile(), QStringLiteral("beginner"));
         restored.selectAll(); const int beforeSets = restored.setCount();
-        const auto suggestions = restored.suggestNextSet(); QCOMPARE(suggestions.size(), 3);
+        const auto suggestions = restored.suggestNextSet(); QCOMPARE(suggestions.size(), 11);
         const auto candidate = suggestions.first().toMap();
         restored.previewFormation(candidate.value(QStringLiteral("type")).toString(),
             candidate.value(QStringLiteral("options")).toMap(), QStringLiteral("rehearsalSafe"));
@@ -681,6 +691,7 @@ private slots:
     {
         QTemporaryDir temporary; QVERIFY(temporary.isValid());
         DrillProject project; project.newProject(); project.addSet(QStringLiteral("Set 2"), 8);
+        project.setOpeningBehavior(QStringLiteral("hold"), 8);
         QCOMPARE(project.openingBehavior(), QStringLiteral("hold")); QCOMPARE(project.openingCounts(), 8);
         QVERIFY(project.openingDurationMs() > 3900.0 && project.openingDurationMs() < 4100.0);
         QVERIFY(!project.setShowTimeMs(project.openingDurationMs() / 2.0));
