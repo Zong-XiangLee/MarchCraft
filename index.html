@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Calculate total marching distance from performer coordinate sheets.">
+  <title>Stepwise — Drill Distance Calculator</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Manrope:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="field-lines" aria-hidden="true"></div>
+  <header class="topbar">
+    <a class="brand" href="#"><span class="brand-mark">S</span><span>STEPWISE</span></a>
+    <div class="show-pill"><span></span><span id="showName">Loading show…</span></div>
+  </header>
+
+  <main>
+    <section class="hero">
+      <div>
+        <p class="eyebrow">DRILL DISTANCE CALCULATOR</p>
+        <h1>Every set.<br><em>Every step.</em></h1>
+        <p class="intro">Turn coordinate sheets into a clear picture of each performer's physical demand across the entire production.</p>
+      </div>
+      <div class="hero-stat">
+        <span id="performerCount">—</span>
+        <small>PERFORMERS<br>ANALYZED</small>
+      </div>
+    </section>
+
+    <section class="controls" aria-label="Calculator controls">
+      <label class="search-wrap">
+        <span>FIND A PERFORMER</span>
+        <div><svg aria-hidden="true" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"></circle><path d="m20 20-4-4"></path></svg><input id="search" type="search" placeholder="Search label or instrument…" autocomplete="off"></div>
+      </label>
+      <label><span>SHOW PART</span><select id="partFilter"><option value="all">Entire show</option><option value="1">Part 1</option><option value="2">Part 2</option><option value="3">Part 3</option><option value="4">Part 4</option></select></label>
+      <label><span>FIELD GEOMETRY</span><select id="geometry"><option value="hs">High school (28 / 56)</option><option value="college">College (21.33 / 64)</option><option value="nfl">NFL (23.56 / 61.78)</option></select></label>
+    </section>
+
+    <section class="instrument-panel" aria-labelledby="instrumentChartTitle">
+      <div class="section-head">
+        <div><p class="eyebrow">SECTION COMPARISON</p><h2 id="instrumentChartTitle">Which instruments march the most?</h2></div>
+        <p class="chart-note">Average distance per performer</p>
+      </div>
+      <div id="instrumentChart" class="instrument-chart"></div>
+    </section>
+
+    <section class="dashboard">
+      <div class="ranking-panel">
+        <div class="section-head"><div><p class="eyebrow">ROSTER</p><h2>Marching load</h2></div><button id="exportBtn" class="export-btn">Export CSV <span>↓</span></button></div>
+        <div class="table-head"><span>PERFORMER</span><span>DISTANCE</span></div>
+        <div id="roster" class="roster" role="listbox" aria-label="Performers"></div>
+      </div>
+
+      <aside id="detail" class="detail-panel">
+        <div class="empty-state">Select a performer to inspect their show.</div>
+      </aside>
+    </section>
+  </main>
+
+  <footer><span>STEPWISE / 8-TO-5 GRID</span><span>STRAIGHT-LINE PATH ESTIMATE</span></footer>
+  <script src="app.js"></script>
+</body>
+</html>

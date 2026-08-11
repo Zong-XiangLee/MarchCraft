@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "coordinateContract": { "units": "meters", "upAxis": "+Y", "forwardAxis": "-Z", "groundPlaneY": 0 },
+  "assets": [
+    { "id": "performer.body.standard", "kind": "bodyRig", "version": 1, "label": "Standard", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.75, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
+    { "id": "performer.body.tall", "kind": "bodyRig", "version": 1, "label": "Tall", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.91, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
+    { "id": "performer.body.short", "kind": "bodyRig", "version": 1, "label": "Short", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.58, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
+    { "id": "performer.body.broad", "kind": "bodyRig", "version": 1, "label": "Broad", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.78, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
+    { "id": "performer.body.youth", "kind": "bodyRig", "version": 1, "label": "Youth", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.47, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
+    { "id": "uniform.marchcraft.default", "kind": "uniform", "version": 1, "label": "MarchCraft Uniform", "scaleMeters": 1, "footContactMeters": 0, "materialSlots": ["primary", "secondary", "accent", "plume", "gloves", "footwear"] },
+    { "id": "instrument.generic", "kind": "instrument", "version": 1, "label": "Generic Instrument", "scaleMeters": 1, "footContactMeters": 0, "socket": "equipment" },
+    { "id": "instrument.trumpet", "kind": "instrument", "version": 1, "label": "Trumpet", "scaleMeters": 0.48, "footContactMeters": 0, "socket": "hand.right" },
+    { "id": "instrument.tuba", "kind": "instrument", "version": 1, "label": "Tuba", "scaleMeters": 1.05, "footContactMeters": 0, "socket": "shoulder.left" },
+    { "id": "equipment.guard.flag", "kind": "instrument", "version": 1, "label": "Guard Flag", "scaleMeters": 1.83, "footContactMeters": 0, "socket": "equipment" },
+    { "id": "prop.box", "kind": "prop", "version": 1, "label": "Box", "scaleMeters": 1, "footContactMeters": 0, "dimensionsMeters": [1, 1, 1] },
+    { "id": "prop.panel", "kind": "prop", "version": 1, "label": "Panel", "scaleMeters": 1, "footContactMeters": 0, "dimensionsMeters": [2.4, 2.4, 0.15] },
+    { "id": "prop.platform", "kind": "prop", "version": 1, "label": "Platform", "scaleMeters": 1, "footContactMeters": 0, "dimensionsMeters": [2.4, 0.4, 2.4] },
+    { "id": "prop.podium", "kind": "prop", "version": 1, "label": "Podium", "scaleMeters": 1, "footContactMeters": 0, "dimensionsMeters": [1.2, 1.4, 1.2] },
+    { "id": "venue.rehearsal", "kind": "venue", "version": 1, "label": "Rehearsal Field", "scaleMeters": 1, "footContactMeters": 0 },
+    { "id": "venue.high_school", "kind": "venue", "version": 1, "label": "High School Stadium", "scaleMeters": 1, "footContactMeters": 0 },
+    { "id": "venue.bowl", "kind": "venue", "version": 1, "label": "Bowl Stadium", "scaleMeters": 1, "footContactMeters": 0 },
+    { "id": "venue.gym", "kind": "venue", "version": 1, "label": "School Gym", "scaleMeters": 1, "footContactMeters": 0 },
+    { "id": "venue.arena", "kind": "venue", "version": 1, "label": "Indoor Arena", "scaleMeters": 1, "footContactMeters": 0 }
+  ]
+}

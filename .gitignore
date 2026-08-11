@@ -1,0 +1,23 @@
+# Local toolchains and generated native builds
+native/.qt/
+native/.tools/
+native/build/
+native/build-*/
+native/dist/
+native/output/
+
+# Temporary extraction and test artifacts
+tmp/
+native/tmp/
+native/*-test-results.txt
+native/aqtinstall.log
+
+# Editor and OS metadata
+*.user
+*.autosave
+.DS_Store
+Thumbs.db
+
+# Python caches
+__pycache__/
+*.py[cod]

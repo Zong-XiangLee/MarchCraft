@@ -1,0 +1,27 @@
+********* Start testing of DrillProjectTest *********
+Config: Using QtTest library 6.8.3, Qt 6.8.3 (x86_64-little_endian-llp64 shared (dynamic) release build; by GCC 13.1.0), windows 10
+PASS   : DrillProjectTest::initTestCase()
+PASS   : DrillProjectTest::regulationFieldGeometry()
+PASS   : DrillProjectTest::demoHasUsableContent()
+PASS   : DrillProjectTest::movementDistanceAndUndo()
+PASS   : DrillProjectTest::audienceCoordinateSemantics()
+PASS   : DrillProjectTest::formationDistribution()
+PASS   : DrillProjectTest::rectangleAndRangeSelection()
+PASS   : DrillProjectTest::setVariantsAndArchive()
+PASS   : DrillProjectTest::projectRoundTrip()
+PASS   : DrillProjectTest::structuredTimingAndTempoRamp()
+PASS   : DrillProjectTest::persistentShapesAndTransitionPaths()
+PASS   : DrillProjectTest::closedShapesNeverDuplicateEndpoints()
+PASS   : DrillProjectTest::formationFitsWithoutCornerCollapse()
+PASS   : DrillProjectTest::commonShapePackAndGuideMovement()
+PASS   : DrillProjectTest::lockedAndHiddenPerformersAreNotSelectable()
+PASS   : DrillProjectTest::variantGroupsClickAndPersistence()
+PASS   : DrillProjectTest::stagingApronCoordinatesAndMovement()
+PASS   : DrillProjectTest::constantSpeedCurvesAndAbsoluteShowClock()
+PASS   : DrillProjectTest::partialReshapeReplacesGuideAndGroup()
+PASS   : DrillProjectTest::setCopyMoveAndRenumber()
+PASS   : DrillProjectTest::galaxySpiralRemainsStableAtManyTurns()
+PASS   : DrillProjectTest::exportsAreCreated()
+PASS   : DrillProjectTest::cleanupTestCase()
+Totals: 23 passed, 0 failed, 0 skipped, 0 blacklisted, 477ms
+********* Finished testing of DrillProjectTest *********

@@ -1,0 +1,7 @@
+/.qt/
+/build/
+/build-*/
+/dist/
+*.user
+*.autosave
+/aqtinstall.log
