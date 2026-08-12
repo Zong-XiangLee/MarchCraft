@@ -338,6 +338,7 @@ Item {
                     marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
                     gaitPhase: performerNode.gaitPhase
                     transitionProgress: drillProject.playhead
+                    countsInMove: drillProject.currentSetCounts
                     travelStepsPerCount: performerNode.travelStepsPerCount
                     locomotionMode: performerNode.locomotionMode
                     debugOverlay: drillProject.debug3D

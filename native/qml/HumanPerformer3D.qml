@@ -1,5 +1,6 @@
 import QtQuick
 import QtQuick3D
+import "HumanGait.js" as HumanGait
 
 // Canonical grounded human performer. Geometry is shared by the scene; every
 // instance owns only its lightweight joint hierarchy and deterministic pose.
@@ -18,6 +19,7 @@ Node {
     property bool marching: false
     property real gaitPhase: 0
     property real transitionProgress: 0
+    property int countsInMove: 1
     property real travelStepsPerCount: 0
     property string locomotionMode: "idle"
     property bool debugOverlay: false
@@ -25,54 +27,21 @@ Node {
     readonly property real canonicalHeight: 1.75
     readonly property real bodyScale: heightMeters / canonicalHeight / metersPerStep
     readonly property real phaseAngle: gaitPhase * Math.PI * 2
-    readonly property real strideDegrees: Math.min(32, Math.max(0, travelStepsPerCount * 24))
+    readonly property real strideMeters: Math.min(0.70, Math.max(0, travelStepsPerCount * metersPerStep))
     readonly property bool forwardMotion: locomotionMode === "march.forward"
     readonly property bool backwardMotion: locomotionMode === "march.backward"
     readonly property bool leftSlide: locomotionMode === "slide.left"
     readonly property bool rightSlide: locomotionMode === "slide.right"
     readonly property bool directionChange: locomotionMode === "direction_change"
-    readonly property real motionWeight: marching ? Math.min(1, transitionProgress * 12) : 0
+    readonly property real elapsedCounts: transitionProgress * Math.max(1, countsInMove)
+    readonly property real motionWeight: marching ? HumanGait.smootherStep(elapsedCounts / 0.35) : 0
+    readonly property var bodyPose: HumanGait.bodyPose(locomotionMode, gaitPhase, strideMeters, motionWeight)
+    readonly property var leftLegPose: HumanGait.legPose(locomotionMode, gaitPhase, true,
+                                                         strideMeters, motionWeight, bodyPose.pelvisY)
+    readonly property var rightLegPose: HumanGait.legPose(locomotionMode, gaitPhase, false,
+                                                          strideMeters, motionWeight, bodyPose.pelvisY)
     readonly property color skinColor: skinPaletteId === "skin.light" ? "#d9a37f"
                                        : skinPaletteId === "skin.deep" ? "#70412f" : "#a9674b"
-
-    function wave(leftSide) {
-        return Math.cos(phaseAngle) * (leftSide ? 1 : -1)
-    }
-
-    function hipX(leftSide) {
-        if (!forwardMotion && !backwardMotion)
-            return 0
-        const direction = backwardMotion ? -0.78 : 1
-        return wave(leftSide) * strideDegrees * direction * motionWeight
-    }
-
-    function kneeX(leftSide) {
-        if (!forwardMotion && !backwardMotion)
-            return 0
-        const swing = Math.max(0, -wave(leftSide))
-        return -swing * Math.max(4, strideDegrees * 0.30) * motionWeight
-    }
-
-    function footX(leftSide) {
-        if (!forwardMotion && !backwardMotion)
-            return 0
-        const amount = wave(leftSide)
-        if (backwardMotion)
-            return (Math.max(0, amount) * 2 - Math.max(0, -amount) * 2) * motionWeight
-        return (Math.max(0, amount) * 14 - Math.max(0, -amount) * 4) * motionWeight
-    }
-
-    function hipZ(leftSide) {
-        if (!leftSlide && !rightSlide)
-            return 0
-        const direction = leftSlide ? -1 : 1
-        const cadence = rightSlide ? -wave(leftSide) : wave(leftSide)
-        return cadence * strideDegrees * 0.78 * direction * motionWeight
-    }
-
-    function armX(leftSide) {
-        return -hipX(leftSide) * 0.28
-    }
 
     PrincipledMaterial {
         id: skinMaterial
@@ -123,20 +92,29 @@ Node {
                     id: pelvis
                     index: 1
                     skeletonRoot: humanSkeleton
-                    y: 0.91
-                    eulerRotation.y: root.directionChange ? Math.sin(root.phaseAngle) * 8 * root.motionWeight
-                                                               : (root.leftSlide || root.rightSlide ? -Math.cos(root.phaseAngle) * 4 * root.motionWeight : 0)
+                    x: root.bodyPose.pelvisX
+                    y: 0.91 + root.bodyPose.pelvisY
+                    eulerRotation: Qt.vector3d(0,
+                                               root.directionChange
+                                                   ? Math.sin(root.phaseAngle) * 8 * root.motionWeight
+                                                   : root.bodyPose.pelvisYaw,
+                                               root.bodyPose.pelvisRoll)
                     Joint {
                         id: spineLower
                         index: 2
                         skeletonRoot: humanSkeleton
-                        y: 0.17
+                        y: 0.17 + root.bodyPose.spineLift + root.bodyPose.breath
+                        eulerRotation: Qt.vector3d(root.bodyPose.spinePitch,
+                                                   root.bodyPose.spineYaw * 0.42,
+                                                   root.bodyPose.spineRoll * 0.45)
                         Joint {
                             id: spineUpper
                             index: 3
                             skeletonRoot: humanSkeleton
                             y: 0.23
-                            eulerRotation.y: (root.leftSlide || root.rightSlide) ? Math.cos(root.phaseAngle) * 3 * root.motionWeight : 0
+                            eulerRotation: Qt.vector3d(-root.bodyPose.spinePitch * 0.62,
+                                                       root.bodyPose.spineYaw * 0.58,
+                                                       root.bodyPose.spineRoll * 0.55)
                             Joint {
                                 id: neck
                                 index: 4
@@ -148,6 +126,7 @@ Node {
                                     skeletonRoot: humanSkeleton
                                     y: 0.12
                                     z: -0.01
+                                    eulerRotation.x: root.bodyPose.headPitch
                                     Node { id: headSocket }
                                 }
                             }
@@ -161,13 +140,14 @@ Node {
                                     index: 15
                                     skeletonRoot: humanSkeleton
                                     x: -0.11; y: -0.03
-                                    eulerRotation: Qt.vector3d(root.armX(true), 0, 50)
+                                    eulerRotation: Qt.vector3d(HumanGait.armPitch(root.leftLegPose), 0, 50)
                                     Joint {
                                         id: forearmLeft
                                         index: 16
                                         skeletonRoot: humanSkeleton
                                         x: -0.24; y: -0.19
-                                        eulerRotation.x: root.forwardMotion || root.backwardMotion ? -5 - root.wave(true) * 2 * root.motionWeight : 0
+                                        eulerRotation.x: root.forwardMotion || root.backwardMotion
+                                                                 ? -5 + HumanGait.armPitch(root.leftLegPose) * 0.28 : 0
                                         Joint {
                                             id: handLeft
                                             index: 17
@@ -188,13 +168,14 @@ Node {
                                     index: 19
                                     skeletonRoot: humanSkeleton
                                     x: 0.11; y: -0.03
-                                    eulerRotation: Qt.vector3d(root.armX(false), 0, -50)
+                                    eulerRotation: Qt.vector3d(HumanGait.armPitch(root.rightLegPose), 0, -50)
                                     Joint {
                                         id: forearmRight
                                         index: 20
                                         skeletonRoot: humanSkeleton
                                         x: 0.24; y: -0.19
-                                        eulerRotation.x: root.forwardMotion || root.backwardMotion ? -5 - root.wave(false) * 2 * root.motionWeight : 0
+                                        eulerRotation.x: root.forwardMotion || root.backwardMotion
+                                                                 ? -5 + HumanGait.armPitch(root.rightLegPose) * 0.28 : 0
                                         Joint {
                                             id: handRight
                                             index: 21
@@ -214,25 +195,27 @@ Node {
                         index: 6
                         skeletonRoot: humanSkeleton
                         x: -0.105; y: -0.03
-                        eulerRotation: Qt.vector3d(root.hipX(true), 0, root.hipZ(true))
+                        eulerRotation: Qt.vector3d(root.leftLegPose.hipX, 0, root.leftLegPose.hipZ)
                         Joint {
                             id: shinLeft
                             index: 7
                             skeletonRoot: humanSkeleton
                             y: -0.39
-                            eulerRotation.x: root.kneeX(true)
+                            eulerRotation: Qt.vector3d(root.leftLegPose.kneeX, 0, root.leftLegPose.kneeZ)
                             Joint {
                                 id: footLeft
                                 index: 8
                                 skeletonRoot: humanSkeleton
                                 y: -0.415
-                                eulerRotation: Qt.vector3d(root.footX(true),
-                                                          root.directionChange ? Math.max(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0, 0)
+                                eulerRotation: Qt.vector3d(root.leftLegPose.footX,
+                                                          root.directionChange ? Math.max(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0,
+                                                          root.leftLegPose.footZ)
                                 Joint {
                                     id: toeLeft
                                     index: 9
                                     skeletonRoot: humanSkeleton
                                     y: -0.04; z: -0.12
+                                    eulerRotation.x: root.leftLegPose.toeX
                                 }
                             }
                         }
@@ -242,25 +225,27 @@ Node {
                         index: 10
                         skeletonRoot: humanSkeleton
                         x: 0.105; y: -0.03
-                        eulerRotation: Qt.vector3d(root.hipX(false), 0, root.hipZ(false))
+                        eulerRotation: Qt.vector3d(root.rightLegPose.hipX, 0, root.rightLegPose.hipZ)
                         Joint {
                             id: shinRight
                             index: 11
                             skeletonRoot: humanSkeleton
                             y: -0.39
-                            eulerRotation.x: root.kneeX(false)
+                            eulerRotation: Qt.vector3d(root.rightLegPose.kneeX, 0, root.rightLegPose.kneeZ)
                             Joint {
                                 id: footRight
                                 index: 12
                                 skeletonRoot: humanSkeleton
                                 y: -0.415
-                                eulerRotation: Qt.vector3d(root.footX(false),
-                                                          root.directionChange ? Math.min(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0, 0)
+                                eulerRotation: Qt.vector3d(root.rightLegPose.footX,
+                                                          root.directionChange ? Math.min(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0,
+                                                          root.rightLegPose.footZ)
                                 Joint {
                                     id: toeRight
                                     index: 13
                                     skeletonRoot: humanSkeleton
                                     y: -0.04; z: -0.12
+                                    eulerRotation.x: root.rightLegPose.toeX
                                 }
                             }
                         }
