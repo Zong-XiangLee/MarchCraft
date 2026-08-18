@@ -961,13 +961,14 @@ ApplicationWindow {
     Dialog {
         id: settingsDialog
         title: "Configure MarchCraft"
-        modal: true; anchors.centerIn: Overlay.overlay; width: 620; height: 560
+        modal: true; anchors.centerIn: Overlay.overlay; width: 680; height: Math.min(window.height - 64, 700)
         standardButtons: Dialog.Close
         onOpened: placementMode.currentIndex = placementMode.indexOfValue(drillProject.shapePlacementMode)
         contentItem: ColumnLayout {
             TabBar { id: configureTabs; Layout.fillWidth: true; TabButton { text: "Performers" } TabButton { text: "Field & Grid" } TabButton { text: "Overlays" } TabButton { text: "Formations" } TabButton { text: "Quick Actions" } TabButton { text: "Drill Clinic" } }
             StackLayout {
                 Layout.fillWidth: true; Layout.fillHeight: true; currentIndex: configureTabs.currentIndex
+                clip: true
                 GridLayout {
                     columns: 2
                     Label { text: "Marker shape" }
@@ -984,6 +985,12 @@ ApplicationWindow {
                     ComboBox { Layout.fillWidth: true; model: ["off","selected","adaptive","always"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProject.markerLabelMode)); onActivated: drillProject.markerLabelMode=currentText }
                     Label { text: "Label color" }
                     TextField { Layout.fillWidth: true; text: drillProject.markerLabelColor; onEditingFinished: drillProject.markerLabelColor=text }
+                    Label { text: "Label font size" }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        Slider { id: labelSizeSlider; Layout.fillWidth: true; from: 7; to: 32; stepSize: 1; value: drillProject.markerLabelFontSize; onMoved: drillProject.markerLabelFontSize = Math.round(value) }
+                        Label { text: Math.round(labelSizeSlider.value) + " px"; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignRight; color: "#9fb1a7" }
+                    }
                     Label { text: "Warning color" }
                     TextField { Layout.fillWidth: true; text: drillProject.markerWarningColor; onEditingFinished: drillProject.markerWarningColor=text }
                     CheckBox { text: "Show facing indicator"; checked: drillProject.markerFacingVisible; onToggled: drillProject.markerFacingVisible=checked }
@@ -1034,6 +1041,7 @@ ApplicationWindow {
                             onClicked: window.toggleQuickShape(modelData.kind)
                         }
                     }
+                    Label { text: "Tip: use Ctrl+, to reopen configuration quickly."; color: "#6f8d80"; font.pixelSize: 11; Layout.topMargin: 8 }
                     Item { Layout.fillHeight: true }
                 }
                 GridLayout {
@@ -1427,4 +1435,14 @@ ApplicationWindow {
     Shortcut { sequence: "Right"; onActivated: drillProject.nudgeSelected(0.25, 0) }
     Shortcut { sequence: "Up"; onActivated: drillProject.nudgeSelected(0, -0.25) }
     Shortcut { sequence: "Down"; onActivated: drillProject.nudgeSelected(0, 0.25) }
+    Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; onActivated: transport.playPause() }
+    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: settingsDialog.open() }
+    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterSearch.forceActiveFocus(); rosterSearch.selectAll() } }
+    Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
+    Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
+    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+I"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
+    Shortcut { sequence: "+"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
+    Shortcut { sequence: "-"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
 }

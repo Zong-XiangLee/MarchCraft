@@ -398,6 +398,7 @@ DrillProject::DrillProject(QObject *parent)
     m_markerOutlineColor = settings.value(QStringLiteral("view/markerOutlineColor"), QStringLiteral("#e7f5ed")).toString();
     m_markerOutlineWidth = qBound(0, settings.value(QStringLiteral("view/markerOutlineWidth"), 1).toInt(), 5);
     m_markerLabelMode = settings.value(QStringLiteral("view/markerLabelMode"), QStringLiteral("adaptive")).toString();
+    m_markerLabelFontSize = qBound(7, settings.value(QStringLiteral("view/markerLabelFontSize"), 10).toInt(), 32);
     m_markerLabelColor = settings.value(QStringLiteral("view/markerLabelColor"), QStringLiteral("#f0f7f3")).toString();
     m_markerFacingVisible = settings.value(QStringLiteral("view/markerFacingVisible"), true).toBool();
     m_markerFacingColor = settings.value(QStringLiteral("view/markerFacingColor"), QStringLiteral("#f8fafc")).toString();
@@ -503,6 +504,7 @@ EDITOR_STRING_SETTER(setFieldGridColor, m_fieldGridColor, "view/fieldGridColor")
 #undef EDITOR_STRING_SETTER
 
 void DrillProject::setMarkerOutlineWidth(int value) { value = qBound(0, value, 5); if (value == m_markerOutlineWidth) return; m_markerOutlineWidth = value; QSettings().setValue(QStringLiteral("view/markerOutlineWidth"), value); emit editorSettingsChanged(); }
+void DrillProject::setMarkerLabelFontSize(int value) { value = qBound(7, value, 32); if (value == m_markerLabelFontSize) return; m_markerLabelFontSize = value; QSettings().setValue(QStringLiteral("view/markerLabelFontSize"), value); emit editorSettingsChanged(); }
 void DrillProject::setMarkerFacingVisible(bool value) { if (value == m_markerFacingVisible) return; m_markerFacingVisible = value; QSettings().setValue(QStringLiteral("view/markerFacingVisible"), value); emit editorSettingsChanged(); }
 void DrillProject::setShowFieldGrid(bool value) { if (value == m_showFieldGrid) return; m_showFieldGrid = value; QSettings().setValue(QStringLiteral("view/showFieldGrid"), value); emit editorSettingsChanged(); }
 void DrillProject::setFieldGridInterval(double value) { static const QVector<double> valid{0.25,0.5,1.0,2.0,4.0}; double next=1.0,best=99; for(double v:valid) if(qAbs(v-value)<best){best=qAbs(v-value);next=v;} if(qFuzzyCompare(next,m_fieldGridInterval))return; m_fieldGridInterval=next; QSettings().setValue(QStringLiteral("view/fieldGridInterval"),next); emit editorSettingsChanged(); }
