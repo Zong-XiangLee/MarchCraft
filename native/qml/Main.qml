@@ -646,7 +646,9 @@ ApplicationWindow {
                     width: parent.width
                     spacing: 10
                     property var person: ({})
-                    property string clinicSeverityFilter: "all"
+                    // Start with actionable items. The author can still broaden
+                    // this to every severity when they want a diagnostic sweep.
+                    property string clinicSeverityFilter: "critical"
                     property string clinicTypeFilter: "all"
                     property bool nextSetSuggestionsExpanded: false
                     property var nextSetCandidates: []
@@ -769,10 +771,15 @@ ApplicationWindow {
                     Rectangle { Layout.fillWidth: true; height: 1; color: "#26343d" }
                     RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                         Label { text: "DRILL CLINIC"; font.bold: true; color: "#9fb1a7"; Layout.fillWidth: true }
-                        Label { text: drillProject.capabilityProfile.toUpperCase(); color: "#4ade80"; font.pixelSize: 10 }
+                        Label { text: "COPILOT"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 10 }
+                    }
+                    Label {
+                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                        text: "Only real rehearsal risks are shown first. Dismiss a false alarm or preview a fix before changing the drill."
+                        color: "#a9bbb1"; font.pixelSize: 11; wrapMode: Text.Wrap
                     }
                     RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        ComboBox { Layout.fillWidth: true; model: ["all","critical","caution","info"]; onActivated: inspector.clinicSeverityFilter = currentText }
+                        ComboBox { Layout.fillWidth: true; currentIndex: 0; model: ["critical","caution","all","info"]; onActivated: inspector.clinicSeverityFilter = currentText }
                         ComboBox { Layout.fillWidth: true; model: ["all","stride","collision","equipmentCollision","propCollision","crossing","direction","spacing","boundary","complexPath"]; onActivated: inspector.clinicTypeFilter = currentText }
                     }
                     Label {
@@ -791,18 +798,23 @@ ApplicationWindow {
                             required property var modelData
                             property string selectedSuggestionId: modelData.actions && modelData.actions.length ? modelData.actions[0].id : ""
                             Layout.fillWidth: true; Layout.leftMargin: 10; Layout.rightMargin: 10
-                            background: Rectangle { color: modelData.severity === "critical" ? "#321820" : modelData.severity === "caution" ? "#302817" : "#15242b"; border.color: modelData.severity === "critical" ? "#fb7185" : modelData.severity === "caution" ? "#fbbf24" : "#38bdf8"; radius: 6 }
+                                background: Rectangle { color: modelData.severity === "critical" ? "#291821" : modelData.severity === "caution" ? "#292218" : "#15242b"; border.color: modelData.severity === "critical" ? "#fb7185" : modelData.severity === "caution" ? "#fbbf24" : "#38bdf8"; radius: 10 }
                             ColumnLayout {
                                 anchors.fill: parent
-                                Label { text: modelData.title; font.bold: true; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                                Label { text: "Set " + modelData.setLabel + (modelData.count > 0 ? " / count " + Number(modelData.count).toFixed(1) : ""); color: "#9fb1a7"; font.pixelSize: 10 }
+                                RowLayout { Layout.fillWidth: true
+                                    Label { text: modelData.severity.toUpperCase(); color: modelData.severity === "critical" ? "#fb7185" : "#fbbf24"; font.bold: true; font.pixelSize: 10 }
+                                    Label { text: "SET " + modelData.setLabel; color: "#9fb1a7"; font.pixelSize: 10; Layout.fillWidth: true }
+                                    ToolButton { text: "?"; ToolTip.text: "This is a suggestion, not a required change."; ToolTip.visible: hovered }
+                                }
+                                Label { text: modelData.title; font.bold: true; font.pixelSize: 15; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                                Label { text: modelData.count > 0 ? "First appears around count " + Number(modelData.count).toFixed(1) : "Review the highlighted transition"; color: "#9fb1a7"; font.pixelSize: 10 }
                                 Label { text: modelData.detail; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#d3dfd8"; font.pixelSize: 11 }
                                 Label { text: modelData.performers ? "Affected: " + modelData.performers : ""; visible: text.length > 0; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#f1f5f9"; font.pixelSize: 10 }
                                 Label { text: modelData.limit > 0 ? "Measured " + Number(modelData.measured).toFixed(2) + " / limit " + Number(modelData.limit).toFixed(2) : "Measured " + Number(modelData.measured).toFixed(2); color: "#9fb1a7"; font.pixelSize: 10 }
                                 ComboBox { id: clinicAction; visible: modelData.actions && modelData.actions.length > 0; Layout.fillWidth: true; model: modelData.actions || []; textRole: "label"; onActivated: selectedSuggestionId = modelData.actions[currentIndex].id }
                                 RowLayout { Layout.fillWidth: true
-                                    Button { text: "Highlight"; onClicked: drillProject.selectClinicIssue(modelData.id) }
-                                    Button { text: "Preview fix"; enabled: selectedSuggestionId.length > 0; onClicked: drillProject.previewSuggestion(selectedSuggestionId) }
+                                    Button { text: "Inspect"; onClicked: drillProject.selectClinicIssue(modelData.id) }
+                                    Button { text: "Preview fix"; highlighted: true; enabled: selectedSuggestionId.length > 0; onClicked: drillProject.previewSuggestion(selectedSuggestionId) }
                                     Button { text: "Apply"; enabled: selectedSuggestionId.length > 0; onClicked: drillProject.acceptSuggestion(selectedSuggestionId) }
                                     ToolButton { text: "x"; ToolTip.text: "Dismiss until this transition changes"; ToolTip.visible: hovered; onClicked: drillProject.dismissIssue(modelData.id) }
                                 }
@@ -825,24 +837,50 @@ ApplicationWindow {
                         visible: inspector.nextSetSuggestionsExpanded
                         Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                         spacing: 6
-                        Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#9fb1a7"; Layout.fillWidth: true }
+                        RowLayout { Layout.fillWidth: true
+                            Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#9fb1a7"; Layout.fillWidth: true }
+                            Label { text: "GENERATIVE DRAFTS"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 9 }
+                        }
                         Label {
-                            text: "Ranked for spacing and reachable movement. Preview one directly on the field before applying it."
+                            text: "Pick a direction, preview it on the field, then keep or discard it. Nothing is committed until you apply it."
                             wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#a9bbb1"; font.pixelSize: 11
                         }
                         Repeater {
                             model: inspector.nextSetCandidates
                             delegate: Frame {
                                 required property var modelData
-                                Layout.fillWidth: true; padding: 8
-                                background: Rectangle { color: "#111b20"; border.color: "#2c3d46"; radius: 6 }
+                                Layout.fillWidth: true; padding: 10
+                                background: Rectangle {
+                                    color: modelData.intent === "impact" ? "#21182b" : modelData.intent === "direction" ? "#122431" : "#111b20"
+                                    border.color: modelData.intent === "impact" ? "#8b5cf6" : modelData.intent === "direction" ? "#38bdf8" : "#2c3d46"
+                                    radius: 12
+                                }
                                 RowLayout {
                                     anchors.fill: parent; spacing: 8
+                                    Rectangle {
+                                        Layout.preferredWidth: 58; Layout.preferredHeight: 58; radius: 10
+                                        color: "#0b1216"; border.color: "#263b44"
+                                        Canvas {
+                                            anchors.fill: parent; anchors.margins: 8
+                                            onPaint: {
+                                                var c = getContext("2d"); c.clearRect(0,0,width,height); c.strokeStyle = modelData.intent === "impact" ? "#c084fc" : modelData.intent === "direction" ? "#67e8f9" : "#86efac"; c.fillStyle = c.strokeStyle; c.lineWidth = 2.5;
+                                                var cx = width/2, cy = height/2;
+                                                if (modelData.type === "line") { c.beginPath(); c.moveTo(5,cy); c.lineTo(width-5,cy); c.stroke(); }
+                                                else if (modelData.type === "arc") { c.beginPath(); c.arc(cx,cy+5,Math.min(width,height)/2-5,Math.PI*1.1,Math.PI*1.9); c.stroke(); }
+                                                else if (modelData.type === "circle" || modelData.type === "ellipse") { c.beginPath(); c.ellipse(cx,cy,modelData.type === "ellipse" ? width/2-3 : height/2-5,height/2-5,0,0,Math.PI*2); c.stroke(); }
+                                                else if (modelData.type === "spiral") { c.beginPath(); for (var i=0;i<22;i++){var a=i*.65, r=2+i*.7; var x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; if(i===0)c.moveTo(x,y);else c.lineTo(x,y);} c.stroke(); }
+                                                else { var n=modelData.type === "triangle" ? 3 : modelData.type === "diamond" ? 4 : modelData.type === "star" ? 5 : 6; c.beginPath(); for (var j=0;j<n;j++){var angle=-Math.PI/2+j*Math.PI*2/n, rr=Math.min(width,height)/2-4, px=cx+Math.cos(angle)*rr, py=cy+Math.sin(angle)*rr; if(j===0)c.moveTo(px,py);else c.lineTo(px,py);} c.closePath(); c.stroke(); }
+                                            }
+                                        }
+                                    }
                                     ColumnLayout {
                                         Layout.fillWidth: true; spacing: 2
-                                        Label { text: modelData.label; font.bold: true; Layout.fillWidth: true }
+                                        RowLayout { Layout.fillWidth: true
+                                            Label { text: modelData.label; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
+                                            Rectangle { implicitWidth: tagLabel.implicitWidth + 12; implicitHeight: 18; radius: 9; color: "#24343a"; Label { id: tagLabel; anchors.centerIn: parent; text: modelData.tag; color: "#a9bbb1"; font.pixelSize: 8; font.bold: true } }
+                                        }
                                         Label { text: modelData.detail; color: "#9fb1a7"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                                        Label { text: "Clinic score " + Number(modelData.score).toFixed(1); color: "#6f8d80"; font.pixelSize: 10 }
+                                        Label { text: "Fit " + Number(modelData.score).toFixed(1) + "  ·  " + modelData.intent; color: "#6f8d80"; font.pixelSize: 10 }
                                     }
                                     Button {
                                         text: drillProject.formationPreviewBusy ? "Optimizing..." : "Preview"

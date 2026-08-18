@@ -3805,8 +3805,10 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
                     const double equipmentClearance = instrumentClearanceRadius(m_performers[row])
                         + instrumentClearanceRadius(m_performers[other]) + 0.25;
                     const double required = qMax(m_capability.collisionClearance, equipmentClearance);
+                    // Only surface a near miss when it is genuinely tight. The
+                    // old 1.25x buffer made valid pathways look like problems.
                     QVector<int> *bucket = clearance < required ? &collisionRows
-                        : clearance < required * 1.25 ? &nearRows : nullptr;
+                        : clearance < required * 1.10 ? &nearRows : nullptr;
                     if (bucket) { if (!bucket->contains(row)) bucket->push_back(row); if (!bucket->contains(other)) bucket->push_back(other); }
                     if (clearance < required && equipmentClearance > m_capability.collisionClearance + 0.01) {
                         if (!equipmentRows.contains(row)) equipmentRows.push_back(row); if (!equipmentRows.contains(other)) equipmentRows.push_back(other);
@@ -3858,7 +3860,7 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
                     propCollisionIds.insert(prop.id); if (!propCollisionNames.contains(propDisplayName(prop))) propCollisionNames.push_back(propDisplayName(prop));
                     if (firstPropCollisionCount < 0) firstPropCollisionCount = progress * counts;
                     if (sample == samples) propDestinationCollision = true;
-                } else if (edgeClearance < required * 1.25) {
+                } else if (edgeClearance < required * 1.10) {
                     if (!propNearRows.contains(row)) propNearRows.push_back(row);
                     propNearIds.insert(prop.id);
                 }
@@ -3886,18 +3888,7 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
         last.insert(QStringLiteral("propIds"), ids); issues.last() = last;
     }
 
-    QVector<int> crossingRows; int crossingCount = 0;
-    for (int a = 0; a < m_performers.size(); ++a) for (int b = a + 1; b < m_performers.size(); ++b) {
-        if (segmentsCross(placementAt(a, destinationSet - 1).position, placementAt(a, destinationSet).position,
-                          placementAt(b, destinationSet - 1).position, placementAt(b, destinationSet).position)) {
-            ++crossingCount; if (!crossingRows.contains(a)) crossingRows.push_back(a); if (!crossingRows.contains(b)) crossingRows.push_back(b);
-        }
-    }
-    if (crossingCount > 0) addIssue(QStringLiteral("crossing"), collisionRows.isEmpty() ? QStringLiteral("caution") : QStringLiteral("critical"),
-        QStringLiteral("Paths cross"), QStringLiteral("%1 direct pathways cross %2 times.").arg(issueLabelList(crossingRows)).arg(crossingCount),
-        crossingRows, crossingCount, 0, 0, {action(QStringLiteral("optimize"), QStringLiteral("Try no-crossing assignment")),
-        action(QStringLiteral("reroute"), QStringLiteral("Preview curved paths")),
-        action(QStringLiteral("follow"), QStringLiteral("Try follow-the-leader"))});
+    // Crossings can be intentional choreography, so they are not Clinic issues.
 
     QVector<int> directionRows; double largestDirection = 0.0;
     if (destinationSet + 1 < m_sets.size()) for (int row = 0; row < m_performers.size(); ++row) {
@@ -3906,7 +3897,7 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
         const double lengths = pointDistance({}, incoming) * pointDistance({}, outgoing); if (lengths < 0.01) continue;
         const double cosine = qBound(-1.0, QPointF::dotProduct(incoming, outgoing) / lengths, 1.0);
         const double angle = std::acos(cosine) * 180.0 / std::numbers::pi; largestDirection = qMax(largestDirection, angle);
-        if (angle > m_capability.directionChangeDegrees) directionRows.push_back(row);
+        if (angle > m_capability.directionChangeDegrees + 15.0) directionRows.push_back(row);
     }
     if (!directionRows.isEmpty()) addIssue(QStringLiteral("direction"), QStringLiteral("caution"), QStringLiteral("Abrupt direction change"),
         QStringLiteral("%1 reverse or redirect more sharply than the profile allows.").arg(issueLabelList(directionRows)),
@@ -3932,7 +3923,7 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
         const double mean = std::accumulate(intervals.begin(), intervals.end(), 0.0) / intervals.size();
         double variance = 0.0; for (double interval : intervals) variance += (interval - mean) * (interval - mean);
         const double coefficient = mean > 0.01 ? std::sqrt(variance / intervals.size()) / mean : 1.0;
-        if (coefficient >= 0.18) {
+        if (coefficient >= 0.25) {
             worstSpacingVariation = qMax(worstSpacingVariation, coefficient);
             for (int row : rows) if (!spacingRows.contains(row)) spacingRows.push_back(row);
         }
@@ -3941,21 +3932,17 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
         QStringLiteral("Attached form has uneven intervals"),
         QStringLiteral("%1 have interval variation of up to %2%. Reflowing preserves the guide while restoring equal spacing.")
             .arg(issueLabelList(spacingRows)).arg(worstSpacingVariation * 100.0, 0, 'f', 0),
-        spacingRows, worstSpacingVariation, 0.18, counts,
+        spacingRows, worstSpacingVariation, 0.25, counts,
         {action(QStringLiteral("reflow"), QStringLiteral("Reflow evenly along shape"))});
 
-    QVector<int> boundaryRows, complexRows; for (int row = 0; row < m_performers.size(); ++row) {
+    QVector<int> boundaryRows; for (int row = 0; row < m_performers.size(); ++row) {
         const auto placement = placementAt(row, destinationSet); const QPointF p = placement.position;
-        if (p.x() <= canvasMinX() + .01 || p.x() >= canvasMaxX() - .01 || p.y() <= canvasMinY() + .01 || p.y() >= canvasMaxY() - .01) boundaryRows.push_back(row);
-        if (placement.pathPoints.size() > 3) complexRows.push_back(row);
+        if (p.x() < canvasMinX() - .25 || p.x() > canvasMaxX() + .25 ||
+            p.y() < canvasMinY() - .25 || p.y() > canvasMaxY() + .25) boundaryRows.push_back(row);
     }
-    if (!boundaryRows.isEmpty()) addIssue(QStringLiteral("boundary"), QStringLiteral("caution"), QStringLiteral("Formation touches workspace boundary"),
-        QStringLiteral("%1 have no adjustment room at an apron edge.").arg(issueLabelList(boundaryRows)), boundaryRows, 0, 0, counts,
+    if (!boundaryRows.isEmpty()) addIssue(QStringLiteral("boundary"), QStringLiteral("caution"), QStringLiteral("Formation extends beyond workspace"),
+        QStringLiteral("%1 extend beyond the editable field and need to be brought back inside.").arg(issueLabelList(boundaryRows)), boundaryRows, 0, 0, counts,
         {action(QStringLiteral("shiftBoundary"), QStringLiteral("Shift inside apron"))});
-    if (!complexRows.isEmpty()) addIssue(QStringLiteral("complexPath"), QStringLiteral("info"), QStringLiteral("Complex paths may be difficult to teach"),
-        QStringLiteral("%1 use more than three path control points.").arg(issueLabelList(complexRows)), complexRows, 4, 3, 0,
-        {action(QStringLiteral("simplifyPath"), QStringLiteral("Simplify paths"))});
-
     std::stable_sort(issues.begin(), issues.end(), [](const QVariant &left, const QVariant &right) {
         const auto rank=[](const QString&s){return s==QStringLiteral("critical")?0:s==QStringLiteral("caution")?1:2;};
         return rank(left.toMap().value(QStringLiteral("severity")).toString()) < rank(right.toMap().value(QStringLiteral("severity")).toString());
@@ -4181,22 +4168,21 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
 QVariantList DrillProject::suggestNextSet()
 {
     QVariantList candidates; if (selectedCount() < 2) return candidates;
-    struct SuggestionSpec { const char *type; const char *label; const char *detail; };
-    // Keep the clinic broad enough to offer both rehearsal-friendly foundations
-    // and more expressive choices. The inspector is scrollable, so these do not
-    // need to be artificially limited to the old three-item modal.
+    struct SuggestionSpec { const char *type; const char *label; const char *detail; const char *tag; const char *intent; };
+    // These are deliberately framed as creative starting points, not commands.
+    // A copilot should explain the trade-off and let the author choose.
     const QVector<SuggestionSpec> suggestions{
-        {"line", "Safe line", "A clean, readable reset with the smallest form complexity."},
-        {"arc", "Safe arc", "An open curve that preserves visual flow while leaving a clear front."},
-        {"block", "Safe block", "A compact, evenly spaced grid for a stable visual statement."},
-        {"circle", "Safe circle", "A balanced closed form with equal visual weight in every direction."},
-        {"ellipse", "Safe ellipse", "A stretched circle that can carry direction across the field."},
-        {"rectangle", "Safe rectangle", "A crisp perimeter with strong corners and clear staging lanes."},
-        {"triangle", "Safe triangle", "A focused, directional form that creates a natural point of emphasis."},
-        {"diamond", "Safe diamond", "A centered angular form that reads well from the stands."},
-        {"polygon", "Safe polygon", "A rounded geometric form with more sides for a softer transition."},
-        {"star", "Safe star", "A feature shape for moments that call for a more decorative picture."},
-        {"spiral", "Safe spiral", "An energetic, expanding path for a featured transition."}
+        {"line", "Reset line", "A clean, readable reset with the smallest form complexity.", "REHEARSAL", "clarity"},
+        {"arc", "Forward arc", "An open curve that keeps the front readable while adding flow.", "FLOW", "direction"},
+        {"block", "Anchor block", "A compact, evenly spaced grid for a stable visual statement.", "STABLE", "spacing"},
+        {"circle", "Orbit circle", "A balanced closed form with equal visual weight in every direction.", "FEATURE", "symmetry"},
+        {"ellipse", "Runway ellipse", "A stretched circle that carries energy across the field.", "MOTION", "travel"},
+        {"rectangle", "Frame rectangle", "A crisp perimeter that creates clear staging lanes.", "PICTURE", "structure"},
+        {"triangle", "Point triangle", "A focused, directional form that creates a natural emphasis point.", "ACCENT", "focus"},
+        {"diamond", "Turn diamond", "A centered angular form that reads cleanly from the stands.", "ACCENT", "focus"},
+        {"polygon", "Soft polygon", "A rounded geometric form for a more gradual transition.", "FLOW", "softness"},
+        {"star", "Feature star", "A decorative picture for a musical peak or reveal.", "FEATURE", "impact"},
+        {"spiral", "Reveal spiral", "An expanding path for a featured transition with visible build.", "FEATURE", "build"}
     };
     for (const auto &suggestion : suggestions) {
         const QString type = QString::fromLatin1(suggestion.type);
@@ -4208,6 +4194,8 @@ QVariantList DrillProject::suggestNextSet()
         candidates.push_back(QVariantMap{{QStringLiteral("id"),QStringLiteral("next:%1").arg(type)},
             {QStringLiteral("type"),type},{QStringLiteral("label"),QString::fromLatin1(suggestion.label)},
             {QStringLiteral("detail"),QString::fromLatin1(suggestion.detail)},
+            {QStringLiteral("tag"),QString::fromLatin1(suggestion.tag)},
+            {QStringLiteral("intent"),QString::fromLatin1(suggestion.intent)},
             {QStringLiteral("score"),score},{QStringLiteral("options"),defaults}});
     }
     std::stable_sort(candidates.begin(),candidates.end(),[](const QVariant&a,const QVariant&b){return a.toMap().value(QStringLiteral("score")).toDouble()>b.toMap().value(QStringLiteral("score")).toDouble();});
