@@ -37,6 +37,7 @@
 #include <utility>
 
 using MarchCraft::DrillSet;
+using MarchCraft::AnimationState;
 using MarchCraft::Performer;
 using MarchCraft::Placement;
 
@@ -492,7 +493,6 @@ void DrillProject::setPerformerMarkerSize(int value)
 
 #define EDITOR_STRING_SETTER(Method, Member, Key) \
 void DrillProject::Method(const QString &value) { if (value == Member) return; Member = value; QSettings().setValue(QStringLiteral(Key), value); emit editorSettingsChanged(); }
-EDITOR_STRING_SETTER(setMarkerGeometry, m_markerGeometry, "view/markerGeometry")
 EDITOR_STRING_SETTER(setMarkerFillColor, m_markerFillColor, "view/markerFillColor")
 EDITOR_STRING_SETTER(setMarkerOutlineColor, m_markerOutlineColor, "view/markerOutlineColor")
 EDITOR_STRING_SETTER(setMarkerLabelMode, m_markerLabelMode, "view/markerLabelMode")
@@ -501,6 +501,17 @@ EDITOR_STRING_SETTER(setMarkerFacingColor, m_markerFacingColor, "view/markerFaci
 EDITOR_STRING_SETTER(setMarkerWarningColor, m_markerWarningColor, "view/markerWarningColor")
 EDITOR_STRING_SETTER(setFieldGridColor, m_fieldGridColor, "view/fieldGridColor")
 #undef EDITOR_STRING_SETTER
+
+void DrillProject::setMarkerGeometry(const QString &value)
+{
+    static const QSet<QString> valid{QStringLiteral("dot"), QStringLiteral("circle"),
+        QStringLiteral("square"), QStringLiteral("diamond")};
+    const QString next = valid.contains(value) ? value : QStringLiteral("circle");
+    if (next == m_markerGeometry) return;
+    m_markerGeometry = next;
+    QSettings().setValue(QStringLiteral("view/markerGeometry"), next);
+    emit editorSettingsChanged();
+}
 
 void DrillProject::setMarkerOutlineWidth(int value) { value = qBound(0, value, 5); if (value == m_markerOutlineWidth) return; m_markerOutlineWidth = value; QSettings().setValue(QStringLiteral("view/markerOutlineWidth"), value); emit editorSettingsChanged(); }
 void DrillProject::setMarkerFacingVisible(bool value) { if (value == m_markerFacingVisible) return; m_markerFacingVisible = value; QSettings().setValue(QStringLiteral("view/markerFacingVisible"), value); emit editorSettingsChanged(); }
@@ -658,10 +669,14 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case YRole: return displayed.y();
     case FromXRole: return from.position.x();
     case FromYRole: return from.position.y();
-    case FacingRole: return placement.facing;
+    case FacingRole: return m_playbackActive ? interpolatedFacing(index.row()) : placement.facing;
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
+    case TravelHeadingRole: return animationStateAt(index.row()).travelDirectionDegrees;
+    case TravelStepsPerCountRole: return animationStateAt(index.row()).travelStepsPerCount;
+    case LocomotionModeRole: return animationStateAt(index.row()).locomotion;
+    case GaitPhaseRole: return animationStateAt(index.row()).normalizedTime;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
@@ -719,7 +734,10 @@ QHash<int, QByteArray> DrillProject::roleNames() const
             {ColorRole, "performerColor"}, {NotesRole, "notes"}, {XRole, "fieldX"},
             {YRole, "fieldY"}, {FromXRole, "fromX"}, {FromYRole, "fromY"},
             {FacingRole, "facing"}, {SelectedRole, "isSelected"},
-            {SetDistanceRole, "setDistance"}, {TotalDistanceRole, "totalDistance"},
+            {SetDistanceRole, "setDistance"}, {TravelHeadingRole, "travelHeading"},
+            {TravelStepsPerCountRole, "travelStepsPerCount"},
+            {LocomotionModeRole, "locomotionMode"}, {GaitPhaseRole, "gaitPhase"},
+            {TotalDistanceRole, "totalDistance"},
             {WarningRole, "hasWarning"}, {VisibleRole, "performerVisible"},
             {LockedRole, "performerLocked"}, {BodyRigRole, "bodyRigId"},
             {UniformRole, "uniformId"}, {SkinPaletteRole, "skinPaletteId"},
@@ -4296,6 +4314,7 @@ QVariantMap DrillProject::performerInfo(int row) const
             {QStringLiteral("instrument"), person.instrument}, {QStringLiteral("section"), person.section},
             {QStringLiteral("notes"), person.notes}, {QStringLiteral("coordinate"), coordinateFor(row)},
             {QStringLiteral("color"), person.color.name(QColor::HexRgb)},
+            {QStringLiteral("facing"), placementAt(row, m_currentSet).facing},
             {QStringLiteral("visible"), person.visible}, {QStringLiteral("locked"), person.locked},
             {QStringLiteral("bodyRigId"), person.appearance.bodyRigId},
             {QStringLiteral("uniformId"), person.appearance.uniformId},
@@ -4564,6 +4583,86 @@ QPointF DrillProject::interpolatedPosition(int performerIndex) const
 {
     if (m_currentSet <= 0 || m_playhead >= 1.0) return placementAt(performerIndex, m_currentSet).position;
     return pathPosition(performerIndex, m_currentSet, m_playhead);
+}
+
+double DrillProject::interpolatedFacing(int performerIndex) const
+{
+    const double destination = placementAt(performerIndex, m_currentSet).facing;
+    if (m_currentSet <= 0 || m_playhead >= 1.0) return destination;
+    const double start = placementAt(performerIndex, m_currentSet - 1).facing;
+    // Turn along the shortest arc so a 350-to-10 degree change passes through
+    // front field instead of spinning almost a full revolution.
+    const double delta = std::fmod(destination - start + 540.0, 360.0) - 180.0;
+    double result = std::fmod(start + delta * m_playhead, 360.0);
+    if (result < 0.0) result += 360.0;
+    return result;
+}
+
+AnimationState DrillProject::animationStateAt(int performerIndex) const
+{
+    AnimationState state;
+    const int counts = currentSetCounts();
+    if (counts > 0) {
+        state.normalizedTime = std::fmod(m_playhead * counts / 2.0, 1.0);
+        if (state.normalizedTime < 0.0)
+            state.normalizedTime += 1.0;
+    }
+    if (!m_playbackActive || m_currentSet <= 0 || counts <= 0)
+        return state;
+
+    const Placement destination = placementAt(performerIndex, m_currentSet);
+    const Placement origin = placementAt(performerIndex, m_currentSet - 1);
+    const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
+
+    constexpr double speedSampleRadius = 0.001;
+    const double beforeProgress = std::max(0.0, m_playhead - speedSampleRadius);
+    const double afterProgress = std::min(1.0, m_playhead + speedSampleRadius);
+    const QPointF before = pathPosition(performerIndex, m_currentSet, beforeProgress);
+    const QPointF current = pathPosition(performerIndex, m_currentSet, m_playhead);
+    const QPointF after = pathPosition(performerIndex, m_currentSet, afterProgress);
+    const QPointF speedDelta = after - before;
+    const double sampleProgress = afterProgress - beforeProgress;
+    // Sum the one-sided distances so a sharp polyline corner does not
+    // momentarily shorten the stride to the diagonal chord length.
+    const double sampleDistance = std::hypot(current.x() - before.x(), current.y() - before.y())
+                                + std::hypot(after.x() - current.x(), after.y() - current.y());
+
+    // A counted hold remains at attention. A facing-only transition receives a
+    // planted direction-change pose, while the delayed portion of a move is idle.
+    if (sampleProgress <= 0.0 || sampleDistance <= 1e-7) {
+        if (facingDelta > 0.5 && std::hypot(destination.position.x() - origin.position.x(),
+                                            destination.position.y() - origin.position.y()) <= 1e-5)
+            state.locomotion = QStringLiteral("direction_change");
+        return state;
+    }
+
+    state.travelStepsPerCount = sampleDistance / sampleProgress / counts;
+
+    // Average the tangent over a small, count-relative window. This remains
+    // deterministic at every playhead position while easing sharp follow,
+    // gate, and pivot corners over roughly one third of a count instead of
+    // snapping the legs between locomotion families in a single frame.
+    const double headingSampleRadius = std::min(0.025, std::max(speedSampleRadius, 0.18 / counts));
+    const double headingBeforeProgress = std::max(0.0, m_playhead - headingSampleRadius);
+    const double headingAfterProgress = std::min(1.0, m_playhead + headingSampleRadius);
+    const QPointF headingDelta = pathPosition(performerIndex, m_currentSet, headingAfterProgress)
+                               - pathPosition(performerIndex, m_currentSet, headingBeforeProgress);
+    const QPointF directionDelta = std::hypot(headingDelta.x(), headingDelta.y()) > 1e-7
+            ? headingDelta : speedDelta;
+    state.travelDirectionDegrees = std::fmod(std::atan2(directionDelta.x(), directionDelta.y())
+                                             * 180.0 / std::numbers::pi + 360.0, 360.0);
+    const double facing = interpolatedFacing(performerIndex);
+    const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
+    const double absoluteRelative = std::abs(relative);
+    if (absoluteRelative <= 45.0)
+        state.locomotion = QStringLiteral("march.forward");
+    else if (absoluteRelative >= 135.0)
+        state.locomotion = QStringLiteral("march.backward");
+    else if (relative > 0.0)
+        state.locomotion = QStringLiteral("slide.right");
+    else
+        state.locomotion = QStringLiteral("slide.left");
+    return state;
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const

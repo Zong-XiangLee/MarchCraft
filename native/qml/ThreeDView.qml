@@ -58,6 +58,14 @@ Item {
                                  : drillProject.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
         }
 
+        HumanGeometry {
+            id: sharedHumanGeometry
+            detailLevel: drillProject.graphicsProfile === "presentation" ? 0
+                       : drillProject.graphicsProfile === "performance" ? 2
+                       : drillProject.graphicsProfile === "automatic"
+                         ? (drillProject.performerCount > 150 ? 1 : 0) : 1
+        }
+
         Node {
             id: cameraOrigin
             eulerRotation: root.cameraBaseRotation
@@ -258,7 +266,22 @@ Item {
             }
         }
 
-        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
+        // Front and back sidelines.
+        Repeater3D {
+            model: 2
+            delegate: Model {
+                required property int index
+                source: "#Cube"
+                 position: Qt.vector3d(0, 0.012, index === 0
+                                      ? drillProject.fieldDepthSteps / 2
+                                      : -drillProject.fieldDepthSteps / 2)
+                scale: Qt.vector3d(1.6, 0.0003, 0.0018)
+                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
+            }
+        }
+
+        // Four vertical one-yard inserts in every five-yard interval on each hash row.
+        // They extend outward so the hashes are on their closest, inward ends.
         Repeater3D {
             model: root.insertColumnCount * 2
             delegate: Model {
@@ -266,8 +289,28 @@ Item {
                 readonly property int column: index % root.insertColumnCount
                 readonly property bool backHash: index >= root.insertColumnCount
                 readonly property real markLength: 24.0 / 22.5
+                readonly property real hashZ: drillProject.fieldDepthSteps / 2
+                                                   - (backHash ? drillProject.backHashSteps
+                                                               : drillProject.frontHashSteps)
                 source: "#Cube"
                  position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
+                                      hashZ + (backHash ? -markLength / 2 : markLength / 2))
+                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
+                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
+            }
+        }
+
+        // Two-foot marks parallel to the sidelines on the two regulation hash rows.
+        Repeater3D {
+            model: (Math.floor(drillProject.fieldWidthSteps / 8) + 1) * 2
+            delegate: Model {
+                required property int index
+                readonly property int yardLineCount: Math.floor(drillProject.fieldWidthSteps / 8) + 1
+                readonly property int yardLine: index % yardLineCount
+                readonly property bool backHash: index >= yardLineCount
+                readonly property real markLength: 24.0 / 22.5
+                source: "#Cube"
+                 position: Qt.vector3d(yardLine * 8 - 80, 0.012,
                                       drillProject.fieldDepthSteps / 2
                                       - (backHash ? drillProject.backHashSteps
                                                   : drillProject.frontHashSteps))
@@ -293,11 +336,16 @@ Item {
                 required property string equipmentAssetId
                 required property real performerHeightMeters
                 required property real setDistance
+                required property real travelHeading
+                required property real travelStepsPerCount
+                required property string locomotionMode
+                required property real gaitPhase
                 position: Qt.vector3d(fieldX - 80, 0,
                                       drillProject.fieldDepthSteps / 2 - fieldY)
                 eulerRotation.y: -facing
 
-                Mannequin3D {
+                HumanPerformer3D {
+                    geometrySource: sharedHumanGeometry
                     metersPerStep: drillProject.metersPerStep
                     heightMeters: performerNode.performerHeightMeters
                     uniformColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
@@ -306,8 +354,14 @@ Item {
                     instrumentAssetId: performerNode.instrumentAssetId
                     equipmentAssetId: performerNode.equipmentAssetId
                     selected: performerNode.isSelected
-                    marching: performerNode.setDistance > 0.01 && drillProject.playbackActive
-                    animationPhase: drillProject.playhead * Math.max(1, drillProject.currentSetCounts) * Math.PI
+                    marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
+                    gaitPhase: performerNode.gaitPhase
+                    facingDegrees: performerNode.facing
+                    travelHeading: performerNode.travelHeading
+                    transitionProgress: drillProject.playhead
+                    countsInMove: drillProject.currentSetCounts
+                    travelStepsPerCount: performerNode.travelStepsPerCount
+                    locomotionMode: performerNode.locomotionMode
                     debugOverlay: drillProject.debug3D
                 }
             }

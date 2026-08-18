@@ -12,7 +12,7 @@ Apply action before project data changes.
 ## What is included
 
 - Native 2D drill editor and synchronized stylized 3D preview
-- Meter-based, right-handed/Y-up 3D world with the performance surface at `Y=0`, planted mannequin performers, and a Blender-ready root/socket contract
+- Meter-based, right-handed/Y-up 3D world with the performance surface at `Y=0`, grounded skinned human performers, straight-leg drill animation, and a Blender-ready root/socket contract
 - Versioned semantic asset catalog with five body-rig profiles, modular uniforms, instrument/equipment attachments, and graceful placeholder assets
 - Configurable rehearsal field, high-school stadium, bowl, school-gym, and indoor-arena environments with daylight, overcast, sunset, night, and indoor lighting
 - Static/movable prop domain model with built-in box, panel, platform, and podium assets
