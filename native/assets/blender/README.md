@@ -68,6 +68,7 @@ python native/scripts/assets/validate_human_gait.py native/assets/performer/huma
 python native/scripts/assets/render_human_performer_preview.py native/assets/performer/human_performer.glb human-gait-preview.bmp
 ```
 
-The gait validator samples all four locomotion modes over a complete two-count
-cycle. It rejects turf penetration or floating beyond 2 mm and upper-body
-height variation beyond 15 mm.
+The gait validator deforms the actual weighted mesh through eight compass
+headings plus half and extended stride cases. It rejects turf penetration or
+floating beyond 2 mm, planted-ankle drift beyond 1 mm, and upper-body height
+variation beyond 15 mm.

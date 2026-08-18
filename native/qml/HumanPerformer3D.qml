@@ -18,6 +18,8 @@ Node {
     property bool selected: false
     property bool marching: false
     property real gaitPhase: 0
+    property real facingDegrees: 0
+    property real travelHeading: 0
     property real transitionProgress: 0
     property int countsInMove: 1
     property real travelStepsPerCount: 0
@@ -33,13 +35,23 @@ Node {
     readonly property bool leftSlide: locomotionMode === "slide.left"
     readonly property bool rightSlide: locomotionMode === "slide.right"
     readonly property bool directionChange: locomotionMode === "direction_change"
+    readonly property real relativeTravelDegrees: HumanGait.normalizeDegrees(travelHeading - facingDegrees)
     readonly property real elapsedCounts: transitionProgress * Math.max(1, countsInMove)
     readonly property real motionWeight: marching ? HumanGait.smootherStep(elapsedCounts / 0.35) : 0
-    readonly property var bodyPose: HumanGait.bodyPose(locomotionMode, gaitPhase, strideMeters, motionWeight)
-    readonly property var leftLegPose: HumanGait.legPose(locomotionMode, gaitPhase, true,
-                                                         strideMeters, motionWeight, bodyPose.pelvisY)
-    readonly property var rightLegPose: HumanGait.legPose(locomotionMode, gaitPhase, false,
-                                                          strideMeters, motionWeight, bodyPose.pelvisY)
+    readonly property var bodyPose: directionChange
+                                    ? HumanGait.bodyPose(locomotionMode, gaitPhase, strideMeters, motionWeight)
+                                    : HumanGait.directionalBodyPose(relativeTravelDegrees, gaitPhase,
+                                                                    strideMeters, motionWeight)
+    readonly property var leftLegPose: directionChange
+                                       ? HumanGait.legPose(locomotionMode, gaitPhase, true,
+                                                           strideMeters, motionWeight, bodyPose.pelvisY)
+                                       : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, true,
+                                                                      strideMeters, motionWeight, bodyPose)
+    readonly property var rightLegPose: directionChange
+                                        ? HumanGait.legPose(locomotionMode, gaitPhase, false,
+                                                            strideMeters, motionWeight, bodyPose.pelvisY)
+                                        : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, false,
+                                                                       strideMeters, motionWeight, bodyPose)
     readonly property color skinColor: skinPaletteId === "skin.light" ? "#d9a37f"
                                        : skinPaletteId === "skin.deep" ? "#70412f" : "#a9674b"
 

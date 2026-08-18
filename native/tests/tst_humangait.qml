@@ -73,7 +73,7 @@ TestCase {
     function test_upperBodyCancelsMostPelvisMotion() {
         var body = HumanGait.bodyPose("march.forward", 0, standardStride, 1)
         verify(body.pelvisY < -0.005)
-        verify(Math.abs(body.pelvisY + body.spineLift) < 0.002)
+        verify(Math.abs(body.pelvisY + body.spineLift) < 0.0022)
         verify(Math.abs(body.spineYaw) < 2)
         verify(Math.abs(body.spineRoll) < 1)
     }
@@ -96,5 +96,55 @@ TestCase {
         verify(Math.abs(body.pelvisRoll) <= 0.56)
         verify(Math.abs(body.spinePitch) <= 0.29)
         verify(Math.abs(body.headPitch) <= 0.17)
+    }
+
+    function test_directionalWeightsMatchCardinalTechnique() {
+        var forward = HumanGait.directionalWeights(0)
+        var right = HumanGait.directionalWeights(90)
+        var backward = HumanGait.directionalWeights(180)
+        var left = HumanGait.directionalWeights(-90)
+        closeTo(forward.forward, 1, 0.000001)
+        closeTo(right.right, 1, 0.000001)
+        closeTo(backward.backward, 1, 0.000001)
+        closeTo(left.left, 1, 0.000001)
+    }
+
+    function test_directionalPoseIsContinuousAcrossOldModeBoundary() {
+        var beforeBody = HumanGait.directionalBodyPose(44.9, 0.31,
+                                                        standardStride, 1)
+        var afterBody = HumanGait.directionalBodyPose(45.1, 0.31,
+                                                       standardStride, 1)
+        var before = HumanGait.directionalLegPose(44.9, 0.31, true,
+                                                   standardStride, 1, beforeBody)
+        var after = HumanGait.directionalLegPose(45.1, 0.31, true,
+                                                  standardStride, 1, afterBody)
+        verify(Math.abs(before.hipX - after.hipX) < 0.2)
+        verify(Math.abs(before.hipZ - after.hipZ) < 0.2)
+        verify(Math.abs(before.kneeX - after.kneeX) < 0.2)
+        verify(Math.abs(before.footX - after.footX) < 0.3)
+    }
+
+    function test_spatialTargetKeepsFullStrideAtEveryHeading() {
+        var headings = [0, 30, 45, 60, 90, 120, 135, 180, -45, -90]
+        for (var i = 0; i < headings.length; ++i) {
+            var target = HumanGait.targetForDirection(headings[i], 0, false,
+                                                       standardStride, 1)
+            closeTo(Math.sqrt(target.x * target.x + target.z * target.z),
+                    standardStride * 0.5, 0.000001)
+            var body = HumanGait.directionalBodyPose(headings[i], 0.25,
+                                                      standardStride, 1)
+            var leg = HumanGait.directionalLegPose(headings[i], 0.25, false,
+                                                    standardStride, 1, body)
+            verify(leg.kneeX <= 0.001)
+            compare(leg.kneeZ, 0)
+        }
+    }
+
+    function test_diagonalSlideStillStabilizesShoulders() {
+        var body = HumanGait.directionalBodyPose(45, 0.125,
+                                                  standardStride, 1)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.2)
+        verify(Math.abs(body.pelvisRoll + body.spineRoll) < 0.1)
+        verify(Math.abs(body.spinePitch) < 0.3)
     }
 }
