@@ -41,6 +41,7 @@ qt_add_qml_module(marchcraft
         qml/FieldView.qml
         qml/ThreeDView.qml
         qml/HumanPerformer3D.qml
+        qml/HumanGait.js
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
@@ -183,10 +184,22 @@ if(BUILD_TESTING)
         FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
     add_test(NAME marchcraft_tests COMMAND marchcraft_tests)
     get_filename_component(MARCHCRAFT_QT_BIN "${Qt6_DIR}/../../../bin" ABSOLUTE)
+    get_filename_component(MARCHCRAFT_QT_PREFIX "${MARCHCRAFT_QT_BIN}/.." ABSOLUTE)
     get_filename_component(MARCHCRAFT_COMPILER_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
+    add_test(NAME human_gait_qml
+        COMMAND "${MARCHCRAFT_QT_BIN}/qmltestrunner.exe"
+                -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_humangait.qml"
+                -import "${CMAKE_CURRENT_SOURCE_DIR}/qml")
     set_tests_properties(marchcraft_tests PROPERTIES
-        ENVIRONMENT "QT_QPA_PLATFORM=offscreen")
+        ENVIRONMENT
+            "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
+    set_tests_properties(human_gait_qml PROPERTIES
+        ENVIRONMENT
+            "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
     set_property(TEST marchcraft_tests PROPERTY ENVIRONMENT_MODIFICATION
+        "PATH=path_list_prepend:${MARCHCRAFT_QT_BIN}"
+        "PATH=path_list_prepend:${MARCHCRAFT_COMPILER_BIN}")
+    set_property(TEST human_gait_qml PROPERTY ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${MARCHCRAFT_QT_BIN}"
         "PATH=path_list_prepend:${MARCHCRAFT_COMPILER_BIN}")
 endif()

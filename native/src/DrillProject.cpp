@@ -4614,14 +4614,18 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     const Placement origin = placementAt(performerIndex, m_currentSet - 1);
     const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
 
-    constexpr double sampleRadius = 0.001;
-    const double beforeProgress = std::max(0.0, m_playhead - sampleRadius);
-    const double afterProgress = std::min(1.0, m_playhead + sampleRadius);
+    constexpr double speedSampleRadius = 0.001;
+    const double beforeProgress = std::max(0.0, m_playhead - speedSampleRadius);
+    const double afterProgress = std::min(1.0, m_playhead + speedSampleRadius);
     const QPointF before = pathPosition(performerIndex, m_currentSet, beforeProgress);
+    const QPointF current = pathPosition(performerIndex, m_currentSet, m_playhead);
     const QPointF after = pathPosition(performerIndex, m_currentSet, afterProgress);
-    const QPointF delta = after - before;
+    const QPointF speedDelta = after - before;
     const double sampleProgress = afterProgress - beforeProgress;
-    const double sampleDistance = std::hypot(delta.x(), delta.y());
+    // Sum the one-sided distances so a sharp polyline corner does not
+    // momentarily shorten the stride to the diagonal chord length.
+    const double sampleDistance = std::hypot(current.x() - before.x(), current.y() - before.y())
+                                + std::hypot(after.x() - current.x(), after.y() - current.y());
 
     // A counted hold remains at attention. A facing-only transition receives a
     // planted direction-change pose, while the delayed portion of a move is idle.
@@ -4633,7 +4637,20 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     }
 
     state.travelStepsPerCount = sampleDistance / sampleProgress / counts;
-    state.travelDirectionDegrees = std::fmod(std::atan2(delta.x(), delta.y()) * 180.0 / std::numbers::pi + 360.0, 360.0);
+
+    // Average the tangent over a small, count-relative window. This remains
+    // deterministic at every playhead position while easing sharp follow,
+    // gate, and pivot corners over roughly one third of a count instead of
+    // snapping the legs between locomotion families in a single frame.
+    const double headingSampleRadius = std::min(0.025, std::max(speedSampleRadius, 0.18 / counts));
+    const double headingBeforeProgress = std::max(0.0, m_playhead - headingSampleRadius);
+    const double headingAfterProgress = std::min(1.0, m_playhead + headingSampleRadius);
+    const QPointF headingDelta = pathPosition(performerIndex, m_currentSet, headingAfterProgress)
+                               - pathPosition(performerIndex, m_currentSet, headingBeforeProgress);
+    const QPointF directionDelta = std::hypot(headingDelta.x(), headingDelta.y()) > 1e-7
+            ? headingDelta : speedDelta;
+    state.travelDirectionDegrees = std::fmod(std::atan2(directionDelta.x(), directionDelta.y())
+                                             * 180.0 / std::numbers::pi + 360.0, 360.0);
     const double facing = interpolatedFacing(performerIndex);
     const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
     const double absoluteRelative = std::abs(relative);

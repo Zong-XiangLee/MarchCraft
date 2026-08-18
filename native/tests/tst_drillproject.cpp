@@ -209,6 +209,35 @@ private slots:
                  QStringLiteral("direction_change"));
     }
 
+    void followCornerSmoothsHeadingWithoutCollapsingStride()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 40.0, 40.0);
+        project.selectPerformer(0, false);
+        project.addSet(QStringLiteral("Set 2"), 8);
+        project.nudgeSelected(8.0, 8.0);
+        project.setSelectedTransitionPath(QStringLiteral("follow"), {QPointF(48.0, 40.0)});
+        project.setPlaybackActive(true);
+
+        auto stateAt = [&project](double playhead) {
+            project.setPlayhead(playhead);
+            const QModelIndex index = project.index(0, 0);
+            return qMakePair(project.data(index, DrillProject::TravelHeadingRole).toDouble(),
+                             project.data(index, DrillProject::TravelStepsPerCountRole).toDouble());
+        };
+
+        const auto before = stateAt(0.48);
+        const auto corner = stateAt(0.50);
+        const auto after = stateAt(0.52);
+        QVERIFY(before.first > corner.first);
+        QVERIFY(corner.first > after.first);
+        QVERIFY(corner.first > 30.0 && corner.first < 60.0);
+        QVERIFY(qAbs(before.second - corner.second) < 0.01);
+        QVERIFY(qAbs(after.second - corner.second) < 0.01);
+    }
+
     void audienceCoordinateSemantics()
     {
         DrillProject project;

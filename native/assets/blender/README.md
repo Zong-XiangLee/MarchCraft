@@ -56,3 +56,19 @@ skinned runtime GLB without third-party Python packages. The conditioner writes
 the canonical 1.75-meter, Y-up asset and all in-place drill clips. When Blender
 is available, `import_human_performer_blender.py` imports that conditioned GLB
 and saves an editable `.blend` for manual weight and pose refinement.
+
+The runtime gait is count-driven by `qml/HumanGait.js`. It uses planted-foot
+targets and a two-bone leg solve for forward and backward technique, while
+slides preserve the authored chest facing. After changing the rig, weights, or
+gait constants, run both validators and regenerate the contact sheet:
+
+```powershell
+python native/scripts/assets/validate_human_performer.py native/assets/performer/human_performer.glb
+python native/scripts/assets/validate_human_gait.py native/assets/performer/human_performer.glb
+python native/scripts/assets/render_human_performer_preview.py native/assets/performer/human_performer.glb human-gait-preview.bmp
+```
+
+The gait validator deforms the actual weighted mesh through eight compass
+headings plus half and extended stride cases. It rejects turf penetration or
+floating beyond 2 mm, planted-ankle drift beyond 1 mm, and upper-body height
+variation beyond 15 mm.

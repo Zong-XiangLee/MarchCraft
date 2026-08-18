@@ -337,7 +337,10 @@ Item {
                     selected: performerNode.isSelected
                     marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
                     gaitPhase: performerNode.gaitPhase
+                    facingDegrees: performerNode.facing
+                    travelHeading: performerNode.travelHeading
                     transitionProgress: drillProject.playhead
+                    countsInMove: drillProject.currentSetCounts
                     travelStepsPerCount: performerNode.travelStepsPerCount
                     locomotionMode: performerNode.locomotionMode
                     debugOverlay: drillProject.debug3D

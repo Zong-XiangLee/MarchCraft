@@ -11,6 +11,30 @@ import struct
 
 from build_human_performer import JOINTS, read_accessor, read_glb
 
+SOLE_TABLES = (
+(-0.00133,-0.00103,-0.00038,-0.00006,0.00002,0.00002,0.00002,0.00001,-0.00001,-0.00036,-0.00068,-0.00096,-0.00118,-0.00103,0.00008,0.00133,-0.00150,-0.00118,-0.00046,-0.00009,0,0,-0.00001,-0.00001,-0.00003,-0.00038,-0.00071,-0.00099,-0.00120,-0.00101,0.00013,0.00142),
+(-0.00056,-0.00040,-0.00039,-0.00002,0.00007,0.00008,0.00006,0.00003,-0.00007,-0.00055,-0.00090,-0.00109,-0.00109,-0.00145,-0.00092,-0.00049,-0.00125,-0.00100,-0.00227,-0.00126,-0.00069,-0.00033,-0.00011,-0.00003,-0.00003,-0.00012,-0.00025,-0.00037,-0.00044,-0.00124,-0.00106,-0.00095),
+(0.00161,0.00149,0.00087,0.00060,0.00039,0.00024,0.00013,0.00005,-0.00019,-0.00030,-0.00029,-0.00016,-0.00005,-0.00002,0.00004,0.00060,0.00024,0.00097,-0.00034,-0.00020,-0.00006,-0.00004,-0.00005,-0.00005,-0.00011,-0.00036,-0.00070,-0.00112,-0.00162,-0.00217,-0.00275,0.00028),
+(-0.00189,-0.00168,-0.00091,-0.00050,-0.00030,-0.00025,-0.00018,-0.00007,0.00016,0.00019,0.00021,0.00023,0.00025,0.00030,0.00038,0.00040,-0.00013,-0.00001,-0.00010,0.00003,0.00009,0.00011,0.00013,0.00016,0.00019,0.00013,-0.00063,-0.00116,-0.00177,-0.00244,-0.00313,0.00024),
+(-0.00062,-0.00055,-0.00036,-0.00005,0.00024,0.00032,0.00040,0.00046,0.00048,0.00046,0.00041,0.00024,0.00015,0.00001,-0.00017,0.00043,-0.00054,-0.00048,-0.00030,0,0.00027,0.00036,0.00043,0.00049,0.00052,0.00051,0.00046,0.00028,0.00020,0.00007,-0.00010,0.00050),
+(-0.00017,-0.00004,-0.00012,0.00002,0.00008,0.00010,0.00012,0.00014,0.00016,-0.00001,-0.00086,-0.00145,-0.00210,-0.00276,-0.00341,0.00018,-0.00185,-0.00164,-0.00089,-0.00048,-0.00021,-0.00006,0.00005,0.00008,0.00019,0.00022,0.00024,0.00026,0.00029,0.00034,0.00043,0.00044),
+(0.00022,0.00100,-0.00029,-0.00016,-0.00005,-0.00005,-0.00006,-0.00004,-0.00019,-0.00045,-0.00081,-0.00125,-0.00175,-0.00231,-0.00287,0.00027,0.00158,0.00143,0.00079,0.00052,0.00032,0.00017,0.00008,0.00002,-0.00011,-0.00025,-0.00026,-0.00015,-0.00004,0,0.00006,0.00060),
+(-0.00115,-0.00092,-0.00245,-0.00150,-0.00094,-0.00056,-0.00028,-0.00011,-0.00003,-0.00003,-0.00008,-0.00014,-0.00018,-0.00104,-0.00091,-0.00089,-0.00065,-0.00050,-0.00047,-0.00008,0.00002,0.00004,0.00002,0,-0.00006,-0.00046,-0.00074,-0.00088,-0.00085,-0.00120,-0.00069,-0.00032))
+ZERO_RESIDUAL = (0.0,) * 16
+EXTENDED_RESIDUALS = (ZERO_RESIDUAL,
+(0.00166,0.00064,0.00017,-0.00017,0,0.00022,-0.00010,-0.00030,0.00294,0.00168,0.00044,0.00005,0,-0.00041,-0.00112,-0.00197),
+(0.00037,-0.00058,-0.00078,-0.00087,-0.00039,-0.00008,-0.00023,-0.00009,0.00363,0.00163,0.00034,-0.00022,-0.00036,-0.00108,-0.00187,-0.00266),
+(-0.00094,-0.00040,-0.00029,-0.00014,0,0.00001,0.00005,0.00020,0.00046,0.00006,0.00003,0.00001,0,-0.00010,-0.00028,-0.00054),
+(-0.00223,-0.00088,-0.00026,-0.00003,0.00001,0.00002,0.00039,0.00102,0.00039,-0.00015,-0.00005,0.00003,0.00001,-0.00021,-0.00042,-0.00088),
+(-0.00117,-0.00043,-0.00014,-0.00002,0,0,0.00035,0.00082,0.00062,0.00020,0.00004,0.00001,0,-0.00009,-0.00019,-0.00052),
+ZERO_RESIDUAL,
+(0.00063,0.00020,0.00004,0.00001,0,-0.00014,-0.00019,-0.00051,-0.00116,-0.00043,-0.00014,-0.00002,0,0,0.00036,0.00081),
+(0.00053,-0.00013,-0.00002,0.00003,0.00001,-0.00021,-0.00043,-0.00088,-0.00223,-0.00088,-0.00027,-0.00004,0.00001,0.00002,0.00039,0.00102),
+(0.00056,0.00008,0.00004,0,0,-0.00013,-0.00035,-0.00060,-0.00094,-0.00041,-0.00013,-0.00010,0,0,0.00005,0.00021),
+(0.00368,0.00162,0.00033,-0.00022,-0.00038,-0.00139,-0.00233,-0.00303,0.00035,-0.00008,-0.00019,-0.00047,-0.00036,-0.00011,-0.00023,-0.00010),
+(0.00299,0.00170,0.00044,0.00005,0,-0.00057,-0.00138,-0.00219,0.00165,0.00067,0.00019,0.00002,0,0.00020,-0.00010,-0.00032),
+ZERO_RESIDUAL)
+
 
 def identity():
     return [[1.0, 0.0, 0.0, 0.0], [0.0, 1.0, 0.0, 0.0],
@@ -40,28 +64,293 @@ def transform(matrix, point):
     return tuple(sum(matrix[row][k] * (x, y, z, 1.0)[k] for k in range(4)) for row in range(3))
 
 
-def pose_matrices(mode: str, phase: float, stride: float = 1.0):
-    angle = phase * math.pi * 2.0
-    amplitude = min(32.0, max(7.0, stride * 24.0))
-    rotations = {15: (0.0, 0.0, 50.0), 19: (0.0, 0.0, -50.0)}
-    for left, thigh, shin, foot, arm in (
-        (True, 6, 7, 8, 15), (False, 10, 11, 12, 19)
+def clamp(value, low, high):
+    return max(low, min(high, value))
+
+
+def mix(a, b, amount):
+    return a + (b - a) * amount
+
+
+def smoother_step(value):
+    value = clamp(value, 0.0, 1.0)
+    return value ** 3 * (value * (value * 6.0 - 15.0) + 10.0)
+
+
+def leg_cycle(phase, left):
+    return (phase + (0.5 if left else 0.0)) % 1.0
+
+
+def foot_pitch(mode, cycle):
+    stance = cycle < 0.5
+    t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
+    if mode == "march.forward":
+        if stance:
+            if t < 0.22:
+                return mix(15.0, 0.0, smoother_step(t / 0.22))
+            if t > 0.76:
+                return mix(0.0, -10.0, smoother_step((t - 0.76) / 0.24))
+            return 0.0
+        if t < 0.28:
+            return mix(-10.0, 1.5, smoother_step(t / 0.28))
+        if t < 0.72:
+            return mix(1.5, 7.0, smoother_step((t - 0.28) / 0.44))
+        return mix(7.0, 15.0, smoother_step((t - 0.72) / 0.28))
+    if mode == "march.backward":
+        if stance:
+            return (mix(-7.0, -2.0, smoother_step(t / 0.28)) if t < 0.28
+                    else mix(-2.0, -6.0, smoother_step((t - 0.28) / 0.72)))
+        return (mix(-6.0, 0.5, smoother_step(t / 0.55)) if t < 0.55
+                else mix(0.5, -7.0, smoother_step((t - 0.55) / 0.45)))
+    return 0.0
+
+
+def toe_pitch(mode, cycle):
+    stance = cycle < 0.5
+    t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
+    if mode == "march.forward" and stance and t > 0.72:
+        return 10.0 * smoother_step((t - 0.72) / 0.28)
+    if mode == "march.backward" and stance:
+        return 3.0 + 3.0 * smoother_step(t)
+    return 0.0
+
+
+def sole_lift(pitch, toe_extent):
+    radians = math.radians(pitch)
+    return max(0.0, math.sin(radians) * 0.17, -math.sin(radians) * toe_extent)
+
+
+def leg_target(mode, phase, left, stride):
+    cycle = leg_cycle(phase, left)
+    stance = cycle < 0.5
+    t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
+    travel = t if stance else smoother_step(t)
+    direction = 1.0 if mode in ("march.backward", "slide.right") else -1.0
+    along = direction * stride * ((0.5 - travel) if stance else (travel - 0.5))
+    lift = 0.0
+    if not stance:
+        arc = math.sin(math.pi * t) ** 1.35
+        lift = arc * (0.020 if mode == "march.backward" else 0.026 if mode == "march.forward" else 0.018)
+    pitch = foot_pitch(mode, cycle)
+    toe_extent = 0.08 if mode == "march.backward" else 0.07
+    lift += sole_lift(pitch, toe_extent)
+    sagittal = mode in ("march.forward", "march.backward")
+    return {"stance": stance, "t": t, "x": 0.0 if sagittal else along,
+            "z": along if sagittal else 0.0, "lift": lift,
+            "foot": pitch, "toe": toe_pitch(mode, cycle)}
+
+
+def required_pelvis_drop(targets):
+    reach = 0.39 + 0.415 - 0.001
+
+    def available(target):
+        horizontal = math.hypot(target["x"], target["z"])
+        return math.sqrt(max(0.0, reach * reach - horizontal * horizontal)) + target["lift"]
+
+    support = next(target for target in targets if target["stance"])
+    moving = next(target for target in targets if not target["stance"])
+    support_drop = min(0.0, available(support) - 0.805)
+    moving_drop = min(0.0, available(moving) - 0.805)
+    edge = min(moving["t"], 1.0 - moving["t"])
+    double_support = 1.0 - smoother_step(edge / 0.12)
+    return mix(support_drop, min(support_drop, moving_drop), double_support)
+
+
+def body_pose(mode, phase, stride):
+    if mode == "idle":
+        return {"pelvis_x": 0.0, "pelvis_y": 0.0, "ik_pelvis_y": 0.0, "pelvis_yaw": 0.0,
+                "pelvis_roll": 0.0, "spine_yaw": 0.0, "spine_roll": 0.0,
+                "spine_pitch": 0.0, "spine_lift": 0.0, "head_pitch": 0.0}
+    targets = [leg_target(mode, phase, left, stride) for left in (True, False)]
+    support = next(target for target in targets if target["stance"])
+    drop = required_pelvis_drop(targets)
+    rhythm = phase * math.pi * 2.0
+    slide = 1.0 if mode == "slide.right" else -1.0 if mode == "slide.left" else 0.0
+    if slide:
+        support_is_left = targets[0]["stance"]
+        normalized_reach = support["x"] / (stride * 0.5) if stride > 0.0001 else 0.0
+        if slide > 0:
+            sole_factor = ((0.012 + 0.010 * normalized_reach) if support_is_left
+                           else (0.026 + 0.009 * normalized_reach))
+        else:
+            sole_factor = ((0.025 - 0.010 * normalized_reach) if support_is_left
+                           else (0.010 - 0.010 * normalized_reach))
+        drop += abs(support["x"]) * max(0.0, sole_factor)
+        if slide < 0.0:
+            drop += 0.00002 * clamp(stride / 0.70, 0.0, 1.0)
+    yaw = slide * (8.0 + math.sin(rhythm) * 1.5) if slide else math.sin(rhythm) * 1.8
+    roll = -math.cos(rhythm) * 0.55
+    return {"pelvis_x": math.cos(rhythm) * 0.0065, "pelvis_y": drop,
+            "ik_pelvis_y": drop,
+            "pelvis_yaw": yaw, "pelvis_roll": roll,
+            "spine_yaw": -yaw * (0.92 if slide else 0.72), "spine_roll": -roll * 0.88,
+            "spine_pitch": math.sin(rhythm + 0.18) * 0.28, "spine_lift": -drop * 0.95,
+            "head_pitch": -math.sin(rhythm + 0.18) * 0.16}
+
+
+def directional_weights(angle_degrees):
+    radians = math.radians(((angle_degrees + 180.0) % 360.0) - 180.0)
+    longitudinal, lateral = abs(math.cos(radians)), abs(math.sin(radians))
+    quadrant_degrees = math.degrees(math.atan2(lateral, longitudinal))
+    lateral_weight = smoother_step((quadrant_degrees - 22.5) / 45.0)
+    longitudinal_weight = 1.0 - lateral_weight
+    return [longitudinal_weight if math.cos(radians) >= 0.0 else 0.0,
+            longitudinal_weight if math.cos(radians) < 0.0 else 0.0,
+            lateral_weight if math.sin(radians) < 0.0 else 0.0,
+            lateral_weight if math.sin(radians) >= 0.0 else 0.0]
+
+
+def directional_sole_offset(angle_degrees, phase, stride):
+    angle = angle_degrees % 360.0
+    quadrant = int(math.floor(angle / 90.0)) % 4
+    longitudinal = SOLE_TABLES[0] if quadrant in (0, 3) else SOLE_TABLES[4]
+    side = SOLE_TABLES[2] if quadrant < 2 else SOLE_TABLES[6]
+    diagonal = SOLE_TABLES[(quadrant * 2 + 1) % 8]
+
+    def sampled(table):
+        position = (phase % 1.0) * len(table)
+        index = int(math.floor(position)) % len(table)
+        return mix(table[index], table[(index + 1) % len(table)], position - math.floor(position))
+
+    weights = directional_weights(angle_degrees)
+    lateral_weight = weights[2] + weights[3]
+    base = (mix(sampled(longitudinal), sampled(diagonal), lateral_weight * 2.0)
+            if lateral_weight <= 0.5
+            else mix(sampled(diagonal), sampled(side), (lateral_weight - 0.5) * 2.0))
+    extended_weight = clamp((stride - 0.5715) / 0.1285, 0.0, 1.0)
+    if extended_weight <= 0.0 or angle < 90.0 or angle > 270.0:
+        return base
+    residual_position = (angle - 90.0) / 15.0
+    residual_index = min(11, int(math.floor(residual_position)))
+    residual = mix(sampled(EXTENDED_RESIDUALS[residual_index]),
+                   sampled(EXTENDED_RESIDUALS[residual_index + 1]),
+                   residual_position - residual_index)
+    return base + residual * extended_weight
+
+
+def directional_target(angle_degrees, phase, left, stride):
+    cycle = leg_cycle(phase, left)
+    stance = cycle < 0.5
+    t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
+    travel = t if stance else smoother_step(t)
+    offset = stride * ((0.5 - travel) if stance else (travel - 0.5))
+    radians = math.radians(((angle_degrees + 180.0) % 360.0) - 180.0)
+    modes = ("march.forward", "march.backward", "slide.left", "slide.right")
+    techniques = [leg_target(mode, phase, left, stride) for mode in modes]
+    weights = directional_weights(angle_degrees)
+    pitch = sum(target["foot"] * weight for target, weight in zip(techniques, weights))
+    lift = sum((target["lift"] - sole_lift(target["foot"], 0.08 if mode == "march.backward" else 0.07))
+               * weight for mode, target, weight in zip(modes, techniques, weights))
+    lift += sole_lift(pitch, mix(0.07, 0.08, weights[1])) + directional_sole_offset(angle_degrees, phase, stride)
+    return {"stance": stance, "t": t,
+            "x": math.sin(radians) * offset, "z": -math.cos(radians) * offset,
+            "lift": lift, "foot": pitch,
+            "toe": sum(target["toe"] * weight for target, weight in zip(techniques, weights))}
+
+
+def directional_body_pose(angle_degrees, phase, stride):
+    targets = [directional_target(angle_degrees, phase, left, stride) for left in (True, False)]
+    weights = directional_weights(angle_degrees)
+    drop = required_pelvis_drop(targets)
+    rhythm = phase * math.pi * 2.0
+    slide_strength = weights[3] - weights[2]
+    longitudinal_weight = weights[0] + weights[1]
+    yaw = slide_strength * (8.0 + math.sin(rhythm) * 1.5) + longitudinal_weight * math.sin(rhythm) * 1.8
+    roll = -math.cos(rhythm) * 0.55
+    return {"pelvis_x": math.cos(rhythm) * 0.0065, "pelvis_y": drop,
+            "ik_pelvis_y": drop, "pelvis_yaw": yaw, "pelvis_roll": roll,
+            "spine_yaw": -yaw * (0.72 + 0.20 * abs(slide_strength)),
+            "spine_roll": -roll * 0.88,
+            "spine_pitch": math.sin(rhythm + 0.18) * 0.28,
+            "spine_lift": -drop * 0.95,
+            "head_pitch": -math.sin(rhythm + 0.18) * 0.16}
+
+
+def sagittal_ik(target_z, lift, pelvis_drop):
+    thigh, shin = 0.39, 0.415
+    vertical = 0.805 + pelvis_drop - lift
+    distance = clamp(math.hypot(vertical, target_z), 0.08, thigh + shin - 0.001)
+    target_angle = math.atan2(-target_z, vertical)
+    hip_offset = math.acos(clamp((thigh * thigh + distance * distance - shin * shin)
+                                 / (2.0 * thigh * distance), -1.0, 1.0))
+    interior = math.acos(clamp((thigh * thigh + shin * shin - distance * distance)
+                               / (2.0 * thigh * shin), -1.0, 1.0))
+    return math.degrees(target_angle + hip_offset), math.degrees(interior - math.pi)
+
+
+def spatial_ik_vector(target_x, target_z, vertical):
+    thigh, shin = 0.39, 0.415
+    plane_vertical = math.hypot(vertical, target_x)
+    distance = clamp(math.hypot(plane_vertical, target_z), 0.08, thigh + shin - 0.001)
+    target_angle = math.atan2(-target_z, plane_vertical)
+    hip_offset = math.acos(clamp((thigh * thigh + distance * distance - shin * shin)
+                                 / (2.0 * thigh * distance), -1.0, 1.0))
+    interior = math.acos(clamp((thigh * thigh + shin * shin - distance * distance)
+                               / (2.0 * thigh * shin), -1.0, 1.0))
+    return (math.degrees(target_angle + hip_offset), math.degrees(math.atan2(target_x, vertical)),
+            math.degrees(interior - math.pi))
+
+
+def leg_pose(mode, phase, left, stride, pelvis_drop):
+    target = leg_target(mode, phase, left, stride)
+    if mode in ("march.forward", "march.backward"):
+        hip, knee = sagittal_ik(target["z"], target["lift"], pelvis_drop)
+        return hip, 0.0, knee, 0.0, target["foot"] - hip - knee, 0.0, target["toe"]
+    if mode in ("slide.left", "slide.right"):
+        roll = math.degrees(math.asin(clamp(target["x"] / 0.805, -0.62, 0.62)))
+        bend = -2.0 if target["stance"] else -7.0 * math.sin(math.pi * target["t"])
+        return -bend * 0.38, roll, bend, -roll * 0.08, -bend * 0.62, -roll * 0.92, 0.0
+    return (0.0,) * 7
+
+
+def directional_leg_pose(angle_degrees, phase, left, stride, body):
+    target = directional_target(angle_degrees, phase, left, stride)
+    hip_bind_x = -0.105 if left else 0.105
+    world_x = hip_bind_x + target["x"] - body["pelvis_x"]
+    world_y = 0.075 + target["lift"] - (0.91 + body["pelvis_y"])
+    world_z = target["z"]
+    roll, yaw = math.radians(body["pelvis_roll"]), math.radians(body["pelvis_yaw"])
+    roll_x = math.cos(roll) * world_x + math.sin(roll) * world_y
+    roll_y = -math.sin(roll) * world_x + math.cos(roll) * world_y
+    local_x = math.cos(yaw) * roll_x - math.sin(yaw) * world_z - hip_bind_x
+    local_z = math.sin(yaw) * roll_x + math.cos(yaw) * world_z
+    local_y = roll_y + 0.03
+    vertical = -local_y
+    reach = 0.39 + 0.415 - 0.001
+    horizontal_squared = local_x * local_x + local_z * local_z
+    if vertical * vertical + horizontal_squared > reach * reach:
+        vertical = math.sqrt(max(0.0, reach * reach - horizontal_squared))
+    hip_x, hip_z, knee_x = spatial_ik_vector(local_x, local_z, vertical)
+    return (hip_x, hip_z, knee_x, 0.0, target["foot"] - hip_x - knee_x,
+            -hip_z - body["pelvis_roll"], target["toe"])
+
+
+def pose_matrices(mode: str, phase: float, stride: float = 0.5715):
+    direction_angle = float(mode.split(".", 1)[1]) if mode.startswith("direction.") else None
+    body = (directional_body_pose(direction_angle, phase, stride)
+            if direction_angle is not None else body_pose(mode, phase, stride))
+    rotations = {
+        1: (0.0, body["pelvis_yaw"], body["pelvis_roll"]),
+        2: (body["spine_pitch"], body["spine_yaw"] * 0.42, body["spine_roll"] * 0.45),
+        3: (-body["spine_pitch"] * 0.62, body["spine_yaw"] * 0.58, body["spine_roll"] * 0.55),
+        5: (body["head_pitch"], 0.0, 0.0),
+        15: (0.0, 0.0, 50.0), 19: (0.0, 0.0, -50.0),
+    }
+    translations = {1: (body["pelvis_x"], body["pelvis_y"], 0.0),
+                    2: (0.0, body["spine_lift"], 0.0)}
+    for left, thigh, shin, foot, toe, arm in (
+        (True, 6, 7, 8, 9, 15), (False, 10, 11, 12, 13, 19)
     ):
-        wave = math.cos(angle) * (1 if left else -1)
-        if mode in ("march.forward", "march.backward"):
-            direction = -0.78 if mode == "march.backward" else 1.0
-            hip = wave * amplitude * direction
-            knee = -max(0.0, -wave) * max(4.0, amplitude * 0.30)
-            foot_angle = (max(0.0, wave) * (2.0 if mode == "march.backward" else 14.0)
-                          - max(0.0, -wave) * (2.0 if mode == "march.backward" else 4.0))
-            rotations[thigh] = (hip, 0.0, 0.0)
-            rotations[shin] = (knee, 0.0, 0.0)
-            rotations[foot] = (foot_angle, 0.0, 0.0)
-            rotations[arm] = (-hip * 0.28, 0.0, 50.0 if left else -50.0)
-        elif mode in ("slide.left", "slide.right"):
-            direction = -1.0 if mode == "slide.left" else 1.0
-            cadence = -wave if mode == "slide.right" else wave
-            rotations[thigh] = (0.0, 0.0, cadence * amplitude * 0.78 * direction)
+        if direction_angle is not None:
+            pose = directional_leg_pose(direction_angle, phase, left, stride, body)
+        else:
+            pose = leg_pose(mode, phase, left, stride, body["pelvis_y"])
+        hip_x, hip_z, knee_x, knee_z, foot_x, foot_z, toe_x = pose
+        rotations[thigh] = (hip_x, 0.0, hip_z)
+        rotations[shin] = (knee_x, 0.0, knee_z)
+        rotations[foot] = (foot_x, 0.0, foot_z)
+        rotations[toe] = (toe_x, 0.0, 0.0)
+        rotations[arm] = (clamp(-hip_x * 0.075, -2.4, 2.4), 0.0, 50.0 if left else -50.0)
 
     globals_ = []
     skins = []
@@ -71,6 +360,8 @@ def pose_matrices(mode: str, phase: float, stride: float = 1.0):
         else:
             parent_position = JOINTS[joint.parent].global_position
             local_position = tuple(joint.global_position[axis] - parent_position[axis] for axis in range(3))
+        offset = translations.get(index, (0.0, 0.0, 0.0))
+        local_position = tuple(local_position[axis] + offset[axis] for axis in range(3))
         local = multiply(translation(*local_position), rotation(*rotations.get(index, (0.0, 0.0, 0.0))))
         global_matrix = local if joint.parent is None else multiply(globals_[joint.parent], local)
         globals_.append(global_matrix)
@@ -103,7 +394,7 @@ def render_bmp(source: pathlib.Path, destination: pathlib.Path):
     positions = read_accessor(document, binary, attributes["POSITION"])
     joints = read_accessor(document, binary, attributes["JOINTS_0"])
     weights = read_accessor(document, binary, attributes["WEIGHTS_0"])
-    width, height, ground = 1200, 720, 630
+    width, height, ground = 1800, 720, 630
     pixels = bytearray(width * height * 3)
     for y in range(height):
         base = (40, 91, 61) if y >= ground else (135, 170, 189)
@@ -114,15 +405,19 @@ def render_bmp(source: pathlib.Path, destination: pathlib.Path):
         offset = ((height - 1 - ground) * width + x) * 3
         pixels[offset:offset+3] = bytes((223, 233, 220))
     poses = [
-        ("march.forward", 0.08, 250, (217, 163, 127)),
-        ("idle", 0.0, 600, (169, 103, 75)),
-        ("slide.right", 0.08, 950, (112, 65, 47)),
+        ("march.forward", 0.50, 180, (217, 163, 127), math.radians(78)),
+        ("direction.45", 0.25, 540, (198, 137, 101), math.radians(45)),
+        ("idle", 0.0, 900, (169, 103, 75), 0.0),
+        ("march.backward", 0.50, 1260, (137, 80, 58), math.radians(78)),
+        ("slide.right", 0.08, 1620, (112, 65, 47), 0.0),
     ]
-    for mode, phase, center_x, base in poses:
+    for mode, phase, center_x, base, view_angle in poses:
         vertices = skinned_vertices(positions, joints, weights, pose_matrices(mode, phase))
-        for x, y, z in sorted(vertices, key=lambda point: point[2], reverse=True):
+        cosine, sine = math.cos(view_angle), math.sin(view_angle)
+        viewed = [(x * cosine + z * sine, y, -x * sine + z * cosine) for x, y, z in vertices]
+        for x, y, depth in sorted(viewed, key=lambda point: point[2], reverse=True):
             px, py = int(center_x + x * 285.0), int(ground - y * 285.0)
-            shade = max(0.58, min(1.08, 0.86 - z * 0.9))
+            shade = max(0.58, min(1.08, 0.86 - depth * 0.9))
             rgb = tuple(max(0, min(255, int(channel * shade))) for channel in base)
             for dy in (-1, 0, 1):
                 for dx in (-1, 0, 1):
