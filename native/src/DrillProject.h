@@ -50,6 +50,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QString markerOutlineColor READ markerOutlineColor WRITE setMarkerOutlineColor NOTIFY editorSettingsChanged)
     Q_PROPERTY(int markerOutlineWidth READ markerOutlineWidth WRITE setMarkerOutlineWidth NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString markerLabelMode READ markerLabelMode WRITE setMarkerLabelMode NOTIFY editorSettingsChanged)
+    Q_PROPERTY(int markerLabelFontSize READ markerLabelFontSize WRITE setMarkerLabelFontSize NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString markerLabelColor READ markerLabelColor WRITE setMarkerLabelColor NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool markerFacingVisible READ markerFacingVisible WRITE setMarkerFacingVisible NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString markerFacingColor READ markerFacingColor WRITE setMarkerFacingColor NOTIFY editorSettingsChanged)
@@ -203,6 +204,8 @@ public:
     QString markerOutlineColor() const { return m_markerOutlineColor; } void setMarkerOutlineColor(const QString &value);
     int markerOutlineWidth() const { return m_markerOutlineWidth; } void setMarkerOutlineWidth(int value);
     QString markerLabelMode() const { return m_markerLabelMode; } void setMarkerLabelMode(const QString &value);
+    int markerLabelFontSize() const { return m_markerLabelFontSize; }
+    void setMarkerLabelFontSize(int value);
     QString markerLabelColor() const { return m_markerLabelColor; } void setMarkerLabelColor(const QString &value);
     bool markerFacingVisible() const { return m_markerFacingVisible; } void setMarkerFacingVisible(bool value);
     QString markerFacingColor() const { return m_markerFacingColor; } void setMarkerFacingColor(const QString &value);
@@ -573,6 +576,7 @@ private:
     QString m_markerOutlineColor{QStringLiteral("#e7f5ed")};
     int m_markerOutlineWidth = 1;
     QString m_markerLabelMode{QStringLiteral("adaptive")};
+    int m_markerLabelFontSize = 10;
     QString m_markerLabelColor{QStringLiteral("#f0f7f3")};
     bool m_markerFacingVisible = true;
     QString m_markerFacingColor{QStringLiteral("#f8fafc")};

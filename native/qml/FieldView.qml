@@ -751,7 +751,7 @@ Item {
                         anchors.horizontalCenter: parent.horizontalCenter
                         text: marcher.label
                         color: marcher.isSelected ? "#fde68a" : drillProject.markerLabelColor
-                        font.pixelSize: Math.max(8, 10 * root.zoom)
+                        font.pixelSize: Math.max(7, drillProject.markerLabelFontSize * root.zoom)
                         font.bold: marcher.isSelected
                         style: Text.Outline
                         styleColor: "#07110d"
