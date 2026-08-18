@@ -102,14 +102,16 @@ Item {
 
         Model {
             source: "#Cube"
-            position: Qt.vector3d(0, -0.5, 0)
+            // Keep the apron decisively below the turf.  The previous coplanar
+            // placement caused depth fighting to flash black through the field.
+            position: Qt.vector3d(0, -0.62, 0)
             scale: Qt.vector3d(1.76, 0.010, (drillProject.fieldDepthSteps + 16) / 100)
             materials: PrincipledMaterial { baseColor: "#17201c"; roughness: 1.0 }
         }
 
         Model {
             source: "#Cube"
-            position: Qt.vector3d(0, -0.5, 0)
+            position: Qt.vector3d(0, -0.50, 0)
             scale: Qt.vector3d(1.6, 0.010, drillProject.fieldDepthSteps / 100)
             materials: PrincipledMaterial {
                 baseColor: drillProject.fieldPreset === "indoor" ? "#a97543" : drillProject.turfColor
@@ -177,6 +179,23 @@ Item {
                                 const px = step / 160 * width
                                 ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                             }
+
+                            // Front/back sidelines and the short one-yard
+                            // inserts are part of the same texture as the
+                            // yard lines, so they stay aligned and avoid a
+                            // large collection of thin depth-sensitive meshes.
+                            ctx.globalAlpha = 1.0
+                            ctx.lineWidth = 5
+                            ctx.beginPath(); ctx.moveTo(0, 2.5); ctx.lineTo(width, 2.5); ctx.stroke()
+                            ctx.beginPath(); ctx.moveTo(0, height - 2.5); ctx.lineTo(width, height - 2.5); ctx.stroke()
+
+                            const markLength = (24.0 / 22.5) / drillProject.fieldDepthSteps * height
+                            for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
+                                const px = drillProject.fieldInsertStep(column) / 160 * width
+                                ctx.lineWidth = 4
+                                ctx.beginPath(); ctx.moveTo(px, 3); ctx.lineTo(px, 3 + markLength); ctx.stroke()
+                                ctx.beginPath(); ctx.moveTo(px, height - 3); ctx.lineTo(px, height - 3 - markLength); ctx.stroke()
+                            }
                         }
                         Component.onCompleted: requestPaint()
                         Connections {
@@ -236,38 +255,6 @@ Item {
                     }
                     roughness: 0.9
                 }
-            }
-        }
-
-        // Front and back sidelines.
-        Repeater3D {
-            model: 2
-            delegate: Model {
-                required property int index
-                source: "#Cube"
-                 position: Qt.vector3d(0, 0.012, index === 0
-                                      ? drillProject.fieldDepthSteps / 2
-                                      : -drillProject.fieldDepthSteps / 2)
-                scale: Qt.vector3d(1.6, 0.0003, 0.0018)
-                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
-            }
-        }
-
-        // Four vertical one-yard inserts in every five-yard interval at each sideline.
-        Repeater3D {
-            model: root.insertColumnCount * 2
-            delegate: Model {
-                required property int index
-                readonly property int column: index % root.insertColumnCount
-                readonly property bool backSide: index >= root.insertColumnCount
-                readonly property real markLength: 24.0 / 22.5
-                source: "#Cube"
-                 position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
-                                      backSide
-                                      ? -drillProject.fieldDepthSteps / 2 + markLength / 2
-                                      : drillProject.fieldDepthSteps / 2 - markLength / 2)
-                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
-                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
 
