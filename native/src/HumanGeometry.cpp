@@ -25,12 +25,14 @@ struct HumanVertex {
     float position[3];
     float normal[3];
     float texCoord[2];
-    quint16 joints[4];
+    // QQuick3DGeometry only accepts floating-point custom vertex attributes.
+    // glTF stores JOINTS_0 as uint16, so convert the indices while loading.
+    float joints[4];
     float weights[4];
 };
 #pragma pack(pop)
 
-static_assert(sizeof(HumanVertex) == 56);
+static_assert(sizeof(HumanVertex) == 64);
 
 struct GeometryCache {
     QByteArray vertices;
@@ -168,7 +170,9 @@ GeometryCache loadGeometry(int detailLevel)
         std::memcpy(destination[row].position, positions.data + row * positions.stride, sizeof(destination[row].position));
         std::memcpy(destination[row].normal, normals.data + row * normals.stride, sizeof(destination[row].normal));
         std::memcpy(destination[row].texCoord, texCoords.data + row * texCoords.stride, sizeof(destination[row].texCoord));
-        std::memcpy(destination[row].joints, joints.data + row * joints.stride, sizeof(destination[row].joints));
+        const auto *jointRow = reinterpret_cast<const quint16 *>(joints.data + row * joints.stride);
+        for (int influence = 0; influence < 4; ++influence)
+            destination[row].joints[influence] = float(qFromLittleEndian(jointRow[influence]));
         std::memcpy(destination[row].weights, weights.data + row * weights.stride, sizeof(destination[row].weights));
     }
     result.indices = QByteArray(indices.data, indices.count * qsizetype(sizeof(quint32)));
@@ -234,7 +238,7 @@ void HumanGeometry::applyDetailLevel()
     addAttribute(QQuick3DGeometry::Attribute::TexCoordSemantic, offsetof(HumanVertex, texCoord),
                  QQuick3DGeometry::Attribute::F32Type);
     addAttribute(QQuick3DGeometry::Attribute::JointSemantic, offsetof(HumanVertex, joints),
-                 QQuick3DGeometry::Attribute::U16Type);
+                 QQuick3DGeometry::Attribute::F32Type);
     addAttribute(QQuick3DGeometry::Attribute::WeightSemantic, offsetof(HumanVertex, weights),
                  QQuick3DGeometry::Attribute::F32Type);
     addAttribute(QQuick3DGeometry::Attribute::IndexSemantic, 0,

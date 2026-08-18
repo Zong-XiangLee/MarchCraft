@@ -83,9 +83,13 @@ int main(int argc, char *argv[])
     if (arguments.contains(QStringLiteral("--qa-set-drag-preview")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
     const int screenshotFlag = arguments.indexOf(QStringLiteral("--screenshot"));
-    if (screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size()) {
+    const bool screenshotRequested = screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size();
+    if (screenshotRequested) {
         const QString destination = arguments.at(screenshotFlag + 1);
-        QTimer::singleShot(1800, &application, [&engine, destination] {
+        const int delayFlag = arguments.indexOf(QStringLiteral("--screenshot-delay"));
+        const int screenshotDelay = delayFlag >= 0 && delayFlag + 1 < arguments.size()
+                ? qBound(250, arguments.at(delayFlag + 1).toInt(), 10000) : 1800;
+        QTimer::singleShot(screenshotDelay, &application, [&engine, destination] {
             if (!engine.rootObjects().isEmpty()) {
                 if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()))
                     window->grabWindow().save(destination);
@@ -95,14 +99,16 @@ int main(int argc, char *argv[])
     }
     if (arguments.contains(QStringLiteral("--qa-current-transition")) && !engine.rootObjects().isEmpty()) {
         QObject *root = engine.rootObjects().first();
-        QTimer::singleShot(400, &application, [root, &project, &application] {
+        QTimer::singleShot(400, &application, [root, &project, &application, screenshotRequested] {
             const bool invoked = QMetaObject::invokeMethod(root, "playCurrentTransition", Qt::DirectConnection);
             if (!invoked) {
                 application.exit(2);
                 return;
             }
-            QTimer::singleShot(900, &application, [&project, &application] {
-                application.exit(project.currentSetIndex() > 0 && project.playhead() > 0.01 ? 0 : 3);
+            QTimer::singleShot(900, &application, [&project, &application, screenshotRequested] {
+                const bool advancing = project.currentSetIndex() > 0 && project.playhead() > 0.01;
+                if (!advancing || !screenshotRequested)
+                    application.exit(advancing ? 0 : 3);
             });
         });
     }

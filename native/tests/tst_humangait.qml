@@ -21,6 +21,22 @@ TestCase {
                                      standardStride, 1).stance)
     }
 
+    function test_countPhaseProducesVisibleJointMotion() {
+        var bodyAtContact = HumanGait.directionalBodyPose(0, 0,
+                                                           standardStride, 1)
+        var bodyAtPassing = HumanGait.directionalBodyPose(0, 0.25,
+                                                           standardStride, 1)
+        var contact = HumanGait.directionalLegPose(0, 0, true,
+                                                    standardStride, 1,
+                                                    bodyAtContact)
+        var passing = HumanGait.directionalLegPose(0, 0.25, true,
+                                                    standardStride, 1,
+                                                    bodyAtPassing)
+        verify(Math.abs(contact.hipX - passing.hipX) > 5)
+        verify(Math.abs(contact.kneeX - passing.kneeX) > 5)
+        verify(Math.abs(contact.footX - passing.footX) > 5)
+    }
+
     function test_plantedForwardFootIsWorldLocked() {
         var atContact = HumanGait.targetForLeg("march.forward", 0, false,
                                                standardStride, 1)
