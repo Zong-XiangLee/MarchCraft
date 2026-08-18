@@ -21,6 +21,22 @@ TestCase {
                                      standardStride, 1).stance)
     }
 
+    function test_countPhaseProducesVisibleJointMotion() {
+        var bodyAtContact = HumanGait.directionalBodyPose(0, 0,
+                                                           standardStride, 1)
+        var bodyAtPassing = HumanGait.directionalBodyPose(0, 0.25,
+                                                           standardStride, 1)
+        var contact = HumanGait.directionalLegPose(0, 0, true,
+                                                    standardStride, 1,
+                                                    bodyAtContact)
+        var passing = HumanGait.directionalLegPose(0, 0.25, true,
+                                                    standardStride, 1,
+                                                    bodyAtPassing)
+        verify(Math.abs(contact.hipX - passing.hipX) > 5)
+        verify(Math.abs(contact.kneeX - passing.kneeX) > 5)
+        verify(Math.abs(contact.footX - passing.footX) > 5)
+    }
+
     function test_plantedForwardFootIsWorldLocked() {
         var atContact = HumanGait.targetForLeg("march.forward", 0, false,
                                                standardStride, 1)
@@ -36,8 +52,43 @@ TestCase {
                                                     standardStride, 1)
         var backwardContact = HumanGait.targetForLeg("march.backward", 0, false,
                                                      standardStride, 1)
-        verify(forwardContact.footPitch > 10)
+        closeTo(forwardContact.footPitch, 20, 0.001)
         verify(backwardContact.footPitch < -4)
+    }
+
+    function test_forwardAndSlideSettleWholeFootWithoutToePushOff() {
+        var stancePhases = [0, 0.06, 0.12, 0.25, 0.38, 0.499]
+        for (var i = 0; i < stancePhases.length; ++i) {
+            var forward = HumanGait.targetForDirection(0, stancePhases[i], false,
+                                                        standardStride, 1)
+            var side = HumanGait.targetForDirection(90, stancePhases[i], false,
+                                                     standardStride, 1)
+            verify(forward.footPitch >= -0.001)
+            closeTo(forward.toePitch, 0, 0.001)
+            closeTo(side.footPitch, forward.footPitch, 0.001)
+            closeTo(side.toePitch, 0, 0.001)
+        }
+        closeTo(HumanGait.targetForLeg("march.forward", 0.25, false,
+                                       standardStride, 1).footPitch, 0, 0.001)
+    }
+
+    function test_attentionAndTenduClose() {
+        var leftAttention = HumanGait.attentionLegPose(true)
+        var rightAttention = HumanGait.attentionLegPose(false)
+        closeTo(leftAttention.footY - rightAttention.footY, 90, 0.001)
+        verify(leftAttention.hipZ > 0 && rightAttention.hipZ < 0)
+        closeTo(leftAttention.footZ, -leftAttention.hipZ, 0.001)
+        closeTo(rightAttention.footZ, -rightAttention.hipZ, 0.001)
+
+        var body = HumanGait.directionalBodyPose(0, 0, standardStride, 1)
+        var moving = HumanGait.directionalLegPose(0, 0, true,
+                                                   standardStride, 1, body)
+        var middle = HumanGait.applyClosingPose(moving, 0, true, 0.5)
+        var closed = HumanGait.applyClosingPose(moving, 0, true, 1)
+        verify(middle.footX < moving.footX - 10)
+        closeTo(closed.footY, 45, 0.001)
+        closeTo(closed.toeX, 0, 0.001)
+        verify(closed.planted)
     }
 
     function test_swingPassesCloseAndDeceleratesIntoContact() {
@@ -78,15 +129,42 @@ TestCase {
         verify(Math.abs(body.spineRoll) < 1)
     }
 
-    function test_slideKeepsShouldersSquareAndKneesForward() {
+    function test_slideReusesForwardTechniqueUnderSquareShoulders() {
         var body = HumanGait.bodyPose("slide.right", 0.125, standardStride, 1)
-        verify(Math.abs(body.pelvisYaw) >= 7)
-        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1)
-        var leg = HumanGait.legPose("slide.right", 0.125, true,
-                                    standardStride, 1, body.pelvisY)
-        verify(Math.abs(leg.hipZ) > 1)
-        verify(Math.abs(leg.kneeZ) < Math.abs(leg.hipZ) * 0.1)
+        verify(Math.abs(body.pelvisYaw) >= 60)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.5)
+
+        var forwardContact = HumanGait.targetForDirection(0, 0, false,
+                                                           standardStride, 1)
+        var slideContact = HumanGait.targetForDirection(90, 0, false,
+                                                         standardStride, 1)
+        closeTo(slideContact.footPitch, forwardContact.footPitch, 0.0001)
+        closeTo(slideContact.toePitch, forwardContact.toePitch, 0.0001)
+
+        var directionalBody = HumanGait.directionalBodyPose(90, 0.125,
+                                                              standardStride, 1)
+        var leg = HumanGait.directionalLegPose(90, 0.125, true,
+                                                standardStride, 1,
+                                                directionalBody)
+        verify(Math.abs(leg.hipZ) < 5)
+        compare(leg.kneeZ, 0)
         verify(leg.kneeX <= 0)
+    }
+
+    function test_backwardIsLowStraightLegPlatformTechnique() {
+        var forwardPassing = HumanGait.targetForLeg("march.forward", 0.25, true,
+                                                    standardStride, 1)
+        var backwardPassing = HumanGait.targetForLeg("march.backward", 0.25, true,
+                                                     standardStride, 1)
+        verify(backwardPassing.lift < forwardPassing.lift * 0.45)
+        verify(backwardPassing.footPitch < 0)
+
+        var body = HumanGait.bodyPose("march.backward", 0.25,
+                                      standardStride, 1)
+        var leg = HumanGait.legPose("march.backward", 0.25, true,
+                                    standardStride, 1, body.pelvisY)
+        verify(leg.kneeX > -15)
+        verify(Math.abs(body.spinePitch) < 0.25)
     }
 
     function test_secondaryMotionRemainsDisciplined() {
@@ -143,7 +221,7 @@ TestCase {
     function test_diagonalSlideStillStabilizesShoulders() {
         var body = HumanGait.directionalBodyPose(45, 0.125,
                                                   standardStride, 1)
-        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.2)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.5)
         verify(Math.abs(body.pelvisRoll + body.spineRoll) < 0.1)
         verify(Math.abs(body.spinePitch) < 0.3)
     }

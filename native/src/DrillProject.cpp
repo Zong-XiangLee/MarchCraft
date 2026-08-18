@@ -677,6 +677,8 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case TravelStepsPerCountRole: return animationStateAt(index.row()).travelStepsPerCount;
     case LocomotionModeRole: return animationStateAt(index.row()).locomotion;
     case GaitPhaseRole: return animationStateAt(index.row()).normalizedTime;
+    case TravelPathTypeRole: return m_currentSet > 0 ? placement.pathType : QStringLiteral("direct");
+    case ClosingTransitionRole: return animationStateAt(index.row()).closesAtDestination;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
@@ -737,6 +739,8 @@ QHash<int, QByteArray> DrillProject::roleNames() const
             {SetDistanceRole, "setDistance"}, {TravelHeadingRole, "travelHeading"},
             {TravelStepsPerCountRole, "travelStepsPerCount"},
             {LocomotionModeRole, "locomotionMode"}, {GaitPhaseRole, "gaitPhase"},
+            {TravelPathTypeRole, "travelPathType"},
+            {ClosingTransitionRole, "closingTransition"},
             {TotalDistanceRole, "totalDistance"},
             {WarningRole, "hasWarning"}, {VisibleRole, "performerVisible"},
             {LockedRole, "performerLocked"}, {BodyRigRole, "bodyRigId"},
@@ -4601,6 +4605,13 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
 
     const Placement destination = placementAt(performerIndex, m_currentSet);
     const Placement origin = placementAt(performerIndex, m_currentSet - 1);
+    if (m_currentSet + 1 >= m_sets.size()) {
+        state.closesAtDestination = true;
+    } else {
+        const Placement next = placementAt(performerIndex, m_currentSet + 1);
+        state.closesAtDestination = std::hypot(next.position.x() - destination.position.x(),
+                                                next.position.y() - destination.position.y()) <= 1e-5;
+    }
     const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
 
     constexpr double speedSampleRadius = 0.001;
@@ -4640,6 +4651,14 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
             ? headingDelta : speedDelta;
     state.travelDirectionDegrees = std::fmod(std::atan2(directionDelta.x(), directionDelta.y())
                                              * 180.0 / std::numbers::pi + 360.0, 360.0);
+    // Follow-the-leader is a path-facing technique: the entire body follows
+    // the tangent instead of keeping an authored front while the lower body
+    // slides underneath it.
+    if (destination.pathType == QStringLiteral("follow")) {
+        state.locomotion = QStringLiteral("march.forward");
+        return state;
+    }
+
     const double facing = interpolatedFacing(performerIndex);
     const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
     const double absoluteRelative = std::abs(relative);

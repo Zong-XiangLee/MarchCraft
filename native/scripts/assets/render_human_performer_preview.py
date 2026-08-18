@@ -12,15 +12,43 @@ import struct
 from build_human_performer import JOINTS, read_accessor, read_glb
 
 SOLE_TABLES = (
-(-0.00133,-0.00103,-0.00038,-0.00006,0.00002,0.00002,0.00002,0.00001,-0.00001,-0.00036,-0.00068,-0.00096,-0.00118,-0.00103,0.00008,0.00133,-0.00150,-0.00118,-0.00046,-0.00009,0,0,-0.00001,-0.00001,-0.00003,-0.00038,-0.00071,-0.00099,-0.00120,-0.00101,0.00013,0.00142),
-(-0.00056,-0.00040,-0.00039,-0.00002,0.00007,0.00008,0.00006,0.00003,-0.00007,-0.00055,-0.00090,-0.00109,-0.00109,-0.00145,-0.00092,-0.00049,-0.00125,-0.00100,-0.00227,-0.00126,-0.00069,-0.00033,-0.00011,-0.00003,-0.00003,-0.00012,-0.00025,-0.00037,-0.00044,-0.00124,-0.00106,-0.00095),
-(0.00161,0.00149,0.00087,0.00060,0.00039,0.00024,0.00013,0.00005,-0.00019,-0.00030,-0.00029,-0.00016,-0.00005,-0.00002,0.00004,0.00060,0.00024,0.00097,-0.00034,-0.00020,-0.00006,-0.00004,-0.00005,-0.00005,-0.00011,-0.00036,-0.00070,-0.00112,-0.00162,-0.00217,-0.00275,0.00028),
-(-0.00189,-0.00168,-0.00091,-0.00050,-0.00030,-0.00025,-0.00018,-0.00007,0.00016,0.00019,0.00021,0.00023,0.00025,0.00030,0.00038,0.00040,-0.00013,-0.00001,-0.00010,0.00003,0.00009,0.00011,0.00013,0.00016,0.00019,0.00013,-0.00063,-0.00116,-0.00177,-0.00244,-0.00313,0.00024),
-(-0.00062,-0.00055,-0.00036,-0.00005,0.00024,0.00032,0.00040,0.00046,0.00048,0.00046,0.00041,0.00024,0.00015,0.00001,-0.00017,0.00043,-0.00054,-0.00048,-0.00030,0,0.00027,0.00036,0.00043,0.00049,0.00052,0.00051,0.00046,0.00028,0.00020,0.00007,-0.00010,0.00050),
-(-0.00017,-0.00004,-0.00012,0.00002,0.00008,0.00010,0.00012,0.00014,0.00016,-0.00001,-0.00086,-0.00145,-0.00210,-0.00276,-0.00341,0.00018,-0.00185,-0.00164,-0.00089,-0.00048,-0.00021,-0.00006,0.00005,0.00008,0.00019,0.00022,0.00024,0.00026,0.00029,0.00034,0.00043,0.00044),
-(0.00022,0.00100,-0.00029,-0.00016,-0.00005,-0.00005,-0.00006,-0.00004,-0.00019,-0.00045,-0.00081,-0.00125,-0.00175,-0.00231,-0.00287,0.00027,0.00158,0.00143,0.00079,0.00052,0.00032,0.00017,0.00008,0.00002,-0.00011,-0.00025,-0.00026,-0.00015,-0.00004,0,0.00006,0.00060),
-(-0.00115,-0.00092,-0.00245,-0.00150,-0.00094,-0.00056,-0.00028,-0.00011,-0.00003,-0.00003,-0.00008,-0.00014,-0.00018,-0.00104,-0.00091,-0.00089,-0.00065,-0.00050,-0.00047,-0.00008,0.00002,0.00004,0.00002,0,-0.00006,-0.00046,-0.00074,-0.00088,-0.00085,-0.00120,-0.00069,-0.00032))
+(-0.00118,-0.00103,-0.00039,-0.00007,0.00001,0.00001,0.00001,0.00000,-0.00000,-0.00026,-0.00049,-0.00070,-0.00085,-0.00069,0.00044,0.00168,-0.00130,-0.00118,-0.00047,-0.00010,-0.00001,-0.00001,-0.00001,-0.00002,-0.00003,-0.00028,-0.00052,-0.00072,-0.00087,-0.00067,0.00049,0.00177),
+(0.00148,0.00088,0.00077,0.00074,0.00060,0.00039,0.00023,-0.00098,-0.00257,-0.00401,-0.00532,-0.00649,-0.00754,-0.00857,-0.00874,-0.00493,-0.00143,-0.00207,-0.01241,-0.01001,-0.00764,-0.00621,-0.00485,-0.00344,-0.00215,-0.00096,0.00015,0.00034,0.00050,-0.00001,0.00099,0.00208),
+(-0.00069,-0.01232,-0.02541,-0.02238,-0.01962,-0.01699,-0.01435,-0.01166,-0.00889,-0.00604,-0.00306,-0.00003,0.00010,0.00080,0.00201,0.00319,0.00136,0.00014,-0.00043,-0.00040,-0.00028,-0.00030,-0.00287,-0.00556,-0.00822,-0.01101,-0.01397,-0.01716,-0.02062,-0.02519,-0.02148,-0.01254),
+(-0.00161,-0.00599,-0.01604,-0.01439,-0.01218,-0.00986,-0.00751,-0.00511,-0.00265,-0.00012,0.00009,0.00015,0.00021,0.00025,0.00028,0.00030,-0.00002,-0.00032,-0.00048,0.00023,0.00005,0.00000,-0.00003,-0.00004,-0.00218,-0.00466,-0.00727,-0.01003,-0.01294,-0.01603,-0.01928,-0.01443),
+(-0.00068,-0.00063,-0.00052,-0.00020,-0.00012,-0.00008,-0.00003,0.00001,0.00003,0.00004,0.00004,-0.00008,-0.00018,-0.00027,-0.00039,0.00001,-0.00061,-0.00057,-0.00047,-0.00016,-0.00008,-0.00004,0.00000,0.00004,0.00007,0.00009,0.00009,-0.00004,-0.00013,-0.00023,-0.00034,0.00006),
+(0.00007,-0.00027,-0.00047,0.00021,0.00003,-0.00002,-0.00005,-0.00007,-0.00247,-0.00510,-0.00784,-0.01069,-0.01363,-0.01667,-0.01981,-0.01485,-0.00172,-0.00580,-0.01562,-0.01376,-0.01150,-0.00921,-0.00694,-0.00466,-0.00235,0.00001,0.00011,0.00018,0.00023,0.00027,0.00031,0.00034),
+(0.00152,0.00024,-0.00038,-0.00040,-0.00030,-0.00031,-0.00314,-0.00612,-0.00911,-0.01216,-0.01534,-0.01864,-0.02209,-0.02656,-0.02299,-0.01343,-0.00087,-0.01185,-0.02441,-0.02104,-0.01815,-0.01553,-0.01302,-0.01054,-0.00805,-0.00550,-0.00282,-0.00004,0.00009,0.00080,0.00205,0.00328),
+(-0.00126,-0.00193,-0.01252,-0.01024,-0.00794,-0.00652,-0.00515,-0.00372,-0.00239,-0.00116,-0.00000,0.00037,0.00052,-0.00001,0.00097,0.00201,0.00128,0.00070,0.00066,0.00069,0.00056,0.00036,0.00020,-0.00077,-0.00232,-0.00374,-0.00503,-0.00621,-0.00727,-0.00832,-0.00852,-0.00477))
 ZERO_RESIDUAL = (0.0,) * 16
+HALF_STRIDE_CORRECTIONS = (
+    (0.00043,0,0,0.00017,0.00057,0,0,0.00016),
+    (-0.00080,-0.00019,0,0.00204,-0.00074,0.00286,0,-0.00055),
+    (-0.00083,0.00612,0,-0.00304,-0.00109,-0.00248,0,0.00644),
+    (0.00157,0.00498,0,0,-0.00038,-0.00008,0,0.00516),
+    (-0.00002,-0.00001,0.00000,0.00019,-0.00003,-0.00001,0.00000,0.00019),
+    (-0.00043,-0.00008,0,0.00539,0.00158,0.00475,0,0),
+    (-0.00124,-0.00267,0,0.00688,-0.00086,0.00566,0,-0.00283),
+    (-0.00070,0.00291,0,-0.00068,-0.00058,-0.00018,0,0.00199))
+EXTENDED_STRIDE_CORRECTIONS = (
+    (0.00040,0,0,-0.00008,0.00054,0,0,-0.00008),
+    (0.00110,0.00016,0,-0.00085,0.00064,-0.00131,0,0.00010),
+    (-0.00151,-0.00289,0,-0.00004,0.00269,0.00009,0,-0.00307),
+    (-0.00458,-0.00206,0,-0.00005,0.00050,0.00004,0,-0.00215),
+    (0.00002,0.00001,0.00000,0.00008,0.00002,0.00000,0.00000,0.00008),
+    (0.00040,0.00003,0,-0.00219,-0.00459,-0.00211,0,-0.00005),
+    (0.00273,0.00011,0,-0.00327,-0.00157,-0.00267,0,-0.00004),
+    (0.00069,-0.00133,0,0.00010,0.00134,0.00015,0,-0.00082))
+HALF_BACK_DIAGONAL_CORRECTIONS = (
+    (0.00054,-0.00202,0,0.00206,0.00002,0.00205,0,-0.00179),
+    (0.00115,-0.00331,-0.00025,0.00283,0.00004,0.00234,-0.00022,-0.00149),
+    (0.00004,0.00253,-0.00023,-0.00048,0.00115,-0.00330,-0.00025,0.00264),
+    (0.00002,0.00208,0,-0.00074,0.00054,-0.00200,0,0.00203))
+EXTENDED_BACK_DIAGONAL_CORRECTIONS = (
+    (-0.00065,-0.00518,0,0.00012,-0.00666,-0.00041,0,-0.00395),
+    (0.00168,-0.00702,0.00014,0.00028,-0.00717,-0.00031,0.00014,-0.00656),
+    (-0.00740,-0.00032,0.00015,-0.00623,0.00173,-0.00767,0.00011,0.00028),
+    (-0.00690,-0.00042,0,-0.00382,-0.00062,-0.00523,0,0.00012))
 EXTENDED_RESIDUALS = (ZERO_RESIDUAL,
 (0.00166,0.00064,0.00017,-0.00017,0,0.00022,-0.00010,-0.00030,0.00294,0.00168,0.00044,0.00005,0,-0.00041,-0.00112,-0.00197),
 (0.00037,-0.00058,-0.00078,-0.00087,-0.00039,-0.00008,-0.00023,-0.00009,0.00363,0.00163,0.00034,-0.00022,-0.00036,-0.00108,-0.00187,-0.00266),
@@ -86,32 +114,28 @@ def foot_pitch(mode, cycle):
     t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
     if mode == "march.forward":
         if stance:
-            if t < 0.22:
-                return mix(15.0, 0.0, smoother_step(t / 0.22))
-            if t > 0.76:
-                return mix(0.0, -10.0, smoother_step((t - 0.76) / 0.24))
+            if t < 0.24:
+                return mix(20.0, 0.0, smoother_step(t / 0.24))
             return 0.0
-        if t < 0.28:
-            return mix(-10.0, 1.5, smoother_step(t / 0.28))
-        if t < 0.72:
-            return mix(1.5, 7.0, smoother_step((t - 0.28) / 0.44))
-        return mix(7.0, 15.0, smoother_step((t - 0.72) / 0.28))
+        if t < 0.24:
+            return mix(0.0, 2.0, smoother_step(t / 0.24))
+        if t < 0.70:
+            return mix(2.0, 8.0, smoother_step((t - 0.24) / 0.46))
+        return mix(8.0, 20.0, smoother_step((t - 0.70) / 0.30))
     if mode == "march.backward":
         if stance:
-            return (mix(-7.0, -2.0, smoother_step(t / 0.28)) if t < 0.28
-                    else mix(-2.0, -6.0, smoother_step((t - 0.28) / 0.72)))
-        return (mix(-6.0, 0.5, smoother_step(t / 0.55)) if t < 0.55
-                else mix(0.5, -7.0, smoother_step((t - 0.55) / 0.45)))
+            return (mix(-5.0, -2.0, smoother_step(t / 0.24)) if t < 0.24
+                    else mix(-2.0, -4.0, smoother_step((t - 0.24) / 0.76)))
+        return (mix(-4.0, -1.0, smoother_step(t / 0.55)) if t < 0.55
+                else mix(-1.0, -5.0, smoother_step((t - 0.55) / 0.45)))
     return 0.0
 
 
 def toe_pitch(mode, cycle):
     stance = cycle < 0.5
     t = cycle * 2.0 if stance else (cycle - 0.5) * 2.0
-    if mode == "march.forward" and stance and t > 0.72:
-        return 10.0 * smoother_step((t - 0.72) / 0.28)
     if mode == "march.backward" and stance:
-        return 3.0 + 3.0 * smoother_step(t)
+        return 2.0 + 2.0 * smoother_step(t)
     return 0.0
 
 
@@ -130,7 +154,7 @@ def leg_target(mode, phase, left, stride):
     lift = 0.0
     if not stance:
         arc = math.sin(math.pi * t) ** 1.35
-        lift = arc * (0.020 if mode == "march.backward" else 0.026 if mode == "march.forward" else 0.018)
+        lift = arc * (0.005 if mode == "march.backward" else 0.026 if mode == "march.forward" else 0.018)
     pitch = foot_pitch(mode, cycle)
     toe_extent = 0.08 if mode == "march.backward" else 0.07
     lift += sole_lift(pitch, toe_extent)
@@ -217,6 +241,39 @@ def directional_sole_offset(angle_degrees, phase, stride):
     base = (mix(sampled(longitudinal), sampled(diagonal), lateral_weight * 2.0)
             if lateral_weight <= 0.5
             else mix(sampled(diagonal), sampled(side), (lateral_weight - 0.5) * 2.0))
+    def correction_from(tables):
+        longitudinal_correction = tables[0] if quadrant in (0, 3) else tables[4]
+        side_correction = tables[2] if quadrant < 2 else tables[6]
+        diagonal_correction = tables[(quadrant * 2 + 1) % 8]
+        return (mix(sampled(longitudinal_correction), sampled(diagonal_correction), lateral_weight * 2.0)
+                if lateral_weight <= 0.5
+                else mix(sampled(diagonal_correction), sampled(side_correction),
+                         (lateral_weight - 0.5) * 2.0))
+    def back_diagonal_correction(tables):
+        zero = (0.0,) * 8
+        if 90.0 <= angle <= 135.0:
+            if angle <= 105.0:
+                first, second, amount = zero, tables[0], (angle - 90.0) / 15.0
+            elif angle <= 120.0:
+                first, second, amount = tables[0], tables[1], (angle - 105.0) / 15.0
+            else:
+                first, second, amount = tables[1], zero, (angle - 120.0) / 15.0
+        elif 225.0 <= angle <= 270.0:
+            if angle <= 240.0:
+                first, second, amount = zero, tables[2], (angle - 225.0) / 15.0
+            elif angle <= 255.0:
+                first, second, amount = tables[2], tables[3], (angle - 240.0) / 15.0
+            else:
+                first, second, amount = tables[3], zero, (angle - 255.0) / 15.0
+        else:
+            return 0.0
+        return mix(sampled(first), sampled(second), amount)
+    if stride < 0.5715:
+        base += (correction_from(HALF_STRIDE_CORRECTIONS)
+                 + back_diagonal_correction(HALF_BACK_DIAGONAL_CORRECTIONS)) * clamp((0.5715 - stride) / 0.28575, 0.0, 1.0)
+    elif stride > 0.5715:
+        base += (correction_from(EXTENDED_STRIDE_CORRECTIONS)
+                 + back_diagonal_correction(EXTENDED_BACK_DIAGONAL_CORRECTIONS)) * clamp((stride - 0.5715) / 0.1285, 0.0, 1.0)
     extended_weight = clamp((stride - 0.5715) / 0.1285, 0.0, 1.0)
     if extended_weight <= 0.0 or angle < 90.0 or angle > 270.0:
         return base
@@ -235,17 +292,19 @@ def directional_target(angle_degrees, phase, left, stride):
     travel = t if stance else smoother_step(t)
     offset = stride * ((0.5 - travel) if stance else (travel - 0.5))
     radians = math.radians(((angle_degrees + 180.0) % 360.0) - 180.0)
-    modes = ("march.forward", "march.backward", "slide.left", "slide.right")
-    techniques = [leg_target(mode, phase, left, stride) for mode in modes]
     weights = directional_weights(angle_degrees)
-    pitch = sum(target["foot"] * weight for target, weight in zip(techniques, weights))
-    lift = sum((target["lift"] - sole_lift(target["foot"], 0.08 if mode == "march.backward" else 0.07))
-               * weight for mode, target, weight in zip(modes, techniques, weights))
+    forward = leg_target("march.forward", phase, left, stride)
+    backward = leg_target("march.backward", phase, left, stride)
+    backward_amount = weights[1]
+    pitch = mix(forward["foot"], backward["foot"], backward_amount)
+    lift = mix(forward["lift"] - sole_lift(forward["foot"], 0.07),
+               backward["lift"] - sole_lift(backward["foot"], 0.08),
+               backward_amount)
     lift += sole_lift(pitch, mix(0.07, 0.08, weights[1])) + directional_sole_offset(angle_degrees, phase, stride)
     return {"stance": stance, "t": t,
             "x": math.sin(radians) * offset, "z": -math.cos(radians) * offset,
             "lift": lift, "foot": pitch,
-            "toe": sum(target["toe"] * weight for target, weight in zip(techniques, weights))}
+            "toe": mix(forward["toe"], backward["toe"], backward_amount)}
 
 
 def directional_body_pose(angle_degrees, phase, stride):
@@ -255,13 +314,14 @@ def directional_body_pose(angle_degrees, phase, stride):
     rhythm = phase * math.pi * 2.0
     slide_strength = weights[3] - weights[2]
     longitudinal_weight = weights[0] + weights[1]
-    yaw = slide_strength * (8.0 + math.sin(rhythm) * 1.5) + longitudinal_weight * math.sin(rhythm) * 1.8
-    roll = -math.cos(rhythm) * 0.55
+    yaw = slide_strength * (68.0 + math.sin(rhythm) * 2.0) + longitudinal_weight * math.sin(rhythm) * 1.4
+    roll = -math.cos(rhythm) * 0.38
     return {"pelvis_x": math.cos(rhythm) * 0.0065, "pelvis_y": drop,
             "ik_pelvis_y": drop, "pelvis_yaw": yaw, "pelvis_roll": roll,
-            "spine_yaw": -yaw * (0.72 + 0.20 * abs(slide_strength)),
-            "spine_roll": -roll * 0.88,
-            "spine_pitch": math.sin(rhythm + 0.18) * 0.28,
+            "spine_yaw": -yaw * mix(0.78, 0.985,
+                                      smoother_step(abs(slide_strength) * 2.0)),
+            "spine_roll": -roll * 0.92,
+            "spine_pitch": math.sin(rhythm + 0.18) * 0.22,
             "spine_lift": -drop * 0.95,
             "head_pitch": -math.sin(rhythm + 0.18) * 0.16}
 
@@ -295,6 +355,10 @@ def leg_pose(mode, phase, left, stride, pelvis_drop):
     target = leg_target(mode, phase, left, stride)
     if mode in ("march.forward", "march.backward"):
         hip, knee = sagittal_ik(target["z"], target["lift"], pelvis_drop)
+        minimum_flex = -0.7 if mode == "march.backward" else -1.4
+        clamped_knee = min(knee, minimum_flex)
+        hip -= (clamped_knee - knee) * 0.5
+        knee = clamped_knee
         return hip, 0.0, knee, 0.0, target["foot"] - hip - knee, 0.0, target["toe"]
     if mode in ("slide.left", "slide.right"):
         roll = math.degrees(math.asin(clamp(target["x"] / 0.805, -0.62, 0.62)))
@@ -321,12 +385,18 @@ def directional_leg_pose(angle_degrees, phase, left, stride, body):
     if vertical * vertical + horizontal_squared > reach * reach:
         vertical = math.sqrt(max(0.0, reach * reach - horizontal_squared))
     hip_x, hip_z, knee_x = spatial_ik_vector(local_x, local_z, vertical)
+    minimum_flex = mix(-1.4, -0.7, directional_weights(angle_degrees)[1])
+    clamped_knee = min(knee_x, minimum_flex)
+    hip_x -= (clamped_knee - knee_x) * 0.5
+    knee_x = clamped_knee
     return (hip_x, hip_z, knee_x, 0.0, target["foot"] - hip_x - knee_x,
             -hip_z - body["pelvis_roll"], target["toe"])
 
 
 def pose_matrices(mode: str, phase: float, stride: float = 0.5715):
-    direction_angle = float(mode.split(".", 1)[1]) if mode.startswith("direction.") else None
+    direction_angle = (float(mode.split(".", 1)[1]) if mode.startswith("direction.")
+                       else 90.0 if mode == "slide.right"
+                       else -90.0 if mode == "slide.left" else None)
     body = (directional_body_pose(direction_angle, phase, stride)
             if direction_angle is not None else body_pose(mode, phase, stride))
     rotations = {

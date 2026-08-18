@@ -340,9 +340,14 @@ Item {
                 required property real travelStepsPerCount
                 required property string locomotionMode
                 required property real gaitPhase
+                required property string travelPathType
+                required property bool closingTransition
+                readonly property real animationFacing:
+                    travelPathType === "follow" && locomotionMode !== "idle"
+                        ? travelHeading : facing
                 position: Qt.vector3d(fieldX - 80, 0,
                                       drillProject.fieldDepthSteps / 2 - fieldY)
-                eulerRotation.y: -facing
+                eulerRotation.y: -animationFacing
 
                 HumanPerformer3D {
                     geometrySource: sharedHumanGeometry
@@ -356,12 +361,13 @@ Item {
                     selected: performerNode.isSelected
                     marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
                     gaitPhase: performerNode.gaitPhase
-                    facingDegrees: performerNode.facing
+                    facingDegrees: performerNode.animationFacing
                     travelHeading: performerNode.travelHeading
                     transitionProgress: drillProject.playhead
                     countsInMove: drillProject.currentSetCounts
                     travelStepsPerCount: performerNode.travelStepsPerCount
                     locomotionMode: performerNode.locomotionMode
+                    closingTransition: performerNode.closingTransition
                     debugOverlay: drillProject.debug3D
                 }
             }

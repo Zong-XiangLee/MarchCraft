@@ -21,6 +21,7 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     weights = read_accessor(document, binary, attributes["WEIGHTS_0"])
 
     report = {}
+    violations = []
     core_cases = [(angle, 0.5715, samples) for angle in (0, 45, 90, 135, 180, -135, -90, -45)]
     stride_samples = min(samples, 16)
     stride_cases = [(angle, stride, stride_samples)
@@ -53,16 +54,21 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         lowest = min(ground_contacts)
         highest_contact = max(ground_contacts)
         height_variation = max(heights) - min(heights)
-        assert lowest >= -0.002, f"{label} penetrates turf by {-lowest:.4f} m"
-        assert highest_contact <= 0.002, f"{label} floats by {highest_contact:.4f} m"
-        assert height_variation <= 0.015, f"{label} upper body bobs {height_variation:.4f} m"
-        assert ankle_drift <= 0.001, f"{label} planted ankle skates {ankle_drift:.4f} m"
+        if lowest < -0.002:
+            violations.append(f"{label} penetrates turf by {-lowest:.4f} m")
+        if highest_contact > 0.002:
+            violations.append(f"{label} floats by {highest_contact:.4f} m")
+        if height_variation > 0.015:
+            violations.append(f"{label} upper body bobs {height_variation:.4f} m")
+        if ankle_drift > 0.001:
+            violations.append(f"{label} planted ankle skates {ankle_drift:.4f} m")
         report[label] = {
             "minimumGroundContactMeters": round(lowest, 6),
             "maximumGroundContactMeters": round(highest_contact, 6),
             "heightVariationMeters": round(height_variation, 6),
             "maximumPlantedAnkleDriftMeters": round(ankle_drift, 6),
         }
+    assert not violations, "\n".join(violations)
     return report
 
 

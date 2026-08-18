@@ -140,6 +140,8 @@ public:
         TravelStepsPerCountRole,
         LocomotionModeRole,
         GaitPhaseRole,
+        TravelPathTypeRole,
+        ClosingTransitionRole,
         TotalDistanceRole,
         WarningRole,
         VisibleRole,
