@@ -5,14 +5,18 @@
 var thighLength = 0.39
 var shinLength = 0.415
 var standingHipHeight = 0.805
-var sole0 = [-0.00133,-0.00103,-0.00038,-0.00006,0.00002,0.00002,0.00002,0.00001,-0.00001,-0.00036,-0.00068,-0.00096,-0.00118,-0.00103,0.00008,0.00133,-0.00150,-0.00118,-0.00046,-0.00009,0,0,-0.00001,-0.00001,-0.00003,-0.00038,-0.00071,-0.00099,-0.00120,-0.00101,0.00013,0.00142]
-var sole45 = [-0.00056,-0.00040,-0.00039,-0.00002,0.00007,0.00008,0.00006,0.00003,-0.00007,-0.00055,-0.00090,-0.00109,-0.00109,-0.00145,-0.00092,-0.00049,-0.00125,-0.00100,-0.00227,-0.00126,-0.00069,-0.00033,-0.00011,-0.00003,-0.00003,-0.00012,-0.00025,-0.00037,-0.00044,-0.00124,-0.00106,-0.00095]
-var sole90 = [0.00161,0.00149,0.00087,0.00060,0.00039,0.00024,0.00013,0.00005,-0.00019,-0.00030,-0.00029,-0.00016,-0.00005,-0.00002,0.00004,0.00060,0.00024,0.00097,-0.00034,-0.00020,-0.00006,-0.00004,-0.00005,-0.00005,-0.00011,-0.00036,-0.00070,-0.00112,-0.00162,-0.00217,-0.00275,0.00028]
-var sole135 = [-0.00189,-0.00168,-0.00091,-0.00050,-0.00030,-0.00025,-0.00018,-0.00007,0.00016,0.00019,0.00021,0.00023,0.00025,0.00030,0.00038,0.00040,-0.00013,-0.00001,-0.00010,0.00003,0.00009,0.00011,0.00013,0.00016,0.00019,0.00013,-0.00063,-0.00116,-0.00177,-0.00244,-0.00313,0.00024]
-var sole180 = [-0.00062,-0.00055,-0.00036,-0.00005,0.00024,0.00032,0.00040,0.00046,0.00048,0.00046,0.00041,0.00024,0.00015,0.00001,-0.00017,0.00043,-0.00054,-0.00048,-0.00030,0,0.00027,0.00036,0.00043,0.00049,0.00052,0.00051,0.00046,0.00028,0.00020,0.00007,-0.00010,0.00050]
-var sole225 = [-0.00017,-0.00004,-0.00012,0.00002,0.00008,0.00010,0.00012,0.00014,0.00016,-0.00001,-0.00086,-0.00145,-0.00210,-0.00276,-0.00341,0.00018,-0.00185,-0.00164,-0.00089,-0.00048,-0.00021,-0.00006,0.00005,0.00008,0.00019,0.00022,0.00024,0.00026,0.00029,0.00034,0.00043,0.00044]
-var sole270 = [0.00022,0.00100,-0.00029,-0.00016,-0.00005,-0.00005,-0.00006,-0.00004,-0.00019,-0.00045,-0.00081,-0.00125,-0.00175,-0.00231,-0.00287,0.00027,0.00158,0.00143,0.00079,0.00052,0.00032,0.00017,0.00008,0.00002,-0.00011,-0.00025,-0.00026,-0.00015,-0.00004,0,0.00006,0.00060]
-var sole315 = [-0.00115,-0.00092,-0.00245,-0.00150,-0.00094,-0.00056,-0.00028,-0.00011,-0.00003,-0.00003,-0.00008,-0.00014,-0.00018,-0.00104,-0.00091,-0.00089,-0.00065,-0.00050,-0.00047,-0.00008,0.00002,0.00004,0.00002,0,-0.00006,-0.00046,-0.00074,-0.00088,-0.00085,-0.00120,-0.00069,-0.00032]
+var sole0 = [-0.00118,-0.00103,-0.00039,-0.00007,0.00001,0.00001,0.00001,0.00000,-0.00000,-0.00026,-0.00049,-0.00070,-0.00085,-0.00069,0.00044,0.00168,-0.00130,-0.00118,-0.00047,-0.00010,-0.00001,-0.00001,-0.00001,-0.00002,-0.00003,-0.00028,-0.00052,-0.00072,-0.00087,-0.00067,0.00049,0.00177]
+var sole45 = [0.00148,0.00088,0.00077,0.00074,0.00060,0.00039,0.00023,-0.00098,-0.00257,-0.00401,-0.00532,-0.00649,-0.00754,-0.00857,-0.00874,-0.00493,-0.00143,-0.00207,-0.01241,-0.01001,-0.00764,-0.00621,-0.00485,-0.00344,-0.00215,-0.00096,0.00015,0.00034,0.00050,-0.00001,0.00099,0.00208]
+var sole90 = [-0.00069,-0.01232,-0.02541,-0.02238,-0.01962,-0.01699,-0.01435,-0.01166,-0.00889,-0.00604,-0.00306,-0.00003,0.00010,0.00080,0.00201,0.00319,0.00136,0.00014,-0.00043,-0.00040,-0.00028,-0.00030,-0.00287,-0.00556,-0.00822,-0.01101,-0.01397,-0.01716,-0.02062,-0.02519,-0.02148,-0.01254]
+var sole135 = [-0.00161,-0.00599,-0.01604,-0.01439,-0.01218,-0.00986,-0.00751,-0.00511,-0.00265,-0.00012,0.00009,0.00015,0.00021,0.00025,0.00028,0.00030,-0.00002,-0.00032,-0.00048,0.00023,0.00005,0.00000,-0.00003,-0.00004,-0.00218,-0.00466,-0.00727,-0.01003,-0.01294,-0.01603,-0.01928,-0.01443]
+var sole180 = [-0.00068,-0.00063,-0.00052,-0.00020,-0.00012,-0.00008,-0.00003,0.00001,0.00003,0.00004,0.00004,-0.00008,-0.00018,-0.00027,-0.00039,0.00001,-0.00061,-0.00057,-0.00047,-0.00016,-0.00008,-0.00004,0.00000,0.00004,0.00007,0.00009,0.00009,-0.00004,-0.00013,-0.00023,-0.00034,0.00006]
+var sole225 = [0.00007,-0.00027,-0.00047,0.00021,0.00003,-0.00002,-0.00005,-0.00007,-0.00247,-0.00510,-0.00784,-0.01069,-0.01363,-0.01667,-0.01981,-0.01485,-0.00172,-0.00580,-0.01562,-0.01376,-0.01150,-0.00921,-0.00694,-0.00466,-0.00235,0.00001,0.00011,0.00018,0.00023,0.00027,0.00031,0.00034]
+var sole270 = [0.00152,0.00024,-0.00038,-0.00040,-0.00030,-0.00031,-0.00314,-0.00612,-0.00911,-0.01216,-0.01534,-0.01864,-0.02209,-0.02656,-0.02299,-0.01343,-0.00087,-0.01185,-0.02441,-0.02104,-0.01815,-0.01553,-0.01302,-0.01054,-0.00805,-0.00550,-0.00282,-0.00004,0.00009,0.00080,0.00205,0.00328]
+var sole315 = [-0.00126,-0.00193,-0.01252,-0.01024,-0.00794,-0.00652,-0.00515,-0.00372,-0.00239,-0.00116,-0.00000,0.00037,0.00052,-0.00001,0.00097,0.00201,0.00128,0.00070,0.00066,0.00069,0.00056,0.00036,0.00020,-0.00077,-0.00232,-0.00374,-0.00503,-0.00621,-0.00727,-0.00832,-0.00852,-0.00477]
+var halfStrideCorrections = [[0.00043,0.00000,0.00000,0.00017,0.00057,0.00000,0.00000,0.00016],[-0.00080,-0.00019,0.00000,0.00204,-0.00074,0.00286,0.00000,-0.00055],[-0.00083,0.00612,0.00000,-0.00304,-0.00109,-0.00248,0.00000,0.00644],[0.00157,0.00498,0.00000,0.00000,-0.00038,-0.00008,0.00000,0.00516],[-0.00002,-0.00001,0.00000,0.00019,-0.00003,-0.00001,0.00000,0.00019],[-0.00043,-0.00008,0.00000,0.00539,0.00158,0.00475,0.00000,0.00000],[-0.00124,-0.00267,0.00000,0.00688,-0.00086,0.00566,0.00000,-0.00283],[-0.00070,0.00291,0.00000,-0.00068,-0.00058,-0.00018,0.00000,0.00199]]
+var extendedStrideCorrections = [[0.00040,0.00000,0.00000,-0.00008,0.00054,0.00000,0.00000,-0.00008],[0.00110,0.00016,0.00000,-0.00085,0.00064,-0.00131,0.00000,0.00010],[-0.00151,-0.00289,0.00000,-0.00004,0.00269,0.00009,0.00000,-0.00307],[-0.00458,-0.00206,0.00000,-0.00005,0.00050,0.00004,0.00000,-0.00215],[0.00002,0.00001,0.00000,0.00008,0.00002,0.00000,0.00000,0.00008],[0.00040,0.00003,0.00000,-0.00219,-0.00459,-0.00211,0.00000,-0.00005],[0.00273,0.00011,0.00000,-0.00327,-0.00157,-0.00267,0.00000,-0.00004],[0.00069,-0.00133,0.00000,0.00010,0.00134,0.00015,0.00000,-0.00082]]
+var halfBackDiagonalCorrections = [[0.00054,-0.00202,0.00000,0.00206,0.00002,0.00205,0.00000,-0.00179],[0.00115,-0.00331,-0.00025,0.00283,0.00004,0.00234,-0.00022,-0.00149],[0.00004,0.00253,-0.00023,-0.00048,0.00115,-0.00330,-0.00025,0.00264],[0.00002,0.00208,0.00000,-0.00074,0.00054,-0.00200,0.00000,0.00203]]
+var extendedBackDiagonalCorrections = [[-0.00065,-0.00518,0.00000,0.00012,-0.00666,-0.00041,0.00000,-0.00395],[0.00168,-0.00702,0.00014,0.00028,-0.00717,-0.00031,0.00014,-0.00656],[-0.00740,-0.00032,0.00015,-0.00623,0.00173,-0.00767,0.00011,0.00028],[-0.00690,-0.00042,0.00000,-0.00382,-0.00062,-0.00523,0.00000,0.00012]]
 var residual105 = [0.00166,0.00064,0.00017,-0.00017,0,0.00022,-0.00010,-0.00030,0.00294,0.00168,0.00044,0.00005,0,-0.00041,-0.00112,-0.00197]
 var residual120 = [0.00037,-0.00058,-0.00078,-0.00087,-0.00039,-0.00008,-0.00023,-0.00009,0.00363,0.00163,0.00034,-0.00022,-0.00036,-0.00108,-0.00187,-0.00266]
 var residual135 = [-0.00094,-0.00040,-0.00029,-0.00014,0,0.00001,0.00005,0.00020,0.00046,0.00006,0.00003,0.00001,0,-0.00010,-0.00028,-0.00054]
@@ -74,22 +78,25 @@ function footPitch(mode, cycle) {
     var t = stance ? cycle * 2 : (cycle - 0.5) * 2
     if (mode === "march.forward") {
         if (stance) {
-            if (t < 0.22) return mix(15, 0, smootherStep(t / 0.22))
-            if (t > 0.76) return mix(0, -10, smootherStep((t - 0.76) / 0.24))
+            // Establish the count with the heel, then place arch, ball and toe
+            // onto the turf. The support foot stays whole-footed until weight
+            // has transferred; forward marching never departs toe-only.
+            if (t < 0.24) return mix(20, 0, smootherStep(t / 0.24))
             return 0
         }
-        if (t < 0.28) return mix(-10, 1.5, smootherStep(t / 0.28))
-        if (t < 0.72) return mix(1.5, 7, smootherStep((t - 0.28) / 0.44))
-        return mix(7, 15, smootherStep((t - 0.72) / 0.28))
+        if (t < 0.24) return mix(0, 2, smootherStep(t / 0.24))
+        if (t < 0.70) return mix(2, 8, smootherStep((t - 0.24) / 0.46))
+        return mix(8, 20, smootherStep((t - 0.70) / 0.30))
     }
     if (mode === "march.backward") {
-        // Backward marching establishes the platform/ball first. It is not a
-        // reversed heel-to-toe forward step.
+        // Backward marching keeps the platform close to the turf.  The ankle
+        // stays slightly plantar-flexed instead of replaying heel-first
+        // forward articulation in reverse.
         if (stance)
-            return t < 0.28 ? mix(-7, -2, smootherStep(t / 0.28))
-                            : mix(-2, -6, smootherStep((t - 0.28) / 0.72))
-        return t < 0.55 ? mix(-6, 0.5, smootherStep(t / 0.55))
-                        : mix(0.5, -7, smootherStep((t - 0.55) / 0.45))
+            return t < 0.24 ? mix(-5, -2, smootherStep(t / 0.24))
+                            : mix(-2, -4, smootherStep((t - 0.24) / 0.76))
+        return t < 0.55 ? mix(-4, -1, smootherStep(t / 0.55))
+                        : mix(-1, -5, smootherStep((t - 0.55) / 0.45))
     }
     return 0
 }
@@ -97,10 +104,10 @@ function footPitch(mode, cycle) {
 function toePitch(mode, cycle) {
     var stance = cycle < 0.5
     var t = stance ? cycle * 2 : (cycle - 0.5) * 2
-    if (mode === "march.forward" && stance && t > 0.72)
-        return 10 * smootherStep((t - 0.72) / 0.28)
+    // Forward and slide technique articulates the whole foot at the ankle.
+    // Keeping this joint neutral makes heel/arch/ball/toe support together.
     if (mode === "march.backward" && stance)
-        return 3 + 3 * smootherStep(t)
+        return 2 + 2 * smootherStep(t)
     return 0
 }
 
@@ -120,7 +127,7 @@ function targetForLeg(mode, gaitPhase, leftSide, strideMeters, motionWeight) {
     var lift = 0
     if (!stance) {
         var arc = Math.pow(Math.sin(Math.PI * t), 1.35)
-        lift = arc * (mode === "march.backward" ? 0.020
+        lift = arc * (mode === "march.backward" ? 0.005
                       : mode === "march.forward" ? 0.026 : 0.018)
     }
     var pitch = footPitch(mode, cycle)
@@ -147,20 +154,24 @@ function targetForDirection(relativeDegrees, gaitPhase, leftSide, strideMeters, 
     var offset = strideMeters * (stance ? 0.5 - travel : travel - 0.5) * motionWeight
     var radians = normalizeDegrees(relativeDegrees) * Math.PI / 180
     var weights = directionalWeights(relativeDegrees)
-    var modes = ["march.forward", "march.backward", "slide.left", "slide.right"]
-    var amounts = [weights.forward, weights.backward, weights.left, weights.right]
-    var lift = 0
-    var pitch = 0
-    var toe = 0
-    for (var index = 0; index < modes.length; ++index) {
-        var technique = targetForLeg(modes[index], gaitPhase, leftSide,
-                                     strideMeters, motionWeight)
-        var techniqueToeExtent = modes[index] === "march.backward" ? 0.08 : 0.07
-        lift += (technique.lift
-                 - soleLiftForPitch(technique.footPitch, techniqueToeExtent)) * amounts[index]
-        pitch += technique.footPitch * amounts[index]
-        toe += technique.toePitch * amounts[index]
-    }
+    // Slides use the same heel-to-toe step as forward marching.  Direction is
+    // supplied by the target path while the pelvis turns the leg chain into
+    // that path.  Only genuinely backward travel blends to the low platform
+    // technique.
+    var forwardTechnique = targetForLeg("march.forward", gaitPhase, leftSide,
+                                        strideMeters, motionWeight)
+    var backwardTechnique = targetForLeg("march.backward", gaitPhase, leftSide,
+                                         strideMeters, motionWeight)
+    var backwardAmount = weights.backward
+    var lift = mix(forwardTechnique.lift
+                   - soleLiftForPitch(forwardTechnique.footPitch, 0.07),
+                   backwardTechnique.lift
+                   - soleLiftForPitch(backwardTechnique.footPitch, 0.08),
+                   backwardAmount)
+    var pitch = mix(forwardTechnique.footPitch, backwardTechnique.footPitch,
+                    backwardAmount)
+    var toe = mix(forwardTechnique.toePitch, backwardTechnique.toePitch,
+                  backwardAmount)
     lift += soleLiftForPitch(pitch, mix(0.07, 0.08, weights.backward))
             + directionalSoleOffset(relativeDegrees, gaitPhase, strideMeters) * motionWeight
     return { stance: stance, progress: t,
@@ -214,18 +225,18 @@ function bodyPose(mode, gaitPhase, strideMeters, motionWeight) {
             pelvisDrop += 0.00002 * clamp(strideMeters / 0.70, 0, 1) * motionWeight
     }
     var pelvisYaw = slideDirection !== 0
-            ? slideDirection * (8 + Math.sin(rhythm) * 1.5) * motionWeight
-            : Math.sin(rhythm) * 1.8 * motionWeight
-    var pelvisRoll = -Math.cos(rhythm) * 0.55 * motionWeight
+            ? slideDirection * (68 + Math.sin(rhythm) * 2.0) * motionWeight
+            : Math.sin(rhythm) * 1.4 * motionWeight
+    var pelvisRoll = -Math.cos(rhythm) * 0.38 * motionWeight
     return {
         pelvisX: Math.cos(rhythm) * 0.0065 * motionWeight,
         pelvisY: pelvisDrop,
         ikPelvisY: pelvisDrop,
         pelvisYaw: pelvisYaw,
         pelvisRoll: pelvisRoll,
-        spineYaw: -pelvisYaw * (slideDirection !== 0 ? 0.92 : 0.72),
-        spineRoll: -pelvisRoll * 0.88,
-        spinePitch: Math.sin(rhythm + 0.18) * 0.28 * motionWeight,
+        spineYaw: -pelvisYaw * (slideDirection !== 0 ? 0.985 : 0.78),
+        spineRoll: -pelvisRoll * 0.92,
+        spinePitch: Math.sin(rhythm + 0.18) * 0.22 * motionWeight,
         spineLift: -pelvisDrop * 0.95,
         headPitch: -Math.sin(rhythm + 0.18) * 0.16 * motionWeight,
         breath: Math.sin(rhythm * 0.5) * 0.0007 * motionWeight
@@ -253,6 +264,40 @@ function directionalSoleOffset(relativeDegrees, gaitPhase, strideMeters) {
                   samplePeriodicTable(diagonalTable, gaitPhase), lateralWeight * 2)
             : mix(samplePeriodicTable(diagonalTable, gaitPhase),
                   samplePeriodicTable(sideTable, gaitPhase), (lateralWeight - 0.5) * 2)
+    function correctionFrom(tables) {
+        var longitudinalCorrection = quadrant === 0 || quadrant === 3 ? tables[0] : tables[4]
+        var sideCorrection = quadrant < 2 ? tables[2] : tables[6]
+        var diagonalCorrection = tables[(quadrant * 2 + 1) % 8]
+        return lateralWeight <= 0.5
+                ? mix(samplePeriodicTable(longitudinalCorrection, gaitPhase),
+                      samplePeriodicTable(diagonalCorrection, gaitPhase), lateralWeight * 2)
+                : mix(samplePeriodicTable(diagonalCorrection, gaitPhase),
+                      samplePeriodicTable(sideCorrection, gaitPhase), (lateralWeight - 0.5) * 2)
+    }
+    function backDiagonalCorrection(tables) {
+        var zero = [0,0,0,0,0,0,0,0]
+        var first
+        var second
+        var amount
+        if (angle >= 90 && angle <= 135) {
+            if (angle <= 105) { first = zero; second = tables[0]; amount = (angle - 90) / 15 }
+            else if (angle <= 120) { first = tables[0]; second = tables[1]; amount = (angle - 105) / 15 }
+            else { first = tables[1]; second = zero; amount = (angle - 120) / 15 }
+        } else if (angle >= 225 && angle <= 270) {
+            if (angle <= 240) { first = zero; second = tables[2]; amount = (angle - 225) / 15 }
+            else if (angle <= 255) { first = tables[2]; second = tables[3]; amount = (angle - 240) / 15 }
+            else { first = tables[3]; second = zero; amount = (angle - 255) / 15 }
+        } else return 0
+        return mix(samplePeriodicTable(first, gaitPhase), samplePeriodicTable(second, gaitPhase), amount)
+    }
+    if (strideMeters < 0.5715)
+        baseOffset += (correctionFrom(halfStrideCorrections)
+                       + backDiagonalCorrection(halfBackDiagonalCorrections))
+                * clamp((0.5715 - strideMeters) / 0.28575, 0, 1)
+    else if (strideMeters > 0.5715)
+        baseOffset += (correctionFrom(extendedStrideCorrections)
+                       + backDiagonalCorrection(extendedBackDiagonalCorrections))
+                * clamp((strideMeters - 0.5715) / 0.1285, 0, 1)
     var extendedWeight = clamp((strideMeters - 0.5715) / 0.1285, 0, 1)
     if (extendedWeight <= 0 || angle < 90 || angle > 270)
         return baseOffset
@@ -278,15 +323,16 @@ function directionalBodyPose(relativeDegrees, gaitPhase, strideMeters, motionWei
     var rhythm = gaitPhase * Math.PI * 2
     var slideStrength = weights.right - weights.left
     var longitudinalWeight = weights.forward + weights.backward
-    var pelvisYaw = (slideStrength * (8 + Math.sin(rhythm) * 1.5)
-                     + longitudinalWeight * Math.sin(rhythm) * 1.8) * motionWeight
-    var pelvisRoll = -Math.cos(rhythm) * 0.55 * motionWeight
+    var pelvisYaw = (slideStrength * (68 + Math.sin(rhythm) * 2.0)
+                     + longitudinalWeight * Math.sin(rhythm) * 1.4) * motionWeight
+    var pelvisRoll = -Math.cos(rhythm) * 0.38 * motionWeight
     return { pelvisX: Math.cos(rhythm) * 0.0065 * motionWeight,
              pelvisY: pelvisDrop, ikPelvisY: pelvisDrop,
              pelvisYaw: pelvisYaw, pelvisRoll: pelvisRoll,
-             spineYaw: -pelvisYaw * (0.72 + 0.20 * Math.abs(slideStrength)),
-             spineRoll: -pelvisRoll * 0.88,
-             spinePitch: Math.sin(rhythm + 0.18) * 0.28 * motionWeight,
+             spineYaw: -pelvisYaw * mix(0.78, 0.985,
+                                         smootherStep(Math.abs(slideStrength) * 2)),
+             spineRoll: -pelvisRoll * 0.92,
+             spinePitch: Math.sin(rhythm + 0.18) * 0.22 * motionWeight,
              spineLift: -pelvisDrop * 0.95,
              headPitch: -Math.sin(rhythm + 0.18) * 0.16 * motionWeight,
              breath: Math.sin(rhythm * 0.5) * 0.0007 * motionWeight }
@@ -327,8 +373,11 @@ function legPose(mode, gaitPhase, leftSide, strideMeters, motionWeight, pelvisDr
     var target = targetForLeg(mode, gaitPhase, leftSide, strideMeters, motionWeight)
     if (mode === "march.forward" || mode === "march.backward") {
         var ik = sagittalIk(target.z, target.lift, pelvisDrop)
-        return { hipX: ik.hip, hipZ: 0, kneeX: ik.knee, kneeZ: 0,
-                 footX: target.footPitch - ik.hip - ik.knee, footZ: 0,
+        var minimumFlex = mode === "march.backward" ? -0.7 : -1.4
+        var knee = Math.min(ik.knee, minimumFlex)
+        var hip = ik.hip - (knee - ik.knee) * 0.5
+        return { hipX: hip, hipZ: 0, kneeX: knee, kneeZ: 0,
+                 footX: target.footPitch - hip - knee, footY: 0, footZ: 0,
                  toeX: target.toePitch, planted: target.stance }
     }
     if (mode === "slide.left" || mode === "slide.right") {
@@ -338,11 +387,50 @@ function legPose(mode, gaitPhase, leftSide, strideMeters, motionWeight, pelvisDr
         var bend = target.stance ? -2 : -7 * Math.sin(Math.PI * target.progress)
         return { hipX: -bend * 0.38, hipZ: roll,
                  kneeX: bend, kneeZ: -roll * 0.08,
-                 footX: -bend * 0.62, footZ: -roll * 0.92,
+                 footX: -bend * 0.62, footY: 0, footZ: -roll * 0.92,
                  toeX: 0, planted: target.stance }
     }
-    return { hipX: 0, hipZ: 0, kneeX: 0, kneeZ: 0,
-             footX: 0, footZ: 0, toeX: 0, planted: true }
+    return attentionLegPose(leftSide)
+}
+
+function attentionLegPose(leftSide) {
+    var inward = leftSide ? 5.5 : -5.5
+    return { hipX: 0, hipZ: inward, kneeX: -0.8, kneeZ: 0,
+             footX: 0.8, footY: leftSide ? 45 : -45, footZ: -inward,
+             toeX: 0, planted: true }
+}
+
+function applyClosingPose(pose, gaitPhase, leftSide, amount) {
+    var blend = smootherStep(amount)
+    if (blend <= 0) return pose
+    var attention = attentionLegPose(leftSide)
+    var recovering = legCycle(gaitPhase, leftSide) >= 0.5
+    // The closing foot reaches with a pointed toe, then returns to a flat,
+    // turned-out attention position. Only the recovery foot performs tendu.
+    var tendu = recovering ? -18 * Math.sin(Math.PI * clamp(amount, 0, 1)) : 0
+    return { hipX: mix(pose.hipX, attention.hipX, blend),
+             hipZ: mix(pose.hipZ, attention.hipZ, blend),
+             kneeX: mix(pose.kneeX, attention.kneeX, blend),
+             kneeZ: mix(pose.kneeZ, attention.kneeZ, blend),
+             footX: mix(pose.footX, attention.footX, blend) + tendu,
+             footY: mix(pose.footY || 0, attention.footY, blend),
+             footZ: mix(pose.footZ, attention.footZ, blend),
+             toeX: mix(pose.toeX, attention.toeX, blend),
+             planted: amount >= 0.98 ? true : pose.planted }
+}
+
+function applyClosingBodyPose(pose, amount) {
+    var blend = smootherStep(amount)
+    return { pelvisX: mix(pose.pelvisX, 0, blend),
+             pelvisY: mix(pose.pelvisY, 0, blend),
+             ikPelvisY: mix(pose.ikPelvisY, 0, blend),
+             pelvisYaw: mix(pose.pelvisYaw, 0, blend),
+             pelvisRoll: mix(pose.pelvisRoll, 0, blend),
+             spineYaw: mix(pose.spineYaw, 0, blend),
+             spineRoll: mix(pose.spineRoll, 0, blend),
+             spinePitch: mix(pose.spinePitch, 0, blend),
+             spineLift: mix(pose.spineLift, 0, blend),
+             headPitch: mix(pose.headPitch, 0, blend), breath: pose.breath }
 }
 
 function directionalLegPose(relativeDegrees, gaitPhase, leftSide, strideMeters,
@@ -368,11 +456,16 @@ function directionalLegPose(relativeDegrees, gaitPhase, leftSide, strideMeters,
     if (vertical * vertical + horizontalSquared > reach * reach)
         vertical = Math.sqrt(Math.max(0, reach * reach - horizontalSquared))
     var ik = spatialIkVector(localX, localZ, vertical)
-    return { hipX: ik.hipX, hipZ: ik.hipZ,
-             kneeX: ik.kneeX, kneeZ: 0,
-             footX: target.footPitch - ik.hipX - ik.kneeX,
+    var weights = directionalWeights(relativeDegrees)
+    var minimumFlex = mix(-1.4, -0.7, weights.backward)
+    var knee = Math.min(ik.kneeX, minimumFlex)
+    var hip = ik.hipX - (knee - ik.kneeX) * 0.5
+    return { hipX: hip, hipZ: ik.hipZ,
+             kneeX: knee, kneeZ: 0,
+             footX: target.footPitch - hip - knee,
+             footY: 0,
              footZ: -ik.hipZ - bodyPoseValue.pelvisRoll,
-             planted: target.stance }
+             toeX: target.toePitch, planted: target.stance }
 }
 
 function armPitch(legPoseValue) {

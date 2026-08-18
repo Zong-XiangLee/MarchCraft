@@ -24,6 +24,7 @@ Node {
     property int countsInMove: 1
     property real travelStepsPerCount: 0
     property string locomotionMode: "idle"
+    property bool closingTransition: false
     property bool debugOverlay: false
 
     readonly property real canonicalHeight: 1.75
@@ -38,20 +39,26 @@ Node {
     readonly property real relativeTravelDegrees: HumanGait.normalizeDegrees(travelHeading - facingDegrees)
     readonly property real elapsedCounts: transitionProgress * Math.max(1, countsInMove)
     readonly property real motionWeight: marching ? HumanGait.smootherStep(elapsedCounts / 0.35) : 0
-    readonly property var bodyPose: directionChange
+    readonly property real closingWeight: closingTransition && marching
+                                          ? HumanGait.clamp(elapsedCounts - Math.max(0, countsInMove - 1), 0, 1)
+                                          : 0
+    readonly property var rawBodyPose: directionChange
                                     ? HumanGait.bodyPose(locomotionMode, gaitPhase, strideMeters, motionWeight)
                                     : HumanGait.directionalBodyPose(relativeTravelDegrees, gaitPhase,
                                                                     strideMeters, motionWeight)
-    readonly property var leftLegPose: directionChange
+    readonly property var bodyPose: HumanGait.applyClosingBodyPose(rawBodyPose, closingWeight)
+    readonly property var rawLeftLegPose: directionChange
                                        ? HumanGait.legPose(locomotionMode, gaitPhase, true,
                                                            strideMeters, motionWeight, bodyPose.pelvisY)
                                        : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, true,
                                                                       strideMeters, motionWeight, bodyPose)
-    readonly property var rightLegPose: directionChange
+    readonly property var rawRightLegPose: directionChange
                                         ? HumanGait.legPose(locomotionMode, gaitPhase, false,
                                                             strideMeters, motionWeight, bodyPose.pelvisY)
                                         : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, false,
                                                                        strideMeters, motionWeight, bodyPose)
+    readonly property var leftLegPose: HumanGait.applyClosingPose(rawLeftLegPose, gaitPhase, true, closingWeight)
+    readonly property var rightLegPose: HumanGait.applyClosingPose(rawRightLegPose, gaitPhase, false, closingWeight)
     readonly property color skinColor: skinPaletteId === "skin.light" ? "#d9a37f"
                                        : skinPaletteId === "skin.deep" ? "#70412f" : "#a9674b"
 
@@ -187,7 +194,7 @@ Node {
                                 id: footLeft
                                 y: -0.415
                                 eulerRotation: Qt.vector3d(root.leftLegPose.footX,
-                                                          root.directionChange ? Math.max(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0,
+                                                          root.directionChange ? Math.max(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : root.leftLegPose.footY,
                                                           root.leftLegPose.footZ)
                                 Node {
                                     id: toeLeft
@@ -209,7 +216,7 @@ Node {
                                 id: footRight
                                 y: -0.415
                                 eulerRotation: Qt.vector3d(root.rightLegPose.footX,
-                                                          root.directionChange ? Math.min(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : 0,
+                                                          root.directionChange ? Math.min(0, Math.sin(root.phaseAngle)) * 35 * root.motionWeight : root.rightLegPose.footY,
                                                           root.rightLegPose.footZ)
                                 Node {
                                     id: toeRight

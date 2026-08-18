@@ -169,6 +169,8 @@ private slots:
             result.insert(QStringLiteral("heading"), project.data(index, DrillProject::TravelHeadingRole));
             result.insert(QStringLiteral("stride"), project.data(index, DrillProject::TravelStepsPerCountRole));
             result.insert(QStringLiteral("phase"), project.data(index, DrillProject::GaitPhaseRole));
+            result.insert(QStringLiteral("pathType"), project.data(index, DrillProject::TravelPathTypeRole));
+            result.insert(QStringLiteral("closes"), project.data(index, DrillProject::ClosingTransitionRole));
             return result;
         };
 
@@ -188,6 +190,37 @@ private slots:
                      .value(QStringLiteral("mode")).toString(), QStringLiteral("idle"));
         QCOMPARE(motionFor(0.0, 8.0, 0.0, QStringLiteral("delayed"), 0.50)
                      .value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
+
+        const auto follow = motionFor(0.0, 8.0, 90.0, QStringLiteral("follow"));
+        QCOMPARE(follow.value(QStringLiteral("pathType")).toString(), QStringLiteral("follow"));
+        QCOMPARE(follow.value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
+        QVERIFY(follow.value(QStringLiteral("closes")).toBool());
+    }
+
+    void closingTransitionOnlyAtPhraseEndOrHold()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 40.0, 40.0);
+        project.selectPerformer(0, false);
+        project.addSet(QStringLiteral("Set 2"), 8);
+        project.nudgeSelected(0.0, 8.0);
+        project.addSet(QStringLiteral("Set 3"), 8);
+        project.nudgeSelected(0.0, 8.0);
+        project.setPlaybackActive(true);
+
+        project.setCurrentSetIndex(1);
+        QVERIFY(!project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
+        project.setCurrentSetIndex(2);
+        QVERIFY(project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
+
+        project.setPlaybackActive(false);
+        project.setCurrentSetIndex(2);
+        project.nudgeSelected(0.0, -8.0);
+        project.setPlaybackActive(true);
+        project.setCurrentSetIndex(1);
+        QVERIFY(project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
     }
 
     void countedHoldIsIdleAndFacingChangeIsPlanted()
