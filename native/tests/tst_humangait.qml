@@ -54,8 +54,8 @@ TestCase {
                                                     standardStride, 1)
         var backwardContact = HumanGait.targetForLeg("march.backward", 0, false,
                                                      standardStride, 1)
-        closeTo(forwardContact.footPitch, 32, 0.001)
-        closeTo(backwardContact.footPitch, -8, 0.001)
+        closeTo(forwardContact.footPitch, -32, 0.001)
+        closeTo(backwardContact.footPitch, 8, 0.001)
     }
 
     function test_forwardAndSlideRollHeelThroughForefoot() {
@@ -72,18 +72,18 @@ TestCase {
         closeTo(HumanGait.targetForLeg("march.forward", 0.25, false,
                                        standardStride, 1).footPitch, 0, 0.001)
         verify(HumanGait.targetForLeg("march.forward", 0.499, false,
-                                      standardStride, 1).footPitch < -11)
+                                      standardStride, 1).footPitch > 11)
         closeTo(HumanGait.targetForLeg("march.forward", 0.75, false,
                                        standardStride, 1).footPitch, 0, 0.001)
         verify(HumanGait.targetForLeg("march.forward", 0.999, false,
-                                      standardStride, 1).footPitch > 31)
+                                      standardStride, 1).footPitch < -31)
     }
 
     function test_attentionAndTenduClose() {
         var leftAttention = HumanGait.attentionLegPose(true)
         var rightAttention = HumanGait.attentionLegPose(false)
-        closeTo(leftAttention.footY, 45, 0.001)
-        closeTo(rightAttention.footY, -45, 0.001)
+        closeTo(leftAttention.footY, -45, 0.001)
+        closeTo(rightAttention.footY, 45, 0.001)
         verify(leftAttention.planted && rightAttention.planted)
         verify(leftAttention.hipZ > 0 && rightAttention.hipZ < 0)
         closeTo(leftAttention.footZ, -leftAttention.hipZ, 0.001)
@@ -95,7 +95,7 @@ TestCase {
         var middle = HumanGait.applyClosingPose(moving, 0, true, 0.5, true)
         var closed = HumanGait.applyClosingPose(moving, 0, true, 1, true)
         verify(middle.footX < moving.footX - 10)
-        closeTo(closed.footY, 45, 0.001)
+        closeTo(closed.footY, -45, 0.001)
         closeTo(closed.toeX, 0, 0.001)
         verify(closed.planted)
     }
@@ -139,6 +139,20 @@ TestCase {
         var contactDelta = HumanGait.smootherStep(1) - HumanGait.smootherStep(0.98)
         verify(earlyDelta < middleDelta)
         verify(contactDelta < middleDelta)
+    }
+
+    function test_recoveryShoeIsParallelAndAdductedAtPassing() {
+        var body = HumanGait.bodyPose("march.forward", 0.75,
+                                      standardStride, 1)
+        var support = HumanGait.legPose("march.forward", 0.75, true,
+                                        standardStride, 1, body.pelvisY)
+        var passing = HumanGait.legPose("march.forward", 0.75, false,
+                                        standardStride, 1, body.pelvisY)
+        closeTo(support.footY, 0, 0.001)
+        closeTo(passing.footY, 0, 0.001)
+        compare(support.hipZ, 0)
+        verify(passing.hipZ < -15.5)
+        closeTo(passing.footZ, -passing.hipZ * 0.8, 0.001)
     }
 
     function test_forwardKneeFlexesBeforeCrossThenLengthens() {
@@ -215,7 +229,7 @@ TestCase {
         var backwardPassing = HumanGait.targetForLeg("march.backward", 0.15, true,
                                                      standardStride, 1)
         verify(backwardPassing.lift < forwardPassing.lift * 0.55)
-        verify(backwardPassing.footPitch < 0)
+        verify(backwardPassing.footPitch > 0)
 
         var body = HumanGait.bodyPose("march.backward", 0.25,
                                       standardStride, 1)
@@ -230,8 +244,10 @@ TestCase {
         for (var i = 0; i < phases.length; ++i) {
             var target = HumanGait.targetForLeg("march.backward", phases[i],
                                                 false, standardStride, 1)
-            verify(target.footPitch < -0.9)
-            verify(target.lift < 0.015)
+            verify(target.footPitch > 0.9)
+            // The ankle rises just enough to rotate the visible +Z toe edge
+            // onto the turf; the validator checks the shoe itself stays low.
+            verify(target.lift < 0.03)
         }
     }
 

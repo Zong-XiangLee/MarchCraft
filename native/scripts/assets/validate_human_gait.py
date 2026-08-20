@@ -25,18 +25,48 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     attention_matrices = pose_matrices("idle", 0.0, 0.5715)
     attention_vertices = skinned_vertices(positions, joints, weights, attention_matrices)
     attention_ground = min(vertex[1] for vertex in attention_vertices)
+
+    # The conditioned mesh's visible shoe points along local +Z even though
+    # the generated toe helper bone points toward -Z. Validate anatomy from the
+    # weighted shoe vertices so a reversed foot bone cannot produce a false pass.
+    def foot_zone_rows(bones, minimum_z, maximum_z):
+        return [row for row, (position, joint_row, weight_row) in enumerate(
+            zip(positions, joints, weights))
+            if position[1] < 0.25
+            and minimum_z <= position[2] < maximum_z
+            and sum(weight_row[influence] for influence in range(4)
+                    if int(joint_row[influence]) in bones) > 0.55]
+
+    def foot_rows(bones, toe):
+        return foot_zone_rows(bones, 0.10, math.inf) if toe \
+            else foot_zone_rows(bones, -math.inf, -0.04)
+
+    def center(vertices, rows):
+        return tuple(sum(vertices[row][axis] for row in rows) / len(rows)
+                     for axis in range(3))
+
+    def interval_gap(vertices, left_rows, right_rows):
+        left_min = min(vertices[row][0] for row in left_rows)
+        left_max = max(vertices[row][0] for row in left_rows)
+        right_min = min(vertices[row][0] for row in right_rows)
+        right_max = max(vertices[row][0] for row in right_rows)
+        return max(right_min - left_max, left_min - right_max, 0.0)
+
+    left_heel_rows = foot_rows((8, 9), False)
+    left_toe_rows = foot_rows((8, 9), True)
+    right_heel_rows = foot_rows((12, 13), False)
+    right_toe_rows = foot_rows((12, 13), True)
+    left_heel_center = center(attention_vertices, left_heel_rows)
+    left_toe_center = center(attention_vertices, left_toe_rows)
+    right_heel_center = center(attention_vertices, right_heel_rows)
+    right_toe_center = center(attention_vertices, right_toe_rows)
     pelvis = transform(attention_matrices[1], JOINTS[1].global_position)
     head = transform(attention_matrices[5], JOINTS[5].global_position)
-    left_ankle = transform(attention_matrices[8], JOINTS[8].global_position)
-    left_toe = transform(attention_matrices[9], JOINTS[9].global_position)
-    right_ankle = transform(attention_matrices[12], JOINTS[12].global_position)
-    right_toe = transform(attention_matrices[13], JOINTS[13].global_position)
     left_hand = transform(attention_matrices[17], JOINTS[17].global_position)
     right_hand = transform(attention_matrices[21], JOINTS[21].global_position)
     left_elbow = transform(attention_matrices[16], JOINTS[16].global_position)
     right_elbow = transform(attention_matrices[20], JOINTS[20].global_position)
-    heel_separation = math.dist((left_ankle[0], left_ankle[2]),
-                                (right_ankle[0], right_ankle[2]))
+    heel_separation = interval_gap(attention_vertices, left_heel_rows, right_heel_rows)
     hand_separation = math.dist(left_hand, right_hand)
     left_forearm = tuple(left_hand[axis] - left_elbow[axis] for axis in range(3))
     right_forearm = tuple(right_hand[axis] - right_elbow[axis] for axis in range(3))
@@ -45,11 +75,11 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         / (math.sqrt(sum(value * value for value in left_forearm))
            * math.sqrt(sum(value * value for value in right_forearm)))))))
 
-    def foot_heading(ankle, toe):
-        return math.degrees(math.atan2(toe[0] - ankle[0], -(toe[2] - ankle[2])))
+    def foot_heading(heel, toe):
+        return math.degrees(math.atan2(toe[0] - heel[0], toe[2] - heel[2]))
 
-    toe_angle = abs(foot_heading(left_ankle, left_toe)
-                    - foot_heading(right_ankle, right_toe))
+    toe_angle = abs(foot_heading(left_heel_center, left_toe_center)
+                    - foot_heading(right_heel_center, right_toe_center))
     head_forward = transform(attention_matrices[5],
                              (JOINTS[5].global_position[0],
                               JOINTS[5].global_position[1],
@@ -83,14 +113,6 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "forearmAngleDegrees": round(forearm_angle, 3),
     }
 
-    def foot_rows(bones, toe):
-        return [row for row, (position, joint_row, weight_row) in enumerate(
-            zip(positions, joints, weights))
-            if position[1] < 0.20
-            and (position[2] < -0.04 if toe else position[2] > 0.10)
-            and sum(weight_row[influence] for influence in range(4)
-                    if int(joint_row[influence]) in bones) > 0.55]
-
     contact_checks = []
     for phase, bones, label in ((0.0, (12, 13), "right"), (0.5, (8, 9), "left")):
         contact_vertices = skinned_vertices(
@@ -104,12 +126,43 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         contact_checks.append({"foot": label, "heelMeters": round(heel_height, 6),
                                "toeMeters": round(toe_height, 6)})
 
+    # Check the synchronized left step-off described by the technique: the
+    # arriving shoe rolls heel-to-toe while the old right shoe clears in the
+    # opposite order. Regions use the visible shoe's actual +Z toe anatomy.
+    zones = (("heel", -math.inf, -0.04), ("arch", -0.04, 0.06),
+             ("ball", 0.06, 0.13), ("toe", 0.13, math.inf))
+
+    def zone_heights(vertices, bones):
+        return {name: min(vertices[row][1]
+                          for row in foot_zone_rows(bones, minimum_z, maximum_z))
+                for name, minimum_z, maximum_z in zones}
+
+    left_contact_vertices = skinned_vertices(
+        positions, joints, weights, pose_matrices("march.forward", 0.50, 0.5715))
+    left_roll_vertices = skinned_vertices(
+        positions, joints, weights, pose_matrices("march.forward", 0.575, 0.5715))
+    left_flat_vertices = skinned_vertices(
+        positions, joints, weights, pose_matrices("march.forward", 0.65, 0.5715))
+    left_contact_zones = zone_heights(left_contact_vertices, (8, 9))
+    left_roll_zones = zone_heights(left_roll_vertices, (8, 9))
+    left_flat_zones = zone_heights(left_flat_vertices, (8, 9))
+    right_release_zones = zone_heights(left_roll_vertices, (12, 13))
+    if not (left_contact_zones["heel"] + 0.015 < left_contact_zones["arch"]
+            < left_contact_zones["ball"] < left_contact_zones["toe"]):
+        violations.append("left step-off does not begin on the visible heel")
+    if not (left_roll_zones["heel"] <= 0.005
+            and left_roll_zones["arch"] > left_roll_zones["heel"] + 0.006
+            and left_roll_zones["toe"] > left_roll_zones["arch"] + 0.025):
+        violations.append("left shoe does not progressively roll heel-to-toe")
+    if max(left_flat_zones.values()) - min(left_flat_zones.values()) > 0.006:
+        violations.append("left shoe does not finish its roll on a flat platform")
+    if min(right_release_zones.values()) < 0.008:
+        violations.append("right shoe remains on its toe after left-foot weight transfer")
+
     flat_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.15, 0.5715))
     release_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.49, 0.5715))
-    right_toe_rows = foot_rows((12, 13), True)
-    right_heel_rows = foot_rows((12, 13), False)
     flat_toe = min(flat_vertices[row][1] for row in right_toe_rows)
     flat_heel = min(flat_vertices[row][1] for row in right_heel_rows)
     release_toe = min(release_vertices[row][1] for row in right_toe_rows)
@@ -124,14 +177,44 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     backward_heel = min(backward_vertices[row][1] for row in right_heel_rows)
     if backward_heel - backward_toe < 0.015:
         violations.append("backward contact is not supported on the forefoot")
+
+    passing_vertices = skinned_vertices(
+        positions, joints, weights, pose_matrices("march.forward", 0.75, 0.5715))
+    passing_gap = interval_gap(passing_vertices,
+                               left_heel_rows + left_toe_rows,
+                               right_heel_rows + right_toe_rows)
+    passing_left_heel = center(passing_vertices, left_heel_rows)
+    passing_left_toe = center(passing_vertices, left_toe_rows)
+    passing_right_heel = center(passing_vertices, right_heel_rows)
+    passing_right_toe = center(passing_vertices, right_toe_rows)
+    passing_left_heading = foot_heading(passing_left_heel, passing_left_toe)
+    passing_right_heading = foot_heading(passing_right_heel, passing_right_toe)
+    passing_heading_delta = abs((passing_left_heading - passing_right_heading + 180) % 360 - 180)
+    passing_z_delta = abs((passing_left_heel[2] + passing_left_toe[2]) * 0.5
+                          - (passing_right_heel[2] + passing_right_toe[2]) * 0.5)
+    if passing_gap > 0.005:
+        violations.append(f"passing shoes are {passing_gap:.4f} m apart instead of touching")
+    if passing_heading_delta > 2.0:
+        violations.append(f"passing shoes differ by {passing_heading_delta:.2f} degrees")
+    if passing_z_delta > 0.03:
+        violations.append(f"passing shoes miss the crossing plane by {passing_z_delta:.4f} m")
     report["footTechnique"] = {
         "heelStrikeContacts": contact_checks,
+        "leftStepOffContactMeters": {key: round(value, 6)
+                                      for key, value in left_contact_zones.items()},
+        "leftStepOffRollMeters": {key: round(value, 6)
+                                   for key, value in left_roll_zones.items()},
+        "rightReleaseMeters": {key: round(value, 6)
+                                for key, value in right_release_zones.items()},
         "flatSupportToeMeters": round(flat_toe, 6),
         "flatSupportHeelMeters": round(flat_heel, 6),
         "releaseToeMeters": round(release_toe, 6),
         "releaseHeelMeters": round(release_heel, 6),
         "backwardToeMeters": round(backward_toe, 6),
         "backwardHeelMeters": round(backward_heel, 6),
+        "passingShoeGapMeters": round(passing_gap, 6),
+        "passingHeadingDeltaDegrees": round(passing_heading_delta, 3),
+        "passingLongitudinalDeltaMeters": round(passing_z_delta, 6),
     }
     core_cases = [(angle, 0.5715, samples) for angle in (0, 45, 90, 135, 180, -135, -90, -45)]
     stride_samples = min(samples, 16)
