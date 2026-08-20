@@ -172,22 +172,20 @@ Item {
                     ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(w, 1); ctx.stroke()
                     ctx.beginPath(); ctx.moveTo(0, h - 1); ctx.lineTo(w, h - 1); ctx.stroke()
 
-                    // Each five-yard span has four vertical one-yard inserts.  They sit on
-                    // the two hash rows, not on the sidelines.  The front insert extends
-                    // toward the front sideline from its hash; the back insert extends
-                    // toward the back sideline.  This puts the horizontal hashes on the
-                    // inward ends of the inserts, where the two hash rows are closest.
+                    // Each five-yard span has four perpendicular inserts. They connect
+                    // each hash row to its audience-side or far-side sideline, so the
+                    // hash and insert meet cleanly at a right angle in 2D.
                     const hashRows = [drillProject.frontHashSteps, drillProject.backHashSteps]
-                    const markLengthSteps = 24.0 / 22.5
-                    const insertLength = markLengthSteps * field.sy
-                    const hashLength = markLengthSteps * field.sx
+                    const frontInsertLength = drillProject.frontHashSteps * field.sy
+                    const backInsertLength = (drillProject.fieldDepthSteps - drillProject.backHashSteps) * field.sy
+                    const hashLength = (24.0 / 22.5) * field.sx
                     for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
                         const x = drillProject.fieldInsertStep(column) * field.sx
                         ctx.lineWidth = Math.max(1, 0.18 * field.sy)
                         const frontHashY = (drillProject.fieldDepthSteps - hashRows[0]) * field.sy
                         const backHashY = (drillProject.fieldDepthSteps - hashRows[1]) * field.sy
-                        ctx.beginPath(); ctx.moveTo(x, frontHashY); ctx.lineTo(x, frontHashY + insertLength); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(x, backHashY); ctx.lineTo(x, backHashY - insertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, frontHashY); ctx.lineTo(x, frontHashY + frontInsertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, backHashY); ctx.lineTo(x, backHashY - backInsertLength); ctx.stroke()
                     }
 
                     // One horizontal hash per five-yard line on each hash row.
@@ -352,6 +350,9 @@ Item {
             }
 
             Repeater {
+                // Props are intentionally out of the editor surface until the
+                // asset-import workflow is ready.
+                visible: false
                 model: drillProject.props
                 delegate: Rectangle {
                     required property var modelData

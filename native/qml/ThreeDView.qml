@@ -280,22 +280,24 @@ Item {
             }
         }
 
-        // Four vertical one-yard inserts in every five-yard interval on each hash row.
-        // They extend outward so the hashes are on their closest, inward ends.
+        // Four perpendicular inserts in every five-yard interval. They connect
+        // each hash row directly to its corresponding sideline.
         Repeater3D {
             model: root.insertColumnCount * 2
             delegate: Model {
                 required property int index
                 readonly property int column: index % root.insertColumnCount
                 readonly property bool backHash: index >= root.insertColumnCount
-                readonly property real markLength: 24.0 / 22.5
+                readonly property real insertLength: backHash
+                                                   ? drillProject.fieldDepthSteps - drillProject.backHashSteps
+                                                   : drillProject.frontHashSteps
                 readonly property real hashZ: drillProject.fieldDepthSteps / 2
                                                    - (backHash ? drillProject.backHashSteps
                                                                : drillProject.frontHashSteps)
                 source: "#Cube"
                  position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
-                                      hashZ + (backHash ? -markLength / 2 : markLength / 2))
-                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
+                                      hashZ + (backHash ? -insertLength / 2 : insertLength / 2))
+                scale: Qt.vector3d(0.0018, 0.0003, insertLength / 100)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
@@ -375,6 +377,9 @@ Item {
         } // drillWorld
 
         Repeater3D {
+            // Props are intentionally out of the editor surface until the
+            // asset-import workflow is ready.
+            visible: false
             model: drillProject.props
             delegate: Prop3D {
                 required property var modelData
@@ -384,6 +389,19 @@ Item {
                 definitionId: modelData.definitionId
                 primaryColor: drillProject.venueSecondaryColor
             }
+        }
+    }
+
+    // Keep camera zoom available through the viewport itself so the editor
+    // stays visually quiet while retaining the familiar wheel gesture.
+    MouseArea {
+        anchors.fill: view
+        acceptedButtons: Qt.NoButton
+        onWheel: function(event) {
+            root.cameraZoom = Math.max(0.55, Math.min(1.65,
+                root.cameraZoom * (event.angleDelta.y > 0 ? 0.92 : 1.08)))
+            root.applyZoom()
+            event.accepted = true
         }
     }
 
@@ -402,17 +420,13 @@ Item {
     Row {
         id: cameraControls
         z: 2
-        anchors.left: parent.left
+        anchors.right: parent.right
         anchors.top: parent.top
         anchors.margins: 14
         spacing: 6
         Button { text: "Press box"; onClicked: root.setCameraPreset("press") }
         Button { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
         Button { text: "Field"; onClicked: root.setCameraPreset("field") }
-        ToolButton { text: "−"; onClicked: { root.cameraZoom = Math.max(0.55, root.cameraZoom - 0.1); root.applyZoom() } }
-        Slider { id: zoomSlider; width: 125; from: 0.55; to: 1.65; value: root.cameraZoom; onMoved: { root.cameraZoom = value; root.applyZoom() } }
-        ToolButton { text: "+"; onClicked: { root.cameraZoom = Math.min(1.65, root.cameraZoom + 0.1); root.applyZoom() } }
-        Label { text: "Zoom"; color: "#a9bbb0"; verticalAlignment: Text.AlignVCenter }
     }
 
     Flow {
@@ -462,8 +476,6 @@ Item {
             Component.onCompleted: currentIndex = indexOfValue(drillProject.graphicsProfile)
             onActivated: drillProject.graphicsProfile = currentValue
         }
-        Button { text: "Add box prop"; onClicked: drillProject.addProp("prop.box", 80, drillProject.fieldDepthSteps / 2) }
-        Button { text: "Add panel"; onClicked: drillProject.addProp("prop.panel", 80, drillProject.fieldDepthSteps / 2) }
         CheckBox { text: "Ground debug"; checked: drillProject.debug3D; onToggled: drillProject.debug3D = checked }
         Label {
             visible: !assetCatalog.valid
