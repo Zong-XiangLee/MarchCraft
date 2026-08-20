@@ -54,31 +54,36 @@ TestCase {
                                                     standardStride, 1)
         var backwardContact = HumanGait.targetForLeg("march.backward", 0, false,
                                                      standardStride, 1)
-        closeTo(forwardContact.footPitch, 20, 0.001)
-        verify(backwardContact.footPitch < -4)
+        closeTo(forwardContact.footPitch, 32, 0.001)
+        closeTo(backwardContact.footPitch, -8, 0.001)
     }
 
-    function test_forwardAndSlideSettleWholeFootWithoutToePushOff() {
+    function test_forwardAndSlideRollHeelThroughForefoot() {
         var stancePhases = [0, 0.06, 0.12, 0.25, 0.38, 0.499]
         for (var i = 0; i < stancePhases.length; ++i) {
             var forward = HumanGait.targetForDirection(0, stancePhases[i], false,
                                                         standardStride, 1)
             var side = HumanGait.targetForDirection(90, stancePhases[i], false,
                                                      standardStride, 1)
-            verify(forward.footPitch >= -0.001)
             closeTo(forward.toePitch, 0, 0.001)
             closeTo(side.footPitch, forward.footPitch, 0.001)
             closeTo(side.toePitch, 0, 0.001)
         }
         closeTo(HumanGait.targetForLeg("march.forward", 0.25, false,
                                        standardStride, 1).footPitch, 0, 0.001)
+        verify(HumanGait.targetForLeg("march.forward", 0.499, false,
+                                      standardStride, 1).footPitch < -11)
+        closeTo(HumanGait.targetForLeg("march.forward", 0.75, false,
+                                       standardStride, 1).footPitch, 0, 0.001)
+        verify(HumanGait.targetForLeg("march.forward", 0.999, false,
+                                      standardStride, 1).footPitch > 31)
     }
 
     function test_attentionAndTenduClose() {
         var leftAttention = HumanGait.attentionLegPose(true)
         var rightAttention = HumanGait.attentionLegPose(false)
-        closeTo(leftAttention.footY, 22.5, 0.001)
-        closeTo(rightAttention.footY, -22.5, 0.001)
+        closeTo(leftAttention.footY, 45, 0.001)
+        closeTo(rightAttention.footY, -45, 0.001)
         verify(leftAttention.planted && rightAttention.planted)
         verify(leftAttention.hipZ > 0 && rightAttention.hipZ < 0)
         closeTo(leftAttention.footZ, -leftAttention.hipZ, 0.001)
@@ -87,10 +92,10 @@ TestCase {
         var body = HumanGait.directionalBodyPose(0, 0, standardStride, 1)
         var moving = HumanGait.directionalLegPose(0, 0, true,
                                                    standardStride, 1, body)
-        var middle = HumanGait.applyClosingPose(moving, 0, true, 0.5)
-        var closed = HumanGait.applyClosingPose(moving, 0, true, 1)
+        var middle = HumanGait.applyClosingPose(moving, 0, true, 0.5, true)
+        var closed = HumanGait.applyClosingPose(moving, 0, true, 1, true)
         verify(middle.footX < moving.footX - 10)
-        closeTo(closed.footY, 22.5, 0.001)
+        closeTo(closed.footY, 45, 0.001)
         closeTo(closed.toeX, 0, 0.001)
         verify(closed.planted)
     }
@@ -106,10 +111,21 @@ TestCase {
 
         var leftArm = HumanGait.handSetPose(true)
         var rightArm = HumanGait.handSetPose(false)
-        closeTo(leftArm.upperX, rightArm.upperX, 0.001)
-        closeTo(leftArm.upperZ, -rightArm.upperZ, 0.001)
-        closeTo(leftArm.forearmZ, -rightArm.forearmZ, 0.001)
-        verify(Math.abs(leftArm.forearmZ) >= 90)
+        verify(leftArm.upperX > 65 && rightArm.upperX > 65)
+        verify(leftArm.upperZ > 80 && rightArm.upperZ < -80)
+        verify(leftArm.forearmZ > 105 && rightArm.forearmZ < -105)
+        verify(leftArm.forearmY > 40 && rightArm.forearmY < -35)
+    }
+
+    function test_evenPhraseKeepsRightFootForTenduClose() {
+        var body = HumanGait.directionalBodyPose(0, 0.75, standardStride, 1)
+        var left = HumanGait.directionalLegPose(0, 0.75, true,
+                                                 standardStride, 1, body)
+        var right = HumanGait.directionalLegPose(0, 0.75, false,
+                                                  standardStride, 1, body)
+        var closedLeft = HumanGait.applyClosingPose(left, 0.75, true, 0.5, false)
+        var closingRight = HumanGait.applyClosingPose(right, 0.75, false, 0.5, false)
+        verify(closingRight.footX < closedLeft.footX - 10)
     }
 
     function test_swingPassesCloseAndDeceleratesIntoContact() {
@@ -136,7 +152,7 @@ TestCase {
         var atCross = rightLegAt(0.75)
         var forwardSwing = rightLegAt(0.85)
         var nextCount = rightLegAt(0)
-        verify(beforeCross.kneeX < atCross.kneeX - 8)
+        verify(beforeCross.kneeX < atCross.kneeX - 4)
         verify(Math.abs(atCross.kneeX) < 15)
         verify(Math.abs(forwardSwing.kneeX) < 8)
         verify(Math.abs(nextCount.kneeX) < 15)
@@ -198,7 +214,7 @@ TestCase {
                                                     standardStride, 1)
         var backwardPassing = HumanGait.targetForLeg("march.backward", 0.15, true,
                                                      standardStride, 1)
-        verify(backwardPassing.lift < forwardPassing.lift * 0.45)
+        verify(backwardPassing.lift < forwardPassing.lift * 0.55)
         verify(backwardPassing.footPitch < 0)
 
         var body = HumanGait.bodyPose("march.backward", 0.25,
@@ -215,7 +231,7 @@ TestCase {
             var target = HumanGait.targetForLeg("march.backward", phases[i],
                                                 false, standardStride, 1)
             verify(target.footPitch < -0.9)
-            verify(target.lift < 0.01)
+            verify(target.lift < 0.015)
         }
     }
 

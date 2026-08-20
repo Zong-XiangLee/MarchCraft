@@ -26,6 +26,7 @@ Node {
     property string locomotionMode: "idle"
     property bool closingTransition: false
     property bool debugOverlay: false
+    property bool castBodyShadow: true
 
     readonly property real canonicalHeight: 1.75
     readonly property real bodyScale: heightMeters / canonicalHeight / metersPerStep
@@ -57,8 +58,11 @@ Node {
                                                             strideMeters, motionWeight, bodyPose.pelvisY)
                                         : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, false,
                                                                        strideMeters, motionWeight, bodyPose)
-    readonly property var leftLegPose: HumanGait.applyClosingPose(rawLeftLegPose, gaitPhase, true, closingWeight)
-    readonly property var rightLegPose: HumanGait.applyClosingPose(rawRightLegPose, gaitPhase, false, closingWeight)
+    readonly property bool closingLeftSide: countsInMove % 2 !== 0
+    readonly property var leftLegPose: HumanGait.applyClosingPose(rawLeftLegPose, gaitPhase, true,
+                                                                   closingWeight, closingLeftSide)
+    readonly property var rightLegPose: HumanGait.applyClosingPose(rawRightLegPose, gaitPhase, false,
+                                                                    closingWeight, closingLeftSide)
     readonly property var leftArmPose: HumanGait.handSetPose(true)
     readonly property var rightArmPose: HumanGait.handSetPose(false)
     readonly property color skinColor: skinPaletteId === "skin.light" ? "#d9a37f"
@@ -286,7 +290,7 @@ Node {
             geometry: root.geometrySource
             skin: humanSkin
             materials: [skinMaterial]
-            castsShadows: true
+            castsShadows: root.castBodyShadow
             receivesShadows: true
         }
     }

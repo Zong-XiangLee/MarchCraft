@@ -675,12 +675,12 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
-    case TravelHeadingRole: return animationStateAt(index.row()).travelDirectionDegrees;
-    case TravelStepsPerCountRole: return animationStateAt(index.row()).travelStepsPerCount;
-    case LocomotionModeRole: return animationStateAt(index.row()).locomotion;
-    case GaitPhaseRole: return animationStateAt(index.row()).normalizedTime;
+    case TravelHeadingRole: return cachedAnimationStateAt(index.row()).travelDirectionDegrees;
+    case TravelStepsPerCountRole: return cachedAnimationStateAt(index.row()).travelStepsPerCount;
+    case LocomotionModeRole: return cachedAnimationStateAt(index.row()).locomotion;
+    case GaitPhaseRole: return cachedAnimationStateAt(index.row()).normalizedTime;
     case TravelPathTypeRole: return m_currentSet > 0 ? placement.pathType : QStringLiteral("direct");
-    case ClosingTransitionRole: return animationStateAt(index.row()).closesAtDestination;
+    case ClosingTransitionRole: return cachedAnimationStateAt(index.row()).closesAtDestination;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
@@ -4556,6 +4556,11 @@ void DrillProject::autosave()
 
 void DrillProject::emitAllDataChanged()
 {
+    ++m_animationStateRevision;
+    if (m_animationStateRevision == 0) {
+        m_animationStateRevision = 1;
+        m_animationStateCacheRevisions.fill(0);
+    }
     if (!m_performers.isEmpty())
         emit dataChanged(index(0), index(m_performers.size() - 1));
     emit statisticsChanged();
@@ -4673,6 +4678,19 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     else
         state.locomotion = QStringLiteral("slide.left");
     return state;
+}
+
+const AnimationState &DrillProject::cachedAnimationStateAt(int performerIndex) const
+{
+    if (m_animationStateCache.size() != m_performers.size()) {
+        m_animationStateCache.resize(m_performers.size());
+        m_animationStateCacheRevisions.fill(0, m_performers.size());
+    }
+    if (m_animationStateCacheRevisions.at(performerIndex) != m_animationStateRevision) {
+        m_animationStateCache[performerIndex] = animationStateAt(performerIndex);
+        m_animationStateCacheRevisions[performerIndex] = m_animationStateRevision;
+    }
+    return m_animationStateCache.at(performerIndex);
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const
