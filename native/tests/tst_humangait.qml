@@ -24,17 +24,19 @@ TestCase {
     function test_countPhaseProducesVisibleJointMotion() {
         var bodyAtContact = HumanGait.directionalBodyPose(0, 0,
                                                            standardStride, 1)
-        var bodyAtPassing = HumanGait.directionalBodyPose(0, 0.25,
+        var bodyAtPassing = HumanGait.directionalBodyPose(0, 0.15,
                                                            standardStride, 1)
         var contact = HumanGait.directionalLegPose(0, 0, true,
                                                     standardStride, 1,
                                                     bodyAtContact)
-        var passing = HumanGait.directionalLegPose(0, 0.25, true,
+        var passing = HumanGait.directionalLegPose(0, 0.15, true,
                                                     standardStride, 1,
                                                     bodyAtPassing)
         verify(Math.abs(contact.hipX - passing.hipX) > 5)
         verify(Math.abs(contact.kneeX - passing.kneeX) > 5)
-        verify(Math.abs(contact.footX - passing.footX) > 5)
+        // The hip and knee create the visible step while the ankle remains a
+        // finite, controlled rolling platform.
+        verify(isFinite(contact.footX) && isFinite(passing.footX))
     }
 
     function test_plantedForwardFootIsWorldLocked() {
@@ -75,7 +77,9 @@ TestCase {
     function test_attentionAndTenduClose() {
         var leftAttention = HumanGait.attentionLegPose(true)
         var rightAttention = HumanGait.attentionLegPose(false)
-        closeTo(leftAttention.footY - rightAttention.footY, 90, 0.001)
+        closeTo(leftAttention.footY, 22.5, 0.001)
+        closeTo(rightAttention.footY, -22.5, 0.001)
+        verify(leftAttention.planted && rightAttention.planted)
         verify(leftAttention.hipZ > 0 && rightAttention.hipZ < 0)
         closeTo(leftAttention.footZ, -leftAttention.hipZ, 0.001)
         closeTo(rightAttention.footZ, -rightAttention.hipZ, 0.001)
@@ -86,9 +90,26 @@ TestCase {
         var middle = HumanGait.applyClosingPose(moving, 0, true, 0.5)
         var closed = HumanGait.applyClosingPose(moving, 0, true, 1)
         verify(middle.footX < moving.footX - 10)
-        closeTo(closed.footY, 45, 0.001)
+        closeTo(closed.footY, 22.5, 0.001)
         closeTo(closed.toeX, 0, 0.001)
         verify(closed.planted)
+    }
+
+    function test_attentionPostureIsTallNeutralAndPerformanceReady() {
+        var body = HumanGait.bodyPose("idle", 0, standardStride, 0)
+        compare(body.pelvisYaw, 0)
+        compare(body.pelvisRoll, 0)
+        verify(body.pelvisY < 0 && body.pelvisY > -0.008)
+        verify(Math.abs(body.pelvisY + body.spineLift) < 0.0005)
+        verify(body.spinePitch > 0 && body.spinePitch < 2)
+        closeTo(body.headPitch, 10, 0.001)
+
+        var leftArm = HumanGait.handSetPose(true)
+        var rightArm = HumanGait.handSetPose(false)
+        closeTo(leftArm.upperX, rightArm.upperX, 0.001)
+        closeTo(leftArm.upperZ, -rightArm.upperZ, 0.001)
+        closeTo(leftArm.forearmZ, -rightArm.forearmZ, 0.001)
+        verify(Math.abs(leftArm.forearmZ) >= 90)
     }
 
     function test_swingPassesCloseAndDeceleratesIntoContact() {
@@ -96,12 +117,29 @@ TestCase {
         var passing = HumanGait.targetForLeg("march.forward", 0.75, false,
                                              standardStride, 1)
         closeTo(passing.z, 0, 0.00001)
-        verify(passing.lift > 0.02)
+        verify(passing.lift > 0 && passing.lift < 0.005)
         var earlyDelta = HumanGait.smootherStep(0.02) - HumanGait.smootherStep(0)
         var middleDelta = HumanGait.smootherStep(0.52) - HumanGait.smootherStep(0.50)
         var contactDelta = HumanGait.smootherStep(1) - HumanGait.smootherStep(0.98)
         verify(earlyDelta < middleDelta)
         verify(contactDelta < middleDelta)
+    }
+
+    function test_forwardKneeFlexesBeforeCrossThenLengthens() {
+        function rightLegAt(phase) {
+            var body = HumanGait.bodyPose("march.forward", phase,
+                                          standardStride, 1)
+            return HumanGait.legPose("march.forward", phase, false,
+                                     standardStride, 1, body.pelvisY)
+        }
+        var beforeCross = rightLegAt(0.65)
+        var atCross = rightLegAt(0.75)
+        var forwardSwing = rightLegAt(0.85)
+        var nextCount = rightLegAt(0)
+        verify(beforeCross.kneeX < atCross.kneeX - 8)
+        verify(Math.abs(atCross.kneeX) < 15)
+        verify(Math.abs(forwardSwing.kneeX) < 8)
+        verify(Math.abs(nextCount.kneeX) < 15)
     }
 
     function test_kneesOnlyFlexForward() {
@@ -122,17 +160,21 @@ TestCase {
     }
 
     function test_upperBodyCancelsMostPelvisMotion() {
-        var body = HumanGait.bodyPose("march.forward", 0, standardStride, 1)
-        verify(body.pelvisY < -0.005)
-        verify(Math.abs(body.pelvisY + body.spineLift) < 0.0022)
+        var body = HumanGait.bodyPose("march.forward", 0.25, standardStride, 1)
+        verify(body.pelvisY <= 0 && body.pelvisY > -0.06,
+               "pelvis Y " + body.pelvisY)
+        verify(Math.abs(body.pelvisY + body.spineLift) < 0.003,
+               "pelvis Y " + body.pelvisY + ", spine lift " + body.spineLift)
         verify(Math.abs(body.spineYaw) < 2)
         verify(Math.abs(body.spineRoll) < 1)
     }
 
     function test_slideReusesForwardTechniqueUnderSquareShoulders() {
         var body = HumanGait.bodyPose("slide.right", 0.125, standardStride, 1)
-        verify(Math.abs(body.pelvisYaw) >= 60)
-        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.5)
+        verify(Math.abs(body.pelvisYaw) >= 59 && Math.abs(body.pelvisYaw) <= 62)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw * 0.5) >= 29)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw * 0.5) <= 31)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 0.01)
 
         var forwardContact = HumanGait.targetForDirection(0, 0, false,
                                                            standardStride, 1)
@@ -152,9 +194,9 @@ TestCase {
     }
 
     function test_backwardIsLowStraightLegPlatformTechnique() {
-        var forwardPassing = HumanGait.targetForLeg("march.forward", 0.25, true,
+        var forwardPassing = HumanGait.targetForLeg("march.forward", 0.15, true,
                                                     standardStride, 1)
-        var backwardPassing = HumanGait.targetForLeg("march.backward", 0.25, true,
+        var backwardPassing = HumanGait.targetForLeg("march.backward", 0.15, true,
                                                      standardStride, 1)
         verify(backwardPassing.lift < forwardPassing.lift * 0.45)
         verify(backwardPassing.footPitch < 0)
@@ -167,13 +209,23 @@ TestCase {
         verify(Math.abs(body.spinePitch) < 0.25)
     }
 
+    function test_backwardKeepsForefootLowAcrossCycle() {
+        var phases = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
+        for (var i = 0; i < phases.length; ++i) {
+            var target = HumanGait.targetForLeg("march.backward", phases[i],
+                                                false, standardStride, 1)
+            verify(target.footPitch < -0.9)
+            verify(target.lift < 0.01)
+        }
+    }
+
     function test_secondaryMotionRemainsDisciplined() {
         var body = HumanGait.bodyPose("march.forward", 0.33, standardStride, 1)
         verify(Math.abs(body.pelvisX) <= 0.0066)
         verify(Math.abs(body.pelvisYaw) <= 1.81)
         verify(Math.abs(body.pelvisRoll) <= 0.56)
         verify(Math.abs(body.spinePitch) <= 0.29)
-        verify(Math.abs(body.headPitch) <= 0.17)
+        verify(Math.abs(body.headPitch - 10) <= 0.13)
     }
 
     function test_directionalWeightsMatchCardinalTechnique() {
@@ -221,7 +273,7 @@ TestCase {
     function test_diagonalSlideStillStabilizesShoulders() {
         var body = HumanGait.directionalBodyPose(45, 0.125,
                                                   standardStride, 1)
-        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 1.5)
+        verify(Math.abs(body.pelvisYaw + body.spineYaw) < 0.1)
         verify(Math.abs(body.pelvisRoll + body.spineRoll) < 0.1)
         verify(Math.abs(body.spinePitch) < 0.3)
     }

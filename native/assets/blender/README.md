@@ -59,8 +59,12 @@ and saves an editable `.blend` for manual weight and pose refinement.
 
 The runtime gait is count-driven by `qml/HumanGait.js`. It uses planted-foot
 targets and a two-bone leg solve for forward and backward technique, while
-slides preserve the authored chest facing. After changing the rig, weights, or
-gait constants, run both validators and regenerate the contact sheet:
+slides distribute facing progressively through the pelvis, chest, and shoulders.
+The neutral runtime pose is marching attention: grounded closed heels, 45-degree
+total toe-out, a vertically stacked pelvis and torso, head approximately 10
+degrees above center, and a centered hand set approximated with the available
+non-fingered hand bones. After changing the rig, weights, or gait constants, run
+both validators and regenerate the contact sheet:
 
 ```powershell
 python native/scripts/assets/validate_human_performer.py native/assets/performer/human_performer.glb

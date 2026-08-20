@@ -18,6 +18,15 @@ def main() -> None:
     positions = read_accessor(document, binary, attributes["POSITION"])
     joints = read_accessor(document, binary, attributes["JOINTS_0"])
     weights = read_accessor(document, binary, attributes["WEIGHTS_0"])
+    # Ground contact can only come from the lower-leg and foot portion of the
+    # source mesh. Restrict calibration to that subset; the validator still
+    # deforms and checks the complete performer mesh afterward.
+    ground_rows = [(position, joint_row, weight_row)
+                   for position, joint_row, weight_row in zip(positions, joints, weights)
+                   if position[1] < 0.30]
+    positions = [row[0] for row in ground_rows]
+    joints = [row[1] for row in ground_rows]
+    weights = [row[2] for row in ground_rows]
 
     angles = (0, 45, 90, 135, 180, 225, 270, 315)
     sole_tables = [[0.0] * 32 for _ in angles]
@@ -36,12 +45,12 @@ def main() -> None:
     print("]")
 
     def calibrate(stride: float, attribute: str, target_angles=angles):
-        corrections = [[0.0] * 8 for _ in target_angles]
+        corrections = [[0.0] * 32 for _ in target_angles]
         for _ in range(3):
             setattr(preview, attribute, tuple(tuple(table) for table in corrections))
             for table_index, angle in enumerate(target_angles):
-                for sample in range(8):
-                    phase = sample / 8.0
+                for sample in range(32):
+                    phase = sample / 32.0
                     vertices = preview.skinned_vertices(
                         positions, joints, weights,
                         preview.pose_matrices(f"direction.{angle}", phase, stride))

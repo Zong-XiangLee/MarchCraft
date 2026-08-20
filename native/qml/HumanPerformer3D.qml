@@ -59,6 +59,8 @@ Node {
                                                                        strideMeters, motionWeight, bodyPose)
     readonly property var leftLegPose: HumanGait.applyClosingPose(rawLeftLegPose, gaitPhase, true, closingWeight)
     readonly property var rightLegPose: HumanGait.applyClosingPose(rawRightLegPose, gaitPhase, false, closingWeight)
+    readonly property var leftArmPose: HumanGait.handSetPose(true)
+    readonly property var rightArmPose: HumanGait.handSetPose(false)
     readonly property color skinColor: skinPaletteId === "skin.light" ? "#d9a37f"
                                        : skinPaletteId === "skin.deep" ? "#70412f" : "#a9674b"
 
@@ -119,13 +121,13 @@ Node {
                         id: spineLower
                         y: 0.17 + root.bodyPose.spineLift + root.bodyPose.breath
                         eulerRotation: Qt.vector3d(root.bodyPose.spinePitch,
-                                                   root.bodyPose.spineYaw * 0.42,
+                                                   root.bodyPose.spineYaw * 0.50,
                                                    root.bodyPose.spineRoll * 0.45)
                         Node {
                             id: spineUpper
                             y: 0.23
                             eulerRotation: Qt.vector3d(-root.bodyPose.spinePitch * 0.62,
-                                                       root.bodyPose.spineYaw * 0.58,
+                                                       root.bodyPose.spineYaw * 0.50,
                                                        root.bodyPose.spineRoll * 0.55)
                             Node {
                                 id: neck
@@ -141,18 +143,25 @@ Node {
                             Node {
                                 id: clavicleLeft
                                 x: -0.15; y: 0.09
+                                eulerRotation.x: -4
                                 Node {
                                     id: upperArmLeft
                                     x: -0.11; y: -0.03
-                                    eulerRotation: Qt.vector3d(HumanGait.armPitch(root.leftLegPose), 0, 50)
+                                    eulerRotation: Qt.vector3d(root.leftArmPose.upperX,
+                                                               root.leftArmPose.upperY,
+                                                               root.leftArmPose.upperZ)
                                     Node {
                                         id: forearmLeft
                                         x: -0.24; y: -0.19
-                                        eulerRotation.x: root.forwardMotion || root.backwardMotion
-                                                                 ? -5 + HumanGait.armPitch(root.leftLegPose) * 0.28 : 0
+                                        eulerRotation: Qt.vector3d(root.leftArmPose.forearmX,
+                                                                   root.leftArmPose.forearmY,
+                                                                   root.leftArmPose.forearmZ)
                                         Node {
                                             id: handLeft
                                             x: -0.23; y: -0.14
+                                            eulerRotation: Qt.vector3d(root.leftArmPose.handX,
+                                                                       root.leftArmPose.handY,
+                                                                       root.leftArmPose.handZ)
                                             Node { id: handLeftSocket }
                                         }
                                     }
@@ -161,18 +170,25 @@ Node {
                             Node {
                                 id: clavicleRight
                                 x: 0.15; y: 0.09
+                                eulerRotation.x: -4
                                 Node {
                                     id: upperArmRight
                                     x: 0.11; y: -0.03
-                                    eulerRotation: Qt.vector3d(HumanGait.armPitch(root.rightLegPose), 0, -50)
+                                    eulerRotation: Qt.vector3d(root.rightArmPose.upperX,
+                                                               root.rightArmPose.upperY,
+                                                               root.rightArmPose.upperZ)
                                     Node {
                                         id: forearmRight
                                         x: 0.24; y: -0.19
-                                        eulerRotation.x: root.forwardMotion || root.backwardMotion
-                                                                 ? -5 + HumanGait.armPitch(root.rightLegPose) * 0.28 : 0
+                                        eulerRotation: Qt.vector3d(root.rightArmPose.forearmX,
+                                                                   root.rightArmPose.forearmY,
+                                                                   root.rightArmPose.forearmZ)
                                         Node {
                                             id: handRight
                                             x: 0.23; y: -0.14
+                                            eulerRotation: Qt.vector3d(root.rightArmPose.handX,
+                                                                       root.rightArmPose.handY,
+                                                                       root.rightArmPose.handZ)
                                             Node { id: handRightSocket }
                                         }
                                     }
