@@ -140,12 +140,22 @@ Item {
                                   (drillProject.canvasMaxY - drillProject.fieldDepthSteps) * field.sy)
                     const w = drillProject.fieldWidthSteps * field.sx
                     const h = drillProject.fieldDepthSteps * field.sy
+                    const endZoneSteps = 16
                     const turf = ctx.createLinearGradient(0, 0, 0, h)
                     turf.addColorStop(0, "#123b2a")
                     turf.addColorStop(0.5, "#1b5037")
                     turf.addColorStop(1, "#123b2a")
                     ctx.fillStyle = turf
                     ctx.fillRect(0, 0, w, h)
+
+                    // Regulation ten-yard end zones sit outside the two goal lines.
+                    ctx.fillStyle = drillProject.fieldPreset === "indoor" ? "#8a5d38" : "#103522"
+                    ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
+                    ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
+                    ctx.globalAlpha = 0.34
+                    ctx.fillStyle = "#79a98a"
+                    ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
+                    ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
 
                     // Subtle five-yard mowing bands add depth without changing the field geometry.
                     ctx.globalAlpha = 0.13
@@ -172,20 +182,22 @@ Item {
                     ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(w, 1); ctx.stroke()
                     ctx.beginPath(); ctx.moveTo(0, h - 1); ctx.lineTo(w, h - 1); ctx.stroke()
 
-                    // Each five-yard span has four perpendicular inserts. They connect
-                    // each hash row to its audience-side or far-side sideline, so the
-                    // hash and insert meet cleanly at a right angle in 2D.
+                    // Four short one-yard inserts per five-yard span on each hash row.
                     const hashRows = [drillProject.frontHashSteps, drillProject.backHashSteps]
-                    const frontInsertLength = drillProject.frontHashSteps * field.sy
-                    const backInsertLength = (drillProject.fieldDepthSteps - drillProject.backHashSteps) * field.sy
-                    const hashLength = (24.0 / 22.5) * field.sx
+                    const markLengthSteps = 24.0 / 22.5
+                    const insertLength = markLengthSteps * field.sy
+                    const hashLength = markLengthSteps * field.sx
                     for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
                         const x = drillProject.fieldInsertStep(column) * field.sx
                         ctx.lineWidth = Math.max(1, 0.18 * field.sy)
                         const frontHashY = (drillProject.fieldDepthSteps - hashRows[0]) * field.sy
                         const backHashY = (drillProject.fieldDepthSteps - hashRows[1]) * field.sy
-                        ctx.beginPath(); ctx.moveTo(x, frontHashY); ctx.lineTo(x, frontHashY + frontInsertLength); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(x, backHashY); ctx.lineTo(x, backHashY - backInsertLength); ctx.stroke()
+                        // Independent short marks at the back and front sidelines.
+                        ctx.beginPath(); ctx.moveTo(x, 1); ctx.lineTo(x, 1 + insertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, h - 1); ctx.lineTo(x, h - 1 - insertLength); ctx.stroke()
+                        // Independent short marks at the two hashes.
+                        ctx.beginPath(); ctx.moveTo(x, frontHashY); ctx.lineTo(x, frontHashY + insertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, backHashY); ctx.lineTo(x, backHashY - insertLength); ctx.stroke()
                     }
 
                     // One horizontal hash per five-yard line on each hash row.
@@ -197,6 +209,20 @@ Item {
                             ctx.beginPath(); ctx.moveTo(x - hashLength / 2, hashY)
                             ctx.lineTo(x + hashLength / 2, hashY); ctx.stroke()
                         }
+                    }
+
+                    // Midfield X references: fourteen steps outward from each hash.
+                    const xCenter = drillProject.fieldWidthSteps / 2 * field.sx
+                    const xHalfSize = 0.7 * Math.min(field.sx, field.sy)
+                    const xRows = [drillProject.frontHashSteps - 14,
+                                   drillProject.backHashSteps + 14]
+                    ctx.lineWidth = Math.max(1.4, 0.2 * field.sx)
+                    for (let row = 0; row < xRows.length; ++row) {
+                        const y = (drillProject.fieldDepthSteps - xRows[row]) * field.sy
+                        ctx.beginPath(); ctx.moveTo(xCenter - xHalfSize, y - xHalfSize)
+                        ctx.lineTo(xCenter + xHalfSize, y + xHalfSize); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(xCenter + xHalfSize, y - xHalfSize)
+                        ctx.lineTo(xCenter - xHalfSize, y + xHalfSize); ctx.stroke()
                     }
 
                     // Six-foot yard numbers centered eight yards from each sideline.
@@ -227,6 +253,9 @@ Item {
                     ctx.strokeStyle = "#f2f7f4"
                     ctx.lineWidth = Math.max(2, 0.3 * field.sy)
                     ctx.strokeRect(1, 1, w - 2, h - 2)
+                    ctx.strokeRect(-endZoneSteps * field.sx + 1, 1,
+                                   endZoneSteps * field.sx - 1, h - 2)
+                    ctx.strokeRect(w, 1, endZoneSteps * field.sx - 1, h - 2)
                 }
                 Connections {
                     target: drillProject

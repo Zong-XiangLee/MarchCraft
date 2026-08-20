@@ -95,7 +95,7 @@ Item {
             venueId: drillProject.venuePreset
             primaryColor: drillProject.venuePrimaryColor
             secondaryColor: drillProject.venueSecondaryColor
-            fieldWidthMeters: drillProject.fieldWidthSteps * drillProject.metersPerStep
+            fieldWidthMeters: (drillProject.fieldWidthSteps + 32) * drillProject.metersPerStep
             fieldDepthMeters: drillProject.fieldDepthSteps * drillProject.metersPerStep
             crowdDensity: drillProject.crowdDensity
             scoreboardText: drillProject.scoreboardText
@@ -113,7 +113,7 @@ Item {
             // Keep the apron decisively below the turf.  The previous coplanar
             // placement caused depth fighting to flash black through the field.
             position: Qt.vector3d(0, -0.62, 0)
-            scale: Qt.vector3d(1.76, 0.010, (drillProject.fieldDepthSteps + 16) / 100)
+            scale: Qt.vector3d(2.08, 0.010, (drillProject.fieldDepthSteps + 16) / 100)
             materials: PrincipledMaterial { baseColor: "#17201c"; roughness: 1.0 }
         }
 
@@ -124,6 +124,44 @@ Item {
             materials: PrincipledMaterial {
                 baseColor: drillProject.fieldPreset === "indoor" ? "#a97543" : drillProject.turfColor
                 roughness: drillProject.fieldPreset === "indoor" ? 0.68 : 0.96
+            }
+        }
+
+        // Ten-yard end zones beyond the two goal lines.
+        Repeater3D {
+            model: 2
+            delegate: Model {
+                required property int index
+                source: "#Cube"
+                position: Qt.vector3d(index === 0 ? -88 : 88, -0.49, 0)
+                scale: Qt.vector3d(0.16, 0.010, drillProject.fieldDepthSteps / 100)
+                materials: PrincipledMaterial {
+                    baseColor: drillProject.fieldPreset === "indoor" ? "#8a5d38" : "#103522"
+                    roughness: 0.96
+                }
+            }
+        }
+
+        Repeater3D {
+            model: 2
+            delegate: Model {
+                required property int index
+                source: "#Cube"
+                position: Qt.vector3d(index === 0 ? -96 : 96, 0.012, 0)
+                scale: Qt.vector3d(0.0018, 0.0003, drillProject.fieldDepthSteps / 100)
+                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
+            }
+        }
+        Repeater3D {
+            model: 4
+            delegate: Model {
+                required property int index
+                source: "#Cube"
+                position: Qt.vector3d(index < 2 ? -88 : 88, 0.012,
+                                      index % 2 === 0 ? drillProject.fieldDepthSteps / 2
+                                                      : -drillProject.fieldDepthSteps / 2)
+                scale: Qt.vector3d(0.16, 0.0003, 0.0018)
+                materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
 
@@ -280,24 +318,22 @@ Item {
             }
         }
 
-        // Four perpendicular inserts in every five-yard interval. They connect
-        // each hash row directly to its corresponding sideline.
+        // Four short one-yard inserts in every five-yard interval on each hash row.
+        // They extend outward, matching the original field geometry.
         Repeater3D {
             model: root.insertColumnCount * 2
             delegate: Model {
                 required property int index
                 readonly property int column: index % root.insertColumnCount
                 readonly property bool backHash: index >= root.insertColumnCount
-                readonly property real insertLength: backHash
-                                                   ? drillProject.fieldDepthSteps - drillProject.backHashSteps
-                                                   : drillProject.frontHashSteps
+                readonly property real markLength: 24.0 / 22.5
                 readonly property real hashZ: drillProject.fieldDepthSteps / 2
                                                    - (backHash ? drillProject.backHashSteps
                                                                : drillProject.frontHashSteps)
                 source: "#Cube"
                  position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
-                                      hashZ + (backHash ? -insertLength / 2 : insertLength / 2))
-                scale: Qt.vector3d(0.0018, 0.0003, insertLength / 100)
+                                      hashZ + (backHash ? -markLength / 2 : markLength / 2))
+                scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
@@ -318,6 +354,29 @@ Item {
                                                   : drillProject.frontHashSteps))
                 scale: Qt.vector3d(markLength / 100, 0.0003, 0.0018)
                 materials: PrincipledMaterial { baseColor: "#eef5f0"; roughness: 0.88 }
+            }
+        }
+
+        // Midfield X references, fourteen steps outward from the two hashes.
+        Repeater3D {
+            model: 2
+            delegate: Node {
+                required property int index
+                readonly property real fieldY: index === 0
+                                                   ? drillProject.frontHashSteps - 14
+                                                   : drillProject.backHashSteps + 14
+                position: Qt.vector3d(0, 0.014,
+                                      drillProject.fieldDepthSteps / 2 - fieldY)
+                Repeater3D {
+                    model: 2
+                    delegate: Model {
+                        required property int index
+                        source: "#Cube"
+                        eulerRotation.y: index === 0 ? 45 : -45
+                        scale: Qt.vector3d(0.018, 0.0003, 0.0018)
+                        materials: PrincipledMaterial { baseColor: "#eef5f0"; roughness: 0.88 }
+                    }
+                }
             }
         }
 

@@ -990,15 +990,19 @@ ApplicationWindow {
         z: 20
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.topMargin: 10
-        width: 34
-        height: 76
-        text: "›\nROSTER"
-        font.pixelSize: 11
+        anchors.topMargin: 12
+        width: 24
+        height: 42
+        text: "›"
+        font.pixelSize: 17
         ToolTip.text: "Show roster (Ctrl+Shift+R)"
         ToolTip.visible: hovered
         onClicked: workspaceSettings.rosterCollapsed = false
-        background: Rectangle { color: hovered ? "#1b8d70" : "#13252a"; radius: 8; border.color: "#2f6d5d" }
+        background: Rectangle {
+            color: hovered ? "#24343d" : "#121a20"
+            radius: 0
+            border.color: hovered ? "#526772" : "#2a3941"
+        }
     }
 
     Menu {
@@ -1040,15 +1044,22 @@ ApplicationWindow {
     Dialog {
         id: projectSetupDialog
         title: "Project setup"
-        modal: true; anchors.centerIn: Overlay.overlay; width: 520
-        standardButtons: Dialog.Cancel
+        modal: true; anchors.centerIn: Overlay.overlay; width: 500; height: 330
+        standardButtons: Dialog.NoButton
         onOpened: {
             projectNameField.text = drillProject.showName
             projectFieldPreset.currentIndex = projectFieldPreset.indexOfValue(drillProject.fieldPreset)
             projectLightingPreset.currentIndex = projectLightingPreset.indexOfValue(drillProject.lightingPreset)
         }
-        contentItem: ColumnLayout {
-            Label { text: "Set up the rehearsal environment before you start staging."; color: "#9fb1a7"; wrapMode: Text.Wrap; Layout.fillWidth: true }
+        contentItem: GridLayout {
+            columns: 2
+            columnSpacing: 14
+            rowSpacing: 10
+            Label {
+                text: "Set up the rehearsal environment before you start staging."
+                color: "#9fb1a7"; wrapMode: Text.Wrap
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.bottomMargin: 4
+            }
             Label { text: "Project name" }
             TextField { id: projectNameField; Layout.fillWidth: true; text: drillProject.showName; placeholderText: "Untitled show" }
             Label { text: "Field" }
@@ -1065,15 +1076,24 @@ ApplicationWindow {
                 model: [{text:"Daylight",value:"lighting.daylight"},{text:"Overcast",value:"lighting.overcast"},{text:"Sunset",value:"lighting.sunset"},{text:"Night game",value:"lighting.night"},{text:"Indoor",value:"lighting.indoor"}]
                 Component.onCompleted: currentIndex = indexOfValue(drillProject.lightingPreset)
             }
-            Label { text: "You can refine markers, grids, overlays, and 3D quality later in Editor preferences."; color: "#6f8d80"; wrapMode: Text.Wrap; Layout.fillWidth: true }
-            Button {
-                text: "Create project"
-                highlighted: true; Layout.alignment: Qt.AlignRight
-                onClicked: {
-                    drillProject.showName = projectNameField.text.trim().length ? projectNameField.text.trim() : "Untitled Show"
-                    drillProject.fieldPreset = projectFieldPreset.currentValue
-                    drillProject.lightingPreset = projectLightingPreset.currentValue
-                    projectSetupDialog.close()
+            Label {
+                text: "Markers, grids, overlays, and 3D quality remain available in Editor preferences."
+                color: "#6f8d80"; wrapMode: Text.Wrap
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 4
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 6
+                Item { Layout.fillWidth: true }
+                Button { text: "Cancel"; onClicked: projectSetupDialog.close() }
+                Button {
+                    text: "Create project"
+                    highlighted: true
+                    onClicked: {
+                        drillProject.showName = projectNameField.text.trim().length ? projectNameField.text.trim() : "Untitled Show"
+                        drillProject.fieldPreset = projectFieldPreset.currentValue
+                        drillProject.lightingPreset = projectLightingPreset.currentValue
+                        projectSetupDialog.close()
+                    }
                 }
             }
         }
