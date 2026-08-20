@@ -17,7 +17,7 @@ Apply action before project data changes.
 - Configurable rehearsal field, high-school stadium, bowl, school-gym, and indoor-arena environments with daylight, overcast, sunset, night, and indoor lighting
 - Static/movable prop domain model with built-in box, panel, platform, and podium assets
 - Drill Clinic collision review accounts for performer equipment footprints and oriented static or moving props, with field highlighting and previewable reroutes or destination shifts
-- Regulation front/back field layout with ten-yard end zones, yard numbers, corrected HS/NCAA/NFL hashes, five-yard lines, exactly four vertical one-yard inserts per five-yard interval, and midfield X references fourteen steps outside each hash
+- Regulation front/back field layout with ten-yard end zones, yard numbers, corrected HS/NCAA/NFL hashes, five-yard lines, and exactly four vertical one-yard inserts per five-yard interval
 - Audience-perspective coordinates: Side 1 is left, Side 2 is right, front is the near/bottom side of the editor, and back is the far/top side
 - Roster, section, label, uniform-color, and instrument assignments
 - Set/subset timeline, variant-local performer groups, single-transition and whole-show playback, paths, formations, snapping, axis locking, and undo/redo

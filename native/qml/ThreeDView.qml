@@ -357,29 +357,6 @@ Item {
             }
         }
 
-        // Midfield X references, fourteen steps outward from the two hashes.
-        Repeater3D {
-            model: 2
-            delegate: Node {
-                required property int index
-                readonly property real fieldY: index === 0
-                                                   ? drillProject.frontHashSteps - 14
-                                                   : drillProject.backHashSteps + 14
-                position: Qt.vector3d(0, 0.014,
-                                      drillProject.fieldDepthSteps / 2 - fieldY)
-                Repeater3D {
-                    model: 2
-                    delegate: Model {
-                        required property int index
-                        source: "#Cube"
-                        eulerRotation.y: index === 0 ? 45 : -45
-                        scale: Qt.vector3d(0.018, 0.0003, 0.0018)
-                        materials: PrincipledMaterial { baseColor: "#eef5f0"; roughness: 0.88 }
-                    }
-                }
-            }
-        }
-
         Repeater3D {
             model: drillProject
             delegate: Node {

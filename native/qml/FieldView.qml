@@ -211,20 +211,6 @@ Item {
                         }
                     }
 
-                    // Midfield X references: fourteen steps outward from each hash.
-                    const xCenter = drillProject.fieldWidthSteps / 2 * field.sx
-                    const xHalfSize = 0.7 * Math.min(field.sx, field.sy)
-                    const xRows = [drillProject.frontHashSteps - 14,
-                                   drillProject.backHashSteps + 14]
-                    ctx.lineWidth = Math.max(1.4, 0.2 * field.sx)
-                    for (let row = 0; row < xRows.length; ++row) {
-                        const y = (drillProject.fieldDepthSteps - xRows[row]) * field.sy
-                        ctx.beginPath(); ctx.moveTo(xCenter - xHalfSize, y - xHalfSize)
-                        ctx.lineTo(xCenter + xHalfSize, y + xHalfSize); ctx.stroke()
-                        ctx.beginPath(); ctx.moveTo(xCenter + xHalfSize, y - xHalfSize)
-                        ctx.lineTo(xCenter - xHalfSize, y + xHalfSize); ctx.stroke()
-                    }
-
                     // Six-foot yard numbers centered eight yards from each sideline.
                     ctx.globalAlpha = 1
                     ctx.fillStyle = "#eaf2ed"
