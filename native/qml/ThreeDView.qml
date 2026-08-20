@@ -468,10 +468,11 @@ Item {
     Flow {
         z: 2
         anchors.left: parent.left
-        anchors.top: cameraControls.bottom
-        anchors.margins: 14
-        anchors.topMargin: 7
-        width: parent.width - 28
+        anchors.right: cameraControls.left
+        anchors.top: parent.top
+        anchors.leftMargin: 14
+        anchors.rightMargin: 12
+        anchors.topMargin: 14
         spacing: 6
 
         ComboBox {
