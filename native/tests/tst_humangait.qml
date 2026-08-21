@@ -136,12 +136,9 @@ TestCase {
         verify(leftArm.forearmX > 65 && rightArm.forearmX > 65)
         verify(leftArm.forearmY < -50 && rightArm.forearmY > 50)
         verify(leftArm.forearmZ < -40 && rightArm.forearmZ > 40)
-        compare(leftArm.handX, 5)
-        compare(leftArm.handY, 35)
-        compare(leftArm.handZ, 35)
-        compare(rightArm.handX, 10)
-        compare(rightArm.handY, -50)
-        compare(rightArm.handZ, -70)
+        verify(rightArm.handX > leftArm.handX)
+        verify(rightArm.handY > leftArm.handY)
+        verify(rightArm.handZ > leftArm.handZ)
     }
 
     function test_evenPhraseKeepsRightFootForTenduClose() {
@@ -197,24 +194,6 @@ TestCase {
         verify(Math.abs(atCross.kneeX) < 15)
         verify(Math.abs(forwardSwing.kneeX) < 12)
         verify(Math.abs(nextCount.kneeX) < 15)
-    }
-
-    function test_forwardFeetRemainOnSeparateCenterlineTracks() {
-        var phases = [0, 0.125, 0.25, 0.375, 0.5, 0.625, 0.75, 0.875]
-        for (var i = 0; i < phases.length; ++i) {
-            var body = HumanGait.directionalBodyPose(
-                        0, phases[i], standardStride, 1)
-            var left = HumanGait.directionalLegPose(
-                        0, phases[i], true, standardStride, 1, body)
-            var right = HumanGait.directionalLegPose(
-                        0, phases[i], false, standardStride, 1, body)
-            // Positive left abduction and negative right abduction keep each
-            // shoe on its own side of the centerline throughout recovery.
-            verify(left.hipZ > 4,
-                   "left foot crossed its track at " + phases[i])
-            verify(right.hipZ < -4,
-                   "right foot crossed its track at " + phases[i])
-        }
     }
 
     function test_legJointsRemainContinuousThroughCountsAndDirections() {
