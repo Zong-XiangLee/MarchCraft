@@ -2,6 +2,13 @@
 
 MarchCraft is a native marching-band drill editor prototype written in C++20 with Qt 6. It does not use HTML, Electron, or an embedded browser.
 
+MarchCraft now opens to a native welcome workspace instead of silently loading a show. Start a
+new project, open one of up to eight recent projects, resume the current show, or open the pinned
+Rancho Bernardo sample as an editable copy. The graphite desktop theme, restrained motion, and
+optional launch sound are designed for a focused professional editing workflow. The application
+ships with dedicated MarchCraft window/executable branding and a warm three-note launch cue that
+avoids resembling a Windows notification.
+
 Version 0.6 expands the offline Drill Clinic with path-sampled performer, instrument,
 and moving-prop clearance checks plus previewable fixes. It also adds live set-card
 reordering with insertion feedback and timing reconstruction, and configurable opening
@@ -52,14 +59,14 @@ Run `build/marchcraft.exe` (or the configuration-specific executable produced by
 
 On Windows, every build also refreshes the canonical production preview at `dist/MarchCraft-Production-Preview/MarchCraft.exe`.
 
-For automated visual verification, pass `--screenshot output.png`; add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`, and `--ground-debug`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`, and `--ground-debug`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
 
 ## Controls
 
 - Double-click an empty field location to add a performer.
 - Click a grouped performer to select its group; Ctrl-click targets an individual member.
-- Right-click the field or a performer to group, select a group, remove members, or ungroup.
-- Right-click roster entries for the same group controls, or right-click set cards to copy, insert, archive, and edit sets.
+- Click or right-click a grouped performer to select its full group. The context menu offers Group, Remove from group, and Ungroup only when their selection requirements are satisfied.
+- Right-click roster entries for the same group controls, or right-click set cards to copy, insert, archive, and edit sets. Unavailable commands remain visible in a muted disabled state.
 - Drag selected performers; hold Shift to lock vertical movement or Control to lock horizontal movement.
 - Arrow keys move the selection by a quarter-step.
 - Use **Shape** to distribute selected performers on the full formation library; enable **Create as group** when desired.

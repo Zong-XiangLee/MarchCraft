@@ -784,6 +784,11 @@ Item {
                         property point startPosition
                         onPressed: {
                             if (mouse.button === Qt.RightButton) {
+                                const group = drillProject.performerGroupInfo(marcher.index)
+                                if (Object.keys(group).length > 0)
+                                    drillProject.selectGroupForPerformer(marcher.index)
+                                else if (!marcher.isSelected)
+                                    drillProject.selectPerformerMode(marcher.index, 0)
                                 const p = mapToItem(root, mouse.x, mouse.y)
                                 root.contextMenuRequested(p.x, p.y, marcher.index)
                                 return

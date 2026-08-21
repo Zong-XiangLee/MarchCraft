@@ -38,12 +38,12 @@ Item {
                       : "Attach MIDI or MusicXML to build the musical timeline"
                 font.bold: true
             }
-            Label { text: transport.audioStatus; color: transport.synthAvailable || drillProject.playbackSource !== "midi" ? "#8fa197" : "#f3c969" }
+            Label { text: transport.audioStatus; color: transport.synthAvailable || drillProject.playbackSource !== "midi" ? "#a5afbc" : "#f3c969" }
             Item { Layout.fillWidth: true }
-            Button { text: "MIDI…"; onClicked: root.requestMidiImport() }
-            Button { text: "MusicXML…"; onClicked: root.requestMusicXmlImport() }
-            Button { text: "Tracks…"; enabled: drillProject.musicTrackCount > 0; onClicked: trackDialog.open() }
-            Button { text: "Map sets…"; enabled: drillProject.musicLoaded; onClicked: mappingDialog.open() }
+            AppButton { text: "MIDI…"; onClicked: root.requestMidiImport() }
+            AppButton { text: "MusicXML…"; onClicked: root.requestMusicXmlImport() }
+            AppButton { text: "Tracks…"; enabled: drillProject.musicTrackCount > 0; onClicked: trackDialog.open() }
+            AppButton { text: "Map sets…"; enabled: drillProject.musicLoaded; onClicked: mappingDialog.open() }
         }
 
         Label {
@@ -61,11 +61,11 @@ Item {
             ComboBox { id: generationMode; model: ["Subdivide", "One move"]; Layout.preferredWidth: 116 }
             ComboBox { id: subdivision; model: ["8", "16", "32"]; currentIndex: 1; enabled: generationMode.currentIndex === 0; Layout.preferredWidth: 70 }
             ComboBox { id: movementMode; model: ["Full time", "Half time", "Double time", "Hold"]; Layout.preferredWidth: 118 }
-            Button {
+            AppButton {
                 text: "Preview sets…"; highlighted: true
                 onClicked: { root.refreshPreview(); generationDialog.open() }
             }
-            Label { text: "Audio offset"; color: "#8fa197" }
+            Label { text: "Audio offset"; color: "#a5afbc" }
             SpinBox {
                 from: -60000; to: 60000; stepSize: 10; editable: true
                 value: Math.round(drillProject.audioOffsetMs)
@@ -116,7 +116,7 @@ Item {
                     Row {
                         width: parent.width
                         Label { text: info.number || ""; font.bold: true; color: "#e7f5ed" }
-                        Label { text: "  " + (info.numerator || 4) + "/" + (info.denominator || 4); color: "#8fa197"; font.pixelSize: 10 }
+                        Label { text: "  " + (info.numerator || 4) + "/" + (info.denominator || 4); color: "#a5afbc"; font.pixelSize: 10 }
                     }
                     Rectangle { width: parent.width; height: Math.max(3, (info.density || 0) * 25); color: "#5ee0a0"; opacity: 0.65; radius: 2 }
                     Label { text: (info.counts || 0) + " ct · " + Math.round(info.tempo || 0); color: "#a9bbb1"; font.pixelSize: 9 }
@@ -176,7 +176,7 @@ Item {
                     }
                 }
             }
-            Button {
+            AppButton {
                 text: "Create sets"; highlighted: true; Layout.alignment: Qt.AlignRight
                 onClicked: {
                     drillProject.commitSetGenerationPlan(root.previewSegments)
@@ -202,8 +202,8 @@ Item {
                         property var info: drillProject.musicTrackInfo(index)
                         width: parent.width
                         Label { text: info.name + "  (" + info.noteCount + " notes)"; Layout.fillWidth: true; elide: Text.ElideRight }
-                        ToolButton { text: "M"; checkable: true; checked: info.muted; ToolTip.text: "Mute"; ToolTip.visible: hovered; onClicked: drillProject.setMusicTrackMuted(index, checked) }
-                        ToolButton { text: "S"; checkable: true; checked: info.solo; ToolTip.text: "Solo"; ToolTip.visible: hovered; onClicked: drillProject.setMusicTrackSolo(index, checked) }
+                        AppToolButton { text: "M"; checkable: true; checked: info.muted; ToolTip.text: "Mute"; ToolTip.visible: hovered; onClicked: drillProject.setMusicTrackMuted(index, checked) }
+                        AppToolButton { text: "S"; checkable: true; checked: info.solo; ToolTip.text: "Solo"; ToolTip.visible: hovered; onClicked: drillProject.setMusicTrackSolo(index, checked) }
                         Slider { from: 0; to: 1; value: info.volume; Layout.preferredWidth: 150; onMoved: drillProject.setMusicTrackVolume(index,value) }
                     }
                 }
@@ -243,7 +243,7 @@ Item {
                     }
                 }
             }
-            Button {
+            AppButton {
                 text: "Apply mapping"; highlighted: true; Layout.alignment: Qt.AlignRight
                 onClicked: if (drillProject.applySetMapping(root.mappingMeasures)) mappingDialog.close()
             }

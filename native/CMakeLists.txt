@@ -14,6 +14,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 6.6 REQUIRED COMPONENTS
     Core Concurrent Gui Quick QuickControls2 Quick3D Multimedia Xml Sql Test)
 
+set_source_files_properties(qml/MarchCraftTheme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_standard_project_setup(REQUIRES 6.6)
 qt_policy(SET QTP0004 NEW)
 
@@ -28,6 +30,8 @@ qt_add_executable(marchcraft
     src/MidiSynthEngine.h
     src/TransportController.cpp
     src/TransportController.h
+    src/WorkspaceController.cpp
+    src/WorkspaceController.h
     src/SceneTypes.h
     src/AssetCatalog.cpp
     src/AssetCatalog.h
@@ -46,6 +50,14 @@ qt_add_qml_module(marchcraft
         qml/Prop3D.qml
         qml/FormationDialog.qml
         qml/MusicPanel.qml
+        qml/MarchCraftTheme.qml
+        qml/AppButton.qml
+        qml/AppToolButton.qml
+        qml/AppMenuItem.qml
+        qml/WorkspaceLogic.qml
+        qml/AppIcon.qml
+        qml/ShapeIcon.qml
+        qml/ProjectSetupPage.qml
     SOURCES
         src/HumanGeometry.cpp
         src/HumanGeometry.h
@@ -70,6 +82,12 @@ qt_add_resources(marchcraft "marchcraft_catalog"
     PREFIX "/catalog"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
+
+set(MARCHCRAFT_LOGO_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/marchcraft-logo.png")
+set_source_files_properties("${MARCHCRAFT_LOGO_PNG}" PROPERTIES QT_RESOURCE_ALIAS "marchcraft-logo.png")
+qt_add_resources(marchcraft "marchcraft_branding"
+    PREFIX "/branding"
+    FILES "${MARCHCRAFT_LOGO_PNG}")
 
 set(MARCHCRAFT_HUMAN_GLB "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer.glb")
 set(MARCHCRAFT_HUMAN_GLB_LOD1 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod1.glb")
@@ -120,6 +138,7 @@ target_compile_definitions(marchcraft PRIVATE
 )
 
 if(WIN32)
+    target_sources(marchcraft PRIVATE marchcraft.rc)
     set_target_properties(marchcraft PROPERTIES WIN32_EXECUTABLE TRUE)
     # A build-tree executable must be runnable on its own, not only from a Qt
     # developer shell. Bundle the Qt DLLs, plugins, and QML imports beside it.
@@ -171,6 +190,8 @@ if(BUILD_TESTING)
         src/MidiSynthEngine.h
         src/TransportController.cpp
         src/TransportController.h
+        src/WorkspaceController.cpp
+        src/WorkspaceController.h
         src/SceneTypes.h
         src/AssetCatalog.cpp
         src/AssetCatalog.h

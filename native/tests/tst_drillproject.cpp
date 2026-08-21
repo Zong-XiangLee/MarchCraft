@@ -3,10 +3,12 @@
 #include "AssetCatalog.h"
 #include "SceneTypes.h"
 #include "TransportController.h"
+#include "WorkspaceController.h"
 
 #include <QFile>
 #include <QJsonDocument>
 #include <QSet>
+#include <QSettings>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -57,6 +59,21 @@ class DrillProjectTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void cleanStartupAndExplicitDemo()
+    {
+        DrillProject project;
+        QCOMPARE(project.performerCount(), 0);
+        QCOMPARE(project.setCount(), 1);
+        QCOMPARE(project.showName(), QStringLiteral("Untitled Show"));
+        QVERIFY(!project.dirty());
+
+        project.loadDemo();
+        QCOMPARE(project.performerCount(), 24);
+        QCOMPARE(project.setCount(), 4);
+        QVERIFY(!project.dirty());
+        QVERIFY(project.averageDistance() > 0.0);
+    }
+
     void regulationFieldGeometry()
     {
         const auto highSchool = MarchCraft::fieldGeometry(QStringLiteral("hs"));
@@ -116,9 +133,102 @@ private slots:
     void demoHasUsableContent()
     {
         DrillProject project;
+        project.loadDemo();
         QCOMPARE(project.performerCount(), 24);
         QCOMPARE(project.setCount(), 4);
         QVERIFY(project.averageDistance() > 0.0);
+    }
+
+    void groupingCapabilitiesAndInvalidNoOp()
+    {
+        DrillProject project;
+        project.newProject();
+        project.batchAddPerformers(QStringLiteral("G"), 3, QStringLiteral("Trumpet"),
+                                   QStringLiteral("Brass"));
+        project.selectAll();
+        QVERIFY(project.canGroupSelection());
+        QVERIFY(!project.canRemoveSelectionFromGroup());
+        QVERIFY(!project.canUngroupSelection());
+
+        project.groupSelected();
+        QVERIFY(project.selectionIsExactGroup());
+        QVERIFY(!project.canGroupSelection());
+        QVERIFY(!project.canRemoveSelectionFromGroup());
+        QVERIFY(project.canUngroupSelection());
+
+        project.groupSelected();
+        project.undo();
+        QVERIFY(project.performerGroupInfo(0).isEmpty());
+
+        project.selectAll();
+        project.groupSelected();
+        project.selectPerformerMode(1, 1);
+        project.selectPerformerMode(2, 1);
+        QVERIFY(project.canRemoveSelectionFromGroup());
+        project.removeSelectedFromGroup();
+        QVERIFY(project.performerGroupInfo(0).isEmpty());
+        QCOMPARE(project.performerGroupInfo(1).value(QStringLiteral("size")).toInt(), 2);
+
+        project.selectPerformerMode(1, 0);
+        QCOMPARE(project.selectedCount(), 2);
+        QVERIFY(project.canUngroupSelection());
+        project.ungroupSelected();
+        QVERIFY(project.performerGroupInfo(1).isEmpty());
+    }
+
+    void recentProjectsPersistDeduplicateAndPrune()
+    {
+        QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
+                           QStringLiteral("MarchCraft"), QStringLiteral("MarchCraft"));
+        const QVariant previousRecent = settings.value(QStringLiteral("workspace/recentProjects"));
+        const QVariant previousSound = settings.value(QStringLiteral("workspace/startupSoundEnabled"));
+        settings.remove(QStringLiteral("workspace/recentProjects"));
+        settings.remove(QStringLiteral("workspace/startupSoundEnabled"));
+        settings.sync();
+
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        QStringList paths;
+        for (int index = 0; index < 10; ++index) {
+            const QString path = temporary.filePath(QStringLiteral("project-%1.marchcraft").arg(index));
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::WriteOnly));
+            file.write("placeholder");
+            file.close();
+            paths.push_back(path);
+        }
+
+        {
+            WorkspaceController workspace;
+            QVERIFY(workspace.startupSoundEnabled());
+            const bool systemAnimationsEnabled = workspace.systemAnimationsEnabled();
+            workspace.refreshSystemPreferences();
+            QCOMPARE(workspace.systemAnimationsEnabled(), systemAnimationsEnabled);
+            for (int index = 0; index < paths.size(); ++index)
+                workspace.recordRecentProject(paths[index], QStringLiteral("Project %1").arg(index));
+            QCOMPARE(workspace.recentProjects().size(), 8);
+            QCOMPARE(workspace.recentProjects().first().toMap().value(QStringLiteral("name")).toString(),
+                     QStringLiteral("Project 9"));
+            workspace.recordRecentProject(paths[5], QStringLiteral("Renamed Five"));
+            QCOMPARE(workspace.recentProjects().size(), 8);
+            QCOMPARE(workspace.recentProjects().first().toMap().value(QStringLiteral("name")).toString(),
+                     QStringLiteral("Renamed Five"));
+            workspace.setStartupSoundEnabled(false);
+        }
+
+        QFile::remove(paths[5]);
+        {
+            WorkspaceController restored;
+            QVERIFY(!restored.startupSoundEnabled());
+            QCOMPARE(restored.recentProjects().size(), 7);
+            restored.removeRecentProject(paths[9]);
+            QCOMPARE(restored.recentProjects().size(), 6);
+        }
+
+        if (previousRecent.isValid()) settings.setValue(QStringLiteral("workspace/recentProjects"), previousRecent);
+        else settings.remove(QStringLiteral("workspace/recentProjects"));
+        if (previousSound.isValid()) settings.setValue(QStringLiteral("workspace/startupSoundEnabled"), previousSound);
+        else settings.remove(QStringLiteral("workspace/startupSoundEnabled"));
     }
 
     void movementDistanceAndUndo()
@@ -882,6 +992,7 @@ private slots:
         QTemporaryDir temporary;
         QVERIFY(temporary.isValid());
         DrillProject project;
+        project.loadDemo();
         const QString csv = temporary.filePath(QStringLiteral("analytics.csv"));
         const QString pdf = temporary.filePath(QStringLiteral("coordinates.pdf"));
         QVERIFY(project.exportCsv(csv));

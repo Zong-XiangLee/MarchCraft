@@ -445,7 +445,8 @@ DrillProject::DrillProject(QObject *parent)
     connect(&m_autosaveTimer, &QTimer::timeout, this, &DrillProject::autosave);
     connect(&m_undo, &QUndoStack::canUndoChanged, this, &DrillProject::historyChanged);
     connect(&m_undo, &QUndoStack::canRedoChanged, this, &DrillProject::historyChanged);
-    loadDemo();
+    newProject();
+    m_autosaveTimer.stop();
     m_undo.clear();
     m_dirty = false;
 }
@@ -1516,6 +1517,34 @@ bool DrillProject::selectionIsExactGroup() const
     for(const auto&group:m_sets[m_currentSet].activeVariant().groups){if(group.performerIds.size()!=selected.size())continue;bool same=true;for(const auto&id:group.performerIds)same=same&&selected.contains(id);if(same)return true;}return false;
 }
 
+bool DrillProject::canGroupSelection() const
+{
+    return selectedCount() >= 2 && !selectionIsExactGroup();
+}
+
+bool DrillProject::canRemoveSelectionFromGroup() const
+{
+    if (m_currentSet < 0) return false;
+    QSet<QString> selected;
+    for (const auto &performer : m_performers)
+        if (performer.selected) selected.insert(performer.id);
+    for (const auto &group : m_sets[m_currentSet].activeVariant().groups) {
+        bool selectedMember = false;
+        bool unselectedMember = false;
+        for (const auto &id : group.performerIds) {
+            selectedMember |= selected.contains(id);
+            unselectedMember |= !selected.contains(id);
+        }
+        if (selectedMember && unselectedMember) return true;
+    }
+    return false;
+}
+
+bool DrillProject::canUngroupSelection() const
+{
+    return selectedGroupedCount() > 0;
+}
+
 double DrillProject::averageDistance() const
 {
     return m_performers.isEmpty() ? 0.0 : totalDistance() / m_performers.size();
@@ -1606,6 +1635,7 @@ void DrillProject::loadDemo()
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
         m_undo.clear();
+        m_autosaveTimer.stop();
         m_dirty = false;
         emit dirtyChanged();
         emit projectChanged();
@@ -1665,7 +1695,11 @@ void DrillProject::loadDemo()
     endResetModel();
     emit performerCountChanged();
     m_undo.clear();
-    markDirty(QStringLiteral("Demo loaded"));
+    m_autosaveTimer.stop();
+    m_projectPath.clear();
+    m_dirty = false;
+    emit dirtyChanged();
+    setStatus(QStringLiteral("Demo loaded"));
     emit projectChanged();
     emit setsChanged();
     emit currentSetChanged();
@@ -1834,6 +1868,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     if (!restoreJson(root, false))
         return false;
     m_projectPath = legacyJson ? QString{} : path;
+    m_autosaveTimer.stop();
     m_dirty = false;
     m_undo.clear();
     emit dirtyChanged();
@@ -2739,9 +2774,13 @@ void DrillProject::selectGroupForPerformer(int row, bool additive)
 void DrillProject::groupSelected(const QString &name)
 {
     if (m_currentSet < 0) return;
+    if (!canGroupSelection()) {
+        setStatus(selectedCount() < 2 ? QStringLiteral("Select at least two performers to group")
+                                      : QStringLiteral("The selected performers are already grouped"));
+        return;
+    }
     QVector<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.push_back(performer.id);
-    if (selected.size() < 2) { setStatus(QStringLiteral("Select at least two performers to group")); return; }
     const auto before = toJson();
     auto &variant = m_sets[m_currentSet].activeVariant();
     QSet<QString> selectedIds;
@@ -2759,7 +2798,7 @@ void DrillProject::groupSelected(const QString &name)
 
 void DrillProject::removeSelectedFromGroup()
 {
-    if (m_currentSet < 0) return;
+    if (m_currentSet < 0 || !canRemoveSelectionFromGroup()) return;
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
@@ -2774,7 +2813,7 @@ void DrillProject::removeSelectedFromGroup()
 
 void DrillProject::ungroupSelected()
 {
-    if (m_currentSet < 0) return;
+    if (m_currentSet < 0 || !canUngroupSelection()) return;
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
