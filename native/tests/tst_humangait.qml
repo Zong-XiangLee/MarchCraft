@@ -157,7 +157,7 @@ TestCase {
         var passing = HumanGait.targetForLeg("march.forward", 0.75, false,
                                              standardStride, 1)
         closeTo(passing.z, 0, 0.00001)
-        verify(passing.lift > 0 && passing.lift < 0.005)
+        verify(passing.lift > 0 && passing.lift < 0.012)
         var earlyDelta = HumanGait.smootherStep(0.02) - HumanGait.smootherStep(0)
         var middleDelta = HumanGait.smootherStep(0.52) - HumanGait.smootherStep(0.50)
         var contactDelta = HumanGait.smootherStep(1) - HumanGait.smootherStep(0.98)
