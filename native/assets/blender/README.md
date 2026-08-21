@@ -50,20 +50,23 @@ Qt's build-time asset importer should generate optimized runtime meshes and LODs
 
 ## Canonical human performer
 
-The original CC BY 4.0 human source is preserved under `Models/`. Run
-`native/scripts/assets/build_human_performer.py` to reproduce the grounded,
-skinned runtime GLB without third-party Python packages. The conditioner writes
-the canonical 1.75-meter, Y-up asset and all in-place drill clips. When Blender
-is available, `import_human_performer_blender.py` imports that conditioned GLB
-and saves an editable `.blend` for manual weight and pose refinement.
+The authorized Blender source is preserved as `Models/lowpolyboy_rigged.blend`;
+its creator attribution and the contributor's direct-permission record are in
+`Models/LowPolyBoyAttribution.txt`. First run `extract_lowpolyboy_mesh.py`
+through Blender to preserve its authored deformation weights in a temporary
+JSON interchange file, then run `build_human_performer.py` on that JSON. The
+conditioner retargets the mesh to the canonical 1.75-meter, Y-up bind pose and
+authors all in-place drill clips. `import_human_performer_blender.py` can import
+the conditioned GLB for manual weight and pose refinement.
 
 The runtime gait is count-driven by `qml/HumanGait.js`. It uses planted-foot
 targets and a two-bone leg solve for forward and backward technique, while
 slides distribute facing progressively through the pelvis, chest, and shoulders.
 The neutral runtime pose is marching attention: grounded closed heels, 90-degree
 total toe-out, a vertically stacked pelvis and torso, head approximately 10
-degrees above center, and a face-height triangular hand set approximated with
-the available non-fingered hand bones. Forward technique presents a high toe at
+degrees above center, and a face-height triangular hand set. The source finger
+geometry is preserved while its weights are collapsed into the runtime's compact
+canonical hand bones. Forward technique presents a high toe at
 heel contact, rolls through the full foot, and releases from the forefoot; backward
 technique stays on a calm forefoot platform. After changing the rig, weights, or
 gait constants, run both validators and regenerate the contact sheet:
@@ -75,6 +78,6 @@ python native/scripts/assets/render_human_performer_preview.py native/assets/per
 ```
 
 The gait validator deforms the actual weighted mesh through eight compass
-headings plus half and extended stride cases. It rejects turf penetration or
-floating beyond 2 mm, planted-ankle drift beyond 1 mm, and upper-body height
-variation beyond 15 mm.
+headings plus half and extended stride cases. It rejects turf penetration beyond
+3 mm, floating beyond 2 mm, planted-ankle drift beyond 1 mm, and upper-body
+height variation beyond 15 mm.

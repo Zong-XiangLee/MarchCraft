@@ -1,0 +1,14 @@
+Rigged Male Human
+Creator: aaravanimates
+Source: https://free3d.com/3d-model/rigged-male-human-442626.html
+Original source label: Personal Use License
+Original creator instruction: Give credit if used.
+
+The MarchCraft contributor Andrew represents that the creator directly granted
+permission to use, modify, and publicly redistribute this model in MarchCraft,
+including in its public GitHub repository. The model and conditioned derivatives
+are used under that direct creator permission; they are not represented as CC0,
+Creative Commons, or public-domain assets.
+
+Source file: lowpolyboy_rigged.blend
+Source SHA-256: CE4685323B42FC2F477EB65D18C296033DE50D6E008AF3C851426AC1AE7AEB60

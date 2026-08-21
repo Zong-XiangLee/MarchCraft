@@ -292,6 +292,9 @@ private slots:
         QCOMPARE(motionFor(8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.right"));
         QCOMPARE(motionFor(-8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.left"));
         QCOMPARE(motionFor(0.0, -8.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
+        QCOMPARE(motionFor(8.0, -4.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
+        QCOMPARE(motionFor(-8.0, -4.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
+        QCOMPARE(motionFor(8.0, 2.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
         QCOMPARE(motionFor(8.0, 0.0, 90.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
 
         const auto halfCycle = motionFor(0.0, 8.0, 0.0, QStringLiteral("direct"), 0.125);

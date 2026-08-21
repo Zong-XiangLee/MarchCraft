@@ -3,13 +3,13 @@
   "coordinateContract": { "units": "meters", "upAxis": "+Y", "forwardAxis": "-Z", "groundPlaneY": 0 },
   "humanPerformer": {
     "runtimeAsset": "qrc:/performer/human_performer.glb",
-    "sourceAsset": "Models/HUMAN.blend",
-    "author": "vistaalienprime",
-    "sourceUrl": "https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e",
-    "license": "CC-BY-4.0",
+    "sourceAsset": "Models/lowpolyboy_rigged.blend",
+    "author": "aaravanimates",
+    "sourceUrl": "https://free3d.com/3d-model/rigged-male-human-442626.html",
+    "license": "Creator-Permission",
     "canonicalHeightMeters": 1.75,
-    "triangleCount": 33240,
-    "lodTriangleCounts": [33240, 20227, 4879],
+    "triangleCount": 3878,
+    "lodTriangleCounts": [3878, 3013, 1983],
     "rigFamily": "marchcraft.canonical.v1"
   },
   "assets": [

@@ -1,14 +1,11 @@
 #!/usr/bin/env python3
-"""Build MarchCraft's canonical skinned human performer from the supplied GLB.
+"""Build MarchCraft's canonical performer from extracted Blender rig data.
 
-The source model is CC BY 4.0 and is intentionally kept byte-for-byte in Models/.
-This conditioner uses only the Python standard library so it is reproducible on
-developer machines that do not have Blender installed.  It fixes the source
-axes/scale/origin, adds a compact humanoid skeleton, creates smooth procedural
-weights, and authors deterministic in-place drill animation clips.
-
-Blender remains the preferred artist workflow.  The generated GLB can be opened
-with native/scripts/assets/import_human_performer_blender.py for hand refinement.
+The checked-in Blender source remains the attribution-bearing artist asset.
+``extract_lowpolyboy_mesh.py`` preserves its authored deformation weights and
+converts its axes/scale into a deterministic JSON interchange file. This script
+packages that data into the compact GLB contract consumed by Qt Quick 3D and
+authors the semantic drill clips used by validators and authoring tools.
 """
 
 from __future__ import annotations
@@ -124,8 +121,11 @@ JOINTS = [
     JointDefinition("pelvis", 0, (0.0, 0.91, 0.0)),
     JointDefinition("spine.lower", 1, (0.0, 1.08, 0.0)),
     JointDefinition("spine.upper", 2, (0.0, 1.31, 0.0)),
-    JointDefinition("neck", 3, (0.0, 1.49, 0.0)),
-    JointDefinition("head", 4, (0.0, 1.61, -0.01)),
+    # Retain the source rig's natural neck and full-height head proportions.
+    # The vertical offset accounts for the conditioned marching sole so the
+    # finished crown still lands on the canonical 1.75 m height.
+    JointDefinition("neck", 3, (0.0, 1.42327, -0.07627)),
+    JointDefinition("head", 4, (0.0, 1.50948, -0.08972)),
     JointDefinition("thigh.left", 1, (-0.105, 0.88, 0.0)),
     JointDefinition("shin.left", 6, (-0.105, 0.49, 0.0)),
     JointDefinition("foot.left", 7, (-0.105, 0.075, 0.0)),
@@ -145,6 +145,153 @@ JOINTS = [
 ]
 
 J = {joint.name: index for index, joint in enumerate(JOINTS)}
+
+
+def subtract(a, b):
+    return tuple(a[index] - b[index] for index in range(3))
+
+
+def add(a, b):
+    return tuple(a[index] + b[index] for index in range(3))
+
+
+def multiply_vector(vector, amount):
+    return tuple(component * amount for component in vector)
+
+
+def dot(a, b):
+    return sum(a[index] * b[index] for index in range(3))
+
+
+def cross(a, b):
+    return (a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0])
+
+
+def unit(vector):
+    length = math.sqrt(dot(vector, vector)) or 1.0
+    return multiply_vector(vector, 1.0 / length)
+
+
+def rotate_between(vector, source_direction, target_direction):
+    source = unit(source_direction)
+    target = unit(target_direction)
+    cosine = max(-1.0, min(1.0, dot(source, target)))
+    if cosine > 0.999999:
+        return vector
+    if cosine < -0.999999:
+        axis = unit(cross(source, (1.0, 0.0, 0.0)
+                          if abs(source[0]) < 0.9 else (0.0, 1.0, 0.0)))
+        return add(multiply_vector(axis, 2.0 * dot(axis, vector)),
+                   multiply_vector(vector, -1.0))
+    axis = cross(source, target)
+    sine = math.sqrt(dot(axis, axis))
+    axis = multiply_vector(axis, 1.0 / sine)
+    return add(add(multiply_vector(vector, cosine),
+                   multiply_vector(cross(axis, vector), sine)),
+               multiply_vector(axis, dot(axis, vector) * (1.0 - cosine)))
+
+
+def target_segment(name):
+    child_by_name = {
+        "pelvis": "spine.lower", "spine.lower": "spine.upper",
+        "spine.upper": "neck", "neck": "head",
+        "thigh.left": "shin.left", "shin.left": "foot.left",
+        "thigh.right": "shin.right", "shin.right": "foot.right",
+        "clavicle.left": "upper_arm.left", "upper_arm.left": "forearm.left",
+        "forearm.left": "hand.left", "clavicle.right": "upper_arm.right",
+        "upper_arm.right": "forearm.right", "forearm.right": "hand.right",
+    }
+    if name in ("foot.left", "foot.right"):
+        x = JOINTS[J[name]].global_position[0]
+        # Match the source ankle-to-ball slope so the visible sole remains
+        # level while the canonical helper bone continues toward local -Z.
+        return (x, 0.1190, 0.0), (x, 0.035, -0.12)
+    if name in ("toe.left", "toe.right"):
+        x = JOINTS[J[name]].global_position[0]
+        return (x, 0.035, -0.12), (x, 0.008, -0.25)
+    if name == "head":
+        # Preserve the artist's complete head-bone length and forward rake.
+        # Compressing this segment flattened the eyes, nose, mouth, and skull.
+        return JOINTS[J[name]].global_position, (0.0, 1.72335, -0.17976)
+    if name in ("hand.left", "hand.right"):
+        head = JOINTS[J[name]].global_position
+        parent = JOINTS[JOINTS[J[name]].parent].global_position
+        return head, add(head, multiply_vector(unit(subtract(head, parent)), 0.075))
+    child_name = child_by_name.get(name)
+    if child_name:
+        return JOINTS[J[name]].global_position, JOINTS[J[child_name]].global_position
+    return None
+
+
+def retarget_rows(rows, source_joints):
+    segments = {}
+    for name, source in source_joints.items():
+        target = target_segment(name)
+        if target:
+            segments[name] = (tuple(source["head"]), tuple(source["tail"]), target[0], target[1])
+
+    output_positions = []
+    output_normals = []
+    for row in rows:
+        accumulated_position = (0.0, 0.0, 0.0)
+        accumulated_normal = (0.0, 0.0, 0.0)
+        total = 0.0
+        for name, weight in row["weights"].items():
+            segment = segments.get(name)
+            if not segment or weight <= 0.0:
+                continue
+            source_head, source_tail, target_head, target_tail = segment
+            source_direction = subtract(source_tail, source_head)
+            target_direction = subtract(target_tail, target_head)
+            relative = subtract(tuple(row["position"]), source_head)
+            rotated = rotate_between(relative, source_direction, target_direction)
+            target_axis = unit(target_direction)
+            axial = dot(rotated, target_axis)
+            length_ratio = (math.sqrt(dot(target_direction, target_direction))
+                            / max(0.000001, math.sqrt(dot(source_direction, source_direction))))
+            perpendicular = subtract(rotated, multiply_vector(target_axis, axial))
+            moved = add(target_head, add(perpendicular,
+                                         multiply_vector(target_axis, axial * length_ratio)))
+            moved_normal = rotate_between(tuple(row["normal"]), source_direction, target_direction)
+            accumulated_position = add(accumulated_position, multiply_vector(moved, weight))
+            accumulated_normal = add(accumulated_normal, multiply_vector(moved_normal, weight))
+            total += weight
+        if total < 0.000001:
+            output_positions.append(tuple(row["position"]))
+            output_normals.append(tuple(row["normal"]))
+        else:
+            output_positions.append(multiply_vector(accumulated_position, 1.0 / total))
+            output_normals.append(unit(accumulated_normal))
+    def sole_profile(z):
+        points = ((-0.11, 0.029), (0.0, 0.010), (0.095, 0.0),
+                  (0.18, 0.003), (0.30, 0.003))
+        if z <= points[0][0]:
+            return points[0][1]
+        for index in range(1, len(points)):
+            if z <= points[index][0]:
+                first, second = points[index - 1], points[index]
+                amount = (z - first[0]) / (second[0] - first[0])
+                return first[1] + (second[1] - first[1]) * amount
+        return points[-1][1]
+
+    flattened_positions = []
+    for position, row in zip(output_positions, rows):
+        foot_weight = sum(weight for name, weight in row["weights"].items()
+                          if name.startswith("foot.") or name.startswith("toe."))
+        if foot_weight > 0.55:
+            # Anatomical forward is local -Z. Parameterize the sole from heel
+            # to toe without reversing the visible shoe relative to the body.
+            position = (position[0], position[1] - sole_profile(-position[2]), position[2])
+        flattened_positions.append(position)
+    output_positions = flattened_positions
+    minimum_y = min(position[1] for position in output_positions)
+    output_positions = [(x, y - minimum_y, z) for x, y, z in output_positions]
+    maximum_y = max(position[1] for position in output_positions)
+    vertical_scale = 1.75 / maximum_y
+    output_positions = [(x, y * vertical_scale, z) for x, y, z in output_positions]
+    return output_positions, output_normals
 
 
 def normalized_pair(first: int, second: int, amount: float) -> tuple[tuple[int, int, int, int], tuple[float, float, float, float]]:
@@ -312,12 +459,12 @@ def build_animations(builder: BufferBuilder) -> list[dict]:
     return animations
 
 
-def simplify_geometry(positions, normals, texcoords, joints, weights, indices, grid_size):
+def simplify_geometry(positions, normals, texcoords, colors, joints, weights, indices, grid_size):
     clusters = {}
     remap = []
     for index, position in enumerate(positions):
         key = (round(position[0] / grid_size), round(position[1] / grid_size),
-               round(position[2] / grid_size), joints[index][0])
+               round(position[2] / grid_size), joints[index][0], tuple(colors[index]))
         cluster = clusters.get(key)
         if cluster is None:
             cluster = {"members": [], "index": len(clusters)}
@@ -328,6 +475,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
     simplified_positions = []
     simplified_normals = []
     simplified_texcoords = []
+    simplified_colors = []
     simplified_joints = []
     simplified_weights = []
     for cluster in clusters.values():
@@ -338,6 +486,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
         length = math.sqrt(sum(value * value for value in normal)) or 1.0
         normal = tuple(value / length for value in normal)
         texcoord = tuple(sum(texcoords[index][axis] for index in members) / count for axis in range(2))
+        color = tuple(sum(colors[index][axis] for index in members) / count for axis in range(4))
         influence_totals = {}
         for index in members:
             for joint, weight in zip(joints[index], weights[index]):
@@ -350,6 +499,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
         simplified_positions.append(position)
         simplified_normals.append(normal)
         simplified_texcoords.append(texcoord)
+        simplified_colors.append(color)
         simplified_joints.append(joint_row)
         simplified_weights.append(weight_row)
 
@@ -370,47 +520,42 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
             continue
         seen.add(canonical)
         simplified_indices.extend(mapped)
-    return (simplified_positions, simplified_normals, simplified_texcoords,
+    return (simplified_positions, simplified_normals, simplified_texcoords, simplified_colors,
             simplified_joints, simplified_weights, simplified_indices)
 
 
 def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.0) -> dict:
-    source_document, source_binary = read_glb(source)
-    primitive = source_document["meshes"][0]["primitives"][0]
-    positions_in = read_accessor(source_document, source_binary, primitive["attributes"]["POSITION"])
-    normals_in = read_accessor(source_document, source_binary, primitive["attributes"]["NORMAL"])
-    texcoords = read_accessor(source_document, source_binary, primitive["attributes"]["TEXCOORD_0"])
-    indices = [row[0] for row in read_accessor(source_document, source_binary, primitive["indices"])]
-
-    minimum_z = min(position[2] for position in positions_in)
-    maximum_z = max(position[2] for position in positions_in)
-    source_height = maximum_z - minimum_z
-    scale = 1.75 / source_height
-    # The source is Z-down: feet are at max Z and the crown is at min Z.
-    # This rotation is proper (determinant +1), keeps its original winding,
-    # and maps the model's forward-facing -Y onto MarchCraft's forward -Z.
-    positions = [(x * scale, (maximum_z - z) * scale, y * scale) for x, y, z in positions_in]
-    normals = []
-    for x, y, z in normals_in:
-        transformed = (x, -z, y)
-        length = math.sqrt(sum(value * value for value in transformed)) or 1.0
-        normals.append(tuple(value / length for value in transformed))
+    source_data = json.loads(source.read_text(encoding="utf-8"))
+    if source_data.get("format") != "marchcraft.weighted-mesh.v1":
+        raise ValueError(f"{source} is not a MarchCraft weighted-mesh interchange file")
+    rows = source_data["vertices"]
+    positions, normals = retarget_rows(rows, source_data["sourceJoints"])
+    texcoords = [tuple(row["texcoord"]) for row in rows]
+    colors = [tuple(row.get("color", (1.0, 1.0, 1.0, 1.0))) for row in rows]
+    indices = list(source_data["indices"])
+    source_height = float(source_data["sourceHeight"])
+    scale = float(source_data["scale"])
 
     joints = []
     weights = []
-    for position in positions:
-        joint_row, weight_row = segment_weights(position)
-        joints.append(joint_row)
-        weights.append(weight_row)
+    for row in rows:
+        influences = sorted(
+            ((J[name], float(weight)) for name, weight in row["weights"].items()),
+            key=lambda item: item[1], reverse=True)[:4]
+        total = sum(weight for _, weight in influences) or 1.0
+        joints.append(tuple([joint for joint, _ in influences] + [0] * (4 - len(influences))))
+        weights.append(tuple([weight / total for _, weight in influences]
+                             + [0.0] * (4 - len(influences))))
 
     if grid_size > 0.0:
-        positions, normals, texcoords, joints, weights, indices = simplify_geometry(
-            positions, normals, texcoords, joints, weights, indices, grid_size)
+        positions, normals, texcoords, colors, joints, weights, indices = simplify_geometry(
+            positions, normals, texcoords, colors, joints, weights, indices, grid_size)
 
     builder = BufferBuilder()
     position_accessor = builder.add_accessor(positions, 5126, "VEC3", target=ARRAY_BUFFER, include_bounds=True)
     normal_accessor = builder.add_accessor(normals, 5126, "VEC3", target=ARRAY_BUFFER)
     texcoord_accessor = builder.add_accessor(texcoords, 5126, "VEC2", target=ARRAY_BUFFER)
+    color_accessor = builder.add_accessor(colors, 5126, "VEC4", target=ARRAY_BUFFER)
     joint_accessor = builder.add_accessor(joints, 5123, "VEC4", target=ARRAY_BUFFER)
     weight_accessor = builder.add_accessor(weights, 5126, "VEC4", target=ARRAY_BUFFER)
     index_accessor = builder.add_accessor(indices, 5125, "SCALAR", target=ELEMENT_ARRAY_BUFFER)
@@ -443,12 +588,12 @@ def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.
     document = {
         "asset": {
             "version": "2.0",
-            "generator": "MarchCraft human performer conditioner v1",
-            "copyright": "HUMAN_BODY by vistaalienprime, CC BY 4.0",
+            "generator": "MarchCraft human performer conditioner v2",
+            "copyright": "Rigged Male Human by aaravanimates; used with creator permission",
             "extras": {
-                "author": "vistaalienprime",
-                "license": "CC-BY-4.0",
-                "source": "https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e",
+                "author": "aaravanimates",
+                "license": "Creator-Permission",
+                "source": "https://free3d.com/3d-model/rigged-male-human-442626.html",
                 "canonicalHeightMeters": 1.75,
                 "upAxis": "+Y",
                 "forwardAxis": "-Z",
@@ -465,6 +610,7 @@ def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.
                     "POSITION": position_accessor,
                     "NORMAL": normal_accessor,
                     "TEXCOORD_0": texcoord_accessor,
+                    "COLOR_0": color_accessor,
                     "JOINTS_0": joint_accessor,
                     "WEIGHTS_0": weight_accessor,
                 },

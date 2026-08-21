@@ -2,14 +2,27 @@
 
 MarchCraft includes the following redistributable components.
 
+## Rigged Male Human
+
+The runtime performer is conditioned from `Rigged Male Human` by
+aaravanimates. The creator requested attribution and, as represented by the
+MarchCraft contributor Andrew, directly authorized MarchCraft to use, modify,
+and publicly redistribute the model in this public GitHub repository. The
+source page is https://free3d.com/3d-model/rigged-male-human-442626.html. The
+source Blender file and permission record are preserved in
+`Models/lowpolyboy_rigged.blend` and `Models/LowPolyBoyAttribution.txt`.
+
+This permission-based use is not represented as a Creative Commons or
+public-domain license.
+
 ## HUMAN_BODY
 
 `HUMAN_BODY` by vistaalienprime is licensed under the Creative Commons
 Attribution 4.0 International license (CC BY 4.0). The original source is
 https://sketchfab.com/3d-models/human-body-f022e4a3641943328b2fbfdf0f7c3e1e.
-MarchCraft reorients, scales, rigs, and animates the mesh; the original model and
-license notice are preserved in `Models/HUMAN.blend`, `Models/human_body.glb`, and
-`Models/HumanBodyLicense.txt`.
+This legacy, non-runtime source is retained for attribution history. Its original
+model and license notice are preserved in `Models/HUMAN.blend`,
+`Models/human_body.glb`, and `Models/HumanBodyLicense.txt`.
 
 License: https://creativecommons.org/licenses/by/4.0/
 

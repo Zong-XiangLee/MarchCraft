@@ -25,6 +25,7 @@ struct HumanVertex {
     float position[3];
     float normal[3];
     float texCoord[2];
+    float color[4];
     // QQuick3DGeometry only accepts floating-point custom vertex attributes.
     // glTF stores JOINTS_0 as uint16, so convert the indices while loading.
     float joints[4];
@@ -32,7 +33,7 @@ struct HumanVertex {
 };
 #pragma pack(pop)
 
-static_assert(sizeof(HumanVertex) == 64);
+static_assert(sizeof(HumanVertex) == 80);
 
 struct GeometryCache {
     QByteArray vertices;
@@ -148,6 +149,7 @@ GeometryCache loadGeometry(int detailLevel)
     const auto positions = accessorView(document, binary, attributes.value(QStringLiteral("POSITION")).toInt(-1), &accessorError);
     const auto normals = accessorView(document, binary, attributes.value(QStringLiteral("NORMAL")).toInt(-1), &accessorError);
     const auto texCoords = accessorView(document, binary, attributes.value(QStringLiteral("TEXCOORD_0")).toInt(-1), &accessorError);
+    const auto colors = accessorView(document, binary, attributes.value(QStringLiteral("COLOR_0")).toInt(-1), &accessorError);
     const auto joints = accessorView(document, binary, attributes.value(QStringLiteral("JOINTS_0")).toInt(-1), &accessorError);
     const auto weights = accessorView(document, binary, attributes.value(QStringLiteral("WEIGHTS_0")).toInt(-1), &accessorError);
     const auto indices = accessorView(document, binary, primitive.value(QStringLiteral("indices")).toInt(-1), &accessorError);
@@ -156,9 +158,11 @@ GeometryCache loadGeometry(int detailLevel)
         return result;
     }
     if (positions.count <= 0 || normals.count != positions.count || texCoords.count != positions.count
+        || colors.count != positions.count
         || joints.count != positions.count || weights.count != positions.count
         || positions.componentType != 5126 || normals.componentType != 5126
-        || texCoords.componentType != 5126 || joints.componentType != 5123
+        || texCoords.componentType != 5126 || colors.componentType != 5126
+        || joints.componentType != 5123
         || weights.componentType != 5126 || indices.componentType != 5125) {
         result.error = QStringLiteral("Human performer GLB vertex layout does not match the canonical contract");
         return result;
@@ -170,6 +174,7 @@ GeometryCache loadGeometry(int detailLevel)
         std::memcpy(destination[row].position, positions.data + row * positions.stride, sizeof(destination[row].position));
         std::memcpy(destination[row].normal, normals.data + row * normals.stride, sizeof(destination[row].normal));
         std::memcpy(destination[row].texCoord, texCoords.data + row * texCoords.stride, sizeof(destination[row].texCoord));
+        std::memcpy(destination[row].color, colors.data + row * colors.stride, sizeof(destination[row].color));
         const auto *jointRow = reinterpret_cast<const quint16 *>(joints.data + row * joints.stride);
         for (int influence = 0; influence < 4; ++influence)
             destination[row].joints[influence] = float(qFromLittleEndian(jointRow[influence]));
@@ -236,6 +241,8 @@ void HumanGeometry::applyDetailLevel()
     addAttribute(QQuick3DGeometry::Attribute::NormalSemantic, offsetof(HumanVertex, normal),
                  QQuick3DGeometry::Attribute::F32Type);
     addAttribute(QQuick3DGeometry::Attribute::TexCoordSemantic, offsetof(HumanVertex, texCoord),
+                 QQuick3DGeometry::Attribute::F32Type);
+    addAttribute(QQuick3DGeometry::Attribute::ColorSemantic, offsetof(HumanVertex, color),
                  QQuick3DGeometry::Attribute::F32Type);
     addAttribute(QQuick3DGeometry::Attribute::JointSemantic, offsetof(HumanVertex, joints),
                  QQuick3DGeometry::Attribute::F32Type);

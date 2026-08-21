@@ -24,7 +24,7 @@ def python_rows(rows) -> str:
 
 
 def write_tables(js_path: pathlib.Path, preview_path: pathlib.Path,
-                 sole_tables, correction_tables) -> None:
+                 sole_tables, correction_tables, residual_tables) -> None:
     js = js_path.read_text(encoding="utf-8")
     for angle, row in zip((0, 45, 90, 135, 180, 225, 270, 315), sole_tables):
         js = re.sub(rf"var sole{angle} = \[[^\n]*\]",
@@ -32,6 +32,12 @@ def write_tables(js_path: pathlib.Path, preview_path: pathlib.Path,
     for label, rows in correction_tables.items():
         js = re.sub(rf"var {label} = \[.*?\n\]", f"var {label} = {js_rows(rows)}",
                     js, flags=re.DOTALL)
+    residual_angles = (105, 120, 135, 150, 165, 195, 210, 225, 240, 255)
+    residual_rows = residual_tables[1:6] + residual_tables[7:12]
+    for angle, row in zip(residual_angles, residual_rows):
+        js = re.sub(rf"var residual{angle} = \[[^\n]*\]",
+                    f"var residual{angle} = [" + ",".join(
+                        f"{value:.5f}" for value in row) + "]", js)
     js_path.write_text(js, encoding="utf-8")
 
     preview = preview_path.read_text(encoding="utf-8")
@@ -53,6 +59,9 @@ def write_tables(js_path: pathlib.Path, preview_path: pathlib.Path,
         preview = re.sub(rf"{python_names[label]} = \(.*?(?=\n{next_names[label]})",
                          f"{python_names[label]} = {python_rows(rows)}",
                          preview, flags=re.DOTALL)
+    preview = re.sub(r"EXTENDED_RESIDUALS = \(.*?(?=\n\n\ndef identity)",
+                     f"EXTENDED_RESIDUALS = {python_rows(residual_tables)}",
+                     preview, flags=re.DOTALL)
     preview_path.write_text(preview, encoding="utf-8")
 
 
@@ -123,9 +132,27 @@ def main() -> None:
         for table in corrections:
             print("  [" + ",".join(f"{value:.5f}" for value in table) + "],")
         print("]")
+
+    residual_angles = tuple(range(90, 271, 15))
+    residual_tables = [[0.0] * 32 for _ in residual_angles]
+    preview.EXTENDED_RESIDUALS = tuple(tuple(table) for table in residual_tables)
+    for table_index, angle in enumerate(residual_angles):
+        if angle in (90, 180, 270):
+            continue
+        for sample in range(32):
+            phase = sample / 32.0
+            vertices = preview.skinned_vertices(
+                positions, joints, weights,
+                preview.pose_matrices(f"direction.{angle}", phase, 0.70))
+            residual_tables[table_index][sample] -= min(vertex[1] for vertex in vertices)
+    preview.EXTENDED_RESIDUALS = tuple(tuple(table) for table in residual_tables)
+    print("extendedResiduals = [")
+    for table in residual_tables:
+        print("  [" + ",".join(f"{value:.5f}" for value in table) + "],")
+    print("]")
     if arguments.write_js and arguments.write_preview:
         write_tables(arguments.write_js, arguments.write_preview,
-                     sole_tables, correction_tables)
+                     sole_tables, correction_tables, residual_tables)
         print(f"Updated {arguments.write_js} and {arguments.write_preview}")
 
 
