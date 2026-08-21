@@ -59,7 +59,13 @@ and saves an editable `.blend` for manual weight and pose refinement.
 
 The runtime gait is count-driven by `qml/HumanGait.js`. It uses planted-foot
 targets and a two-bone leg solve for forward and backward technique, while
-slides preserve the authored chest facing. After changing the rig, weights, or
+slides distribute facing progressively through the pelvis, chest, and shoulders.
+The neutral runtime pose is marching attention: grounded closed heels, 90-degree
+total toe-out, a vertically stacked pelvis and torso, head approximately 10
+degrees above center, and a face-height triangular hand set approximated with
+the available non-fingered hand bones. Forward technique presents a high toe at
+heel contact, rolls through the full foot, and releases from the forefoot; backward
+technique stays on a calm forefoot platform. After changing the rig, weights, or
 gait constants, run both validators and regenerate the contact sheet:
 
 ```powershell

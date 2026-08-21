@@ -63,7 +63,7 @@ Item {
             detailLevel: drillProject.graphicsProfile === "presentation" ? 0
                        : drillProject.graphicsProfile === "performance" ? 2
                        : drillProject.graphicsProfile === "automatic"
-                         ? (drillProject.performerCount > 150 ? 1 : 0) : 1
+                         ? (drillProject.performerCount > 150 ? 2 : 0) : 1
         }
 
         Node {
@@ -407,15 +407,15 @@ Item {
                     locomotionMode: performerNode.locomotionMode
                     closingTransition: performerNode.closingTransition
                     debugOverlay: drillProject.debug3D
+                    castBodyShadow: drillProject.graphicsProfile === "presentation" ||
+                                    (drillProject.graphicsProfile !== "performance" &&
+                                     drillProject.performerCount <= 150)
                 }
             }
         }
         } // drillWorld
 
         Repeater3D {
-            // Props are intentionally out of the editor surface until the
-            // asset-import workflow is ready.
-            visible: false
             model: drillProject.props
             delegate: Prop3D {
                 required property var modelData
@@ -460,9 +460,9 @@ Item {
         anchors.top: parent.top
         anchors.margins: 14
         spacing: 6
-        Button { text: "Press box"; onClicked: root.setCameraPreset("press") }
-        Button { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
-        Button { text: "Field"; onClicked: root.setCameraPreset("field") }
+        AppButton { text: "Press box"; onClicked: root.setCameraPreset("press") }
+        AppButton { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
+        AppButton { text: "Field"; onClicked: root.setCameraPreset("field") }
     }
 
     Flow {
@@ -517,7 +517,7 @@ Item {
         Label {
             visible: !assetCatalog.valid
             text: "Asset catalog error"
-            color: "#fb7185"
+            color: "#e07178"
             ToolTip.visible: hovered
             ToolTip.text: assetCatalog.validationErrors.join("\n")
             property bool hovered: catalogHover.hovered

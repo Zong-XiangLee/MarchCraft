@@ -446,7 +446,8 @@ DrillProject::DrillProject(QObject *parent)
     connect(&m_autosaveTimer, &QTimer::timeout, this, &DrillProject::autosave);
     connect(&m_undo, &QUndoStack::canUndoChanged, this, &DrillProject::historyChanged);
     connect(&m_undo, &QUndoStack::canRedoChanged, this, &DrillProject::historyChanged);
-    loadDemo();
+    newProject();
+    m_autosaveTimer.stop();
     m_undo.clear();
     m_dirty = false;
 }
@@ -676,12 +677,12 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
-    case TravelHeadingRole: return animationStateAt(index.row()).travelDirectionDegrees;
-    case TravelStepsPerCountRole: return animationStateAt(index.row()).travelStepsPerCount;
-    case LocomotionModeRole: return animationStateAt(index.row()).locomotion;
-    case GaitPhaseRole: return animationStateAt(index.row()).normalizedTime;
+    case TravelHeadingRole: return cachedAnimationStateAt(index.row()).travelDirectionDegrees;
+    case TravelStepsPerCountRole: return cachedAnimationStateAt(index.row()).travelStepsPerCount;
+    case LocomotionModeRole: return cachedAnimationStateAt(index.row()).locomotion;
+    case GaitPhaseRole: return cachedAnimationStateAt(index.row()).normalizedTime;
     case TravelPathTypeRole: return m_currentSet > 0 ? placement.pathType : QStringLiteral("direct");
-    case ClosingTransitionRole: return animationStateAt(index.row()).closesAtDestination;
+    case ClosingTransitionRole: return cachedAnimationStateAt(index.row()).closesAtDestination;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
@@ -1596,6 +1597,34 @@ bool DrillProject::selectionIsExactGroup() const
     for(const auto&group:m_sets[m_currentSet].activeVariant().groups){if(group.performerIds.size()!=selected.size())continue;bool same=true;for(const auto&id:group.performerIds)same=same&&selected.contains(id);if(same)return true;}return false;
 }
 
+bool DrillProject::canGroupSelection() const
+{
+    return selectedCount() >= 2 && !selectionIsExactGroup();
+}
+
+bool DrillProject::canRemoveSelectionFromGroup() const
+{
+    if (m_currentSet < 0) return false;
+    QSet<QString> selected;
+    for (const auto &performer : m_performers)
+        if (performer.selected) selected.insert(performer.id);
+    for (const auto &group : m_sets[m_currentSet].activeVariant().groups) {
+        bool selectedMember = false;
+        bool unselectedMember = false;
+        for (const auto &id : group.performerIds) {
+            selectedMember |= selected.contains(id);
+            unselectedMember |= !selected.contains(id);
+        }
+        if (selectedMember && unselectedMember) return true;
+    }
+    return false;
+}
+
+bool DrillProject::canUngroupSelection() const
+{
+    return selectedGroupedCount() > 0;
+}
+
 double DrillProject::averageDistance() const
 {
     return m_performers.isEmpty() ? 0.0 : totalDistance() / m_performers.size();
@@ -1688,6 +1717,7 @@ void DrillProject::loadDemo()
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
         m_undo.clear();
+        m_autosaveTimer.stop();
         m_dirty = false;
         emit dirtyChanged();
         emit projectChanged();
@@ -1747,7 +1777,11 @@ void DrillProject::loadDemo()
     endResetModel();
     emit performerCountChanged();
     m_undo.clear();
-    markDirty(QStringLiteral("Demo loaded"));
+    m_autosaveTimer.stop();
+    m_projectPath.clear();
+    m_dirty = false;
+    emit dirtyChanged();
+    setStatus(QStringLiteral("Demo loaded"));
     emit projectChanged();
     emit setsChanged();
     emit currentSetChanged();
@@ -1916,6 +1950,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     if (!restoreJson(root, false))
         return false;
     m_projectPath = legacyJson ? QString{} : path;
+    m_autosaveTimer.stop();
     m_dirty = false;
     m_undo.clear();
     emit dirtyChanged();
@@ -2821,9 +2856,13 @@ void DrillProject::selectGroupForPerformer(int row, bool additive)
 void DrillProject::groupSelected(const QString &name)
 {
     if (m_currentSet < 0) return;
+    if (!canGroupSelection()) {
+        setStatus(selectedCount() < 2 ? QStringLiteral("Select at least two performers to group")
+                                      : QStringLiteral("The selected performers are already grouped"));
+        return;
+    }
     QVector<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.push_back(performer.id);
-    if (selected.size() < 2) { setStatus(QStringLiteral("Select at least two performers to group")); return; }
     const auto before = toJson();
     auto &variant = m_sets[m_currentSet].activeVariant();
     QSet<QString> selectedIds;
@@ -2841,7 +2880,7 @@ void DrillProject::groupSelected(const QString &name)
 
 void DrillProject::removeSelectedFromGroup()
 {
-    if (m_currentSet < 0) return;
+    if (m_currentSet < 0 || !canRemoveSelectionFromGroup()) return;
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
@@ -2856,7 +2895,7 @@ void DrillProject::removeSelectedFromGroup()
 
 void DrillProject::ungroupSelected()
 {
-    if (m_currentSet < 0) return;
+    if (m_currentSet < 0 || !canUngroupSelection()) return;
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
@@ -4677,6 +4716,11 @@ void DrillProject::autosave()
 
 void DrillProject::emitAllDataChanged()
 {
+    ++m_animationStateRevision;
+    if (m_animationStateRevision == 0) {
+        m_animationStateRevision = 1;
+        m_animationStateCacheRevisions.fill(0);
+    }
     if (!m_performers.isEmpty())
         emit dataChanged(index(0), index(m_performers.size() - 1));
     emit statisticsChanged();
@@ -4794,6 +4838,19 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     else
         state.locomotion = QStringLiteral("slide.left");
     return state;
+}
+
+const AnimationState &DrillProject::cachedAnimationStateAt(int performerIndex) const
+{
+    if (m_animationStateCache.size() != m_performers.size()) {
+        m_animationStateCache.resize(m_performers.size());
+        m_animationStateCacheRevisions.fill(0, m_performers.size());
+    }
+    if (m_animationStateCacheRevisions.at(performerIndex) != m_animationStateRevision) {
+        m_animationStateCache[performerIndex] = animationStateAt(performerIndex);
+        m_animationStateCacheRevisions[performerIndex] = m_animationStateRevision;
+    }
+    return m_animationStateCache.at(performerIndex);
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const

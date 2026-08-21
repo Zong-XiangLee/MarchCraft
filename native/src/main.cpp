@@ -1,14 +1,18 @@
 #include "DrillProject.h"
 #include "AssetCatalog.h"
 #include "TransportController.h"
+#include "WorkspaceController.h"
 
 #include <QGuiApplication>
+#include <QColor>
 #include <QDateTime>
 #include <QFile>
+#include <QIcon>
 #include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
 #include <QQuickStyle>
+#include <QPalette>
 #include <QTimer>
 #include <QTextStream>
 
@@ -32,13 +36,53 @@ int main(int argc, char *argv[])
     application.setOrganizationDomain(QStringLiteral("marchcraft.local"));
     application.setApplicationName(QStringLiteral("MarchCraft"));
     application.setApplicationVersion(QStringLiteral("0.6.0"));
+    application.setWindowIcon(QIcon(QStringLiteral(":/branding/marchcraft-logo.png")));
     qInstallMessageHandler(writeApplicationLog);
     QQuickStyle::setStyle(QStringLiteral("Fusion"));
+
+    QPalette palette;
+    palette.setColor(QPalette::Window, QColor(QStringLiteral("#121821")));
+    palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#f2f5f7")));
+    palette.setColor(QPalette::Base, QColor(QStringLiteral("#0f151d")));
+    palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#18212c")));
+    palette.setColor(QPalette::Text, QColor(QStringLiteral("#f2f5f7")));
+    palette.setColor(QPalette::Button, QColor(QStringLiteral("#18212c")));
+    palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#f2f5f7")));
+    palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#5b8def")));
+    palette.setColor(QPalette::HighlightedText, QColor(QStringLiteral("#ffffff")));
+    palette.setColor(QPalette::Mid, QColor(QStringLiteral("#293443")));
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(QStringLiteral("#66717f")));
+    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(QStringLiteral("#66717f")));
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(QStringLiteral("#66717f")));
+    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(QStringLiteral("#222c38")));
+    application.setPalette(palette);
 
     DrillProject project;
     TransportController transport(&project);
     AssetCatalog assetCatalog;
+    WorkspaceController workspaceController;
     const QStringList arguments = application.arguments();
+    const bool qaHome = arguments.contains(QStringLiteral("--qa-home"));
+    const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
+    const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
+    const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
+    const QStringList editorFlags{
+        QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
+        QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
+        QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
+        QStringLiteral("--venue"), QStringLiteral("--lighting"),
+        QStringLiteral("--graphics-profile"), QStringLiteral("--ground-debug"),
+        QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
+    };
+    bool startInEditor = false;
+    for (const QString &flag : editorFlags)
+        startInEditor |= arguments.contains(flag);
+    startInEditor |= qaShapes;
+    startInEditor &= !(qaHome || qaNewProject);
+    if (startInEditor)
+        project.loadDemo();
+    if (qaShapes)
+        project.selectAll();
     const int venueFlag = arguments.indexOf(QStringLiteral("--venue"));
     if (venueFlag >= 0 && venueFlag + 1 < arguments.size())
         project.setVenuePreset(arguments.at(venueFlag + 1));
@@ -71,9 +115,19 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
     engine.rootContext()->setContextProperty(QStringLiteral("transport"), &transport);
     engine.rootContext()->setContextProperty(QStringLiteral("assetCatalog"), &assetCatalog);
+    engine.rootContext()->setContextProperty(QStringLiteral("workspaceController"), &workspaceController);
+    engine.rootContext()->setContextProperty(QStringLiteral("initialWorkspaceActive"), startInEditor);
+    engine.rootContext()->setContextProperty(QStringLiteral("qaMode"), startInEditor || qaHome || qaNewProject);
+    engine.rootContext()->setContextProperty(QStringLiteral("initialHomeMode"),
+        qaNewProject ? QStringLiteral("new") : QStringLiteral("dashboard"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &application, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule(QStringLiteral("MarchCraft"), QStringLiteral("Main"));
+
+    if (qaMinimum && !engine.rootObjects().isEmpty()) {
+        engine.rootObjects().first()->setProperty("width", 1120);
+        engine.rootObjects().first()->setProperty("height", 720);
+    }
 
     if (arguments.contains(QStringLiteral("--3d")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("threeD", true);
@@ -82,6 +136,8 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qa3DView", arguments.at(viewFlag + 1));
     if (arguments.contains(QStringLiteral("--qa-set-drag-preview")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
+    if (qaShapes && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("qaShapePalette", true);
     const int screenshotFlag = arguments.indexOf(QStringLiteral("--screenshot"));
     const bool screenshotRequested = screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size();
     if (screenshotRequested) {
