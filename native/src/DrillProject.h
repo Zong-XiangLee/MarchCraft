@@ -88,6 +88,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QString musicSourceType READ musicSourceType NOTIFY musicChanged)
     Q_PROPERTY(int musicMeasureCount READ musicMeasureCount NOTIFY musicChanged)
     Q_PROPERTY(int musicTrackCount READ musicTrackCount NOTIFY musicChanged)
+    Q_PROPERTY(QVariantList musicSections READ musicSections NOTIFY musicChanged)
     Q_PROPERTY(double musicDurationMs READ musicDurationMs NOTIFY musicChanged)
     Q_PROPERTY(QString musicDiagnostics READ musicDiagnostics NOTIFY musicChanged)
     Q_PROPERTY(int musicSelectionStart READ musicSelectionStart NOTIFY musicChanged)
@@ -248,6 +249,7 @@ public:
     QString musicSourceType() const { return m_music.sourceType; }
     int musicMeasureCount() const { return m_music.measures.size(); }
     int musicTrackCount() const { return m_music.tracks.size(); }
+    QVariantList musicSections() const;
     double musicDurationMs() const { return m_music.durationMs; }
     QString musicDiagnostics() const { return m_music.diagnostics.join(QStringLiteral(" · ")); }
     int musicSelectionStart() const { return m_musicSelectionStart; }
@@ -307,6 +309,9 @@ public:
     Q_INVOKABLE void setMusicTrackVolume(int index, double volume);
     Q_INVOKABLE void selectSetRange(int index, bool extend = false);
     Q_INVOKABLE void setMusicSelection(int startMeasure, int endMeasure);
+    Q_INVOKABLE QString addMusicSection(const QString &name, const QString &type,
+                                        const QString &color, int startMeasure, int endMeasure);
+    Q_INVOKABLE void removeMusicSection(const QString &id);
     Q_INVOKABLE QVariantList previewSetGeneration(int startMeasure, int endMeasure,
                                                   const QString &mode = QStringLiteral("subdivide"),
                                                   int subdivision = 16, double stepMultiplier = 1.0) const;
@@ -530,6 +535,15 @@ private:
         QVariantMap metrics;
     };
 
+    struct MusicSection {
+        QString id;
+        QString name;
+        QString type;
+        QString color;
+        int startMeasure = 0;
+        int endMeasure = 0;
+    };
+
     QString m_showName{QStringLiteral("Untitled Show")};
     QString m_fieldPreset{QStringLiteral("hs")};
     QString m_audioSource;
@@ -550,6 +564,7 @@ private:
     MarchCraft::MusicDocument m_music;
     int m_musicSelectionStart = -1;
     int m_musicSelectionEnd = -1;
+    QVector<MusicSection> m_musicSections;
     QString m_playbackSource{QStringLiteral("midi")};
     double m_midiMasterVolume = 0.75;
     bool m_loopEnabled = false;

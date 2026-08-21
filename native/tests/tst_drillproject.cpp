@@ -859,6 +859,53 @@ private slots:
         QCOMPARE(restored.openingBehavior(), QStringLiteral("hold")); QCOMPARE(restored.openingCounts(), 12);
     }
 
+    void musicHoldThenMoveUsesExactMeasureBoundaries()
+    {
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 40.0, 40.0);
+        project.selectPerformer(0, false);
+        const QVariantMap hold{{QStringLiteral("startTick"), 0},
+            {QStringLiteral("endTick"), 15360}, {QStringLiteral("startMeasure"), 1},
+            {QStringLiteral("endMeasure"), 4}, {QStringLiteral("stepMultiplier"), 0.0}};
+        const QVariantMap move{{QStringLiteral("startTick"), 15360},
+            {QStringLiteral("endTick"), 30720}, {QStringLiteral("startMeasure"), 5},
+            {QStringLiteral("endMeasure"), 8}, {QStringLiteral("stepMultiplier"), 1.0}};
+        QVERIFY(project.commitSetGenerationPlan({hold, move}));
+        QCOMPARE(project.setCount(), 3);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), 15360);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("stepMultiplier")).toDouble(), 0.0);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong(), 30720);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("stepMultiplier")).toDouble(), 1.0);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 16);
+
+        // Reapplying a movement mode to an existing boundary must update it.
+        QVariantMap revisedMove = move;
+        revisedMove.insert(QStringLiteral("stepMultiplier"), 0.0);
+        QVERIFY(project.commitSetGenerationPlan({revisedMove}));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("stepMultiplier")).toDouble(), 0.0);
+        QVERIFY(project.commitSetGenerationPlan({move}));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("stepMultiplier")).toDouble(), 1.0);
+
+        project.setCurrentSetIndex(2);
+        project.nudgeSelected(8.0, 0.0);
+        TransportController transport(&project);
+        transport.seekTick(15359);
+        QCOMPARE(project.currentSetIndex(), 1);
+        QVERIFY(project.playhead() > 0.999);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 40.0);
+        transport.seekTick(15360);
+        QCOMPARE(project.currentSetIndex(), 2);
+        QCOMPARE(project.playhead(), 0.0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 40.0);
+        transport.seekTick(30719);
+        QVERIFY(project.playhead() > 0.999);
+        QVERIFY(project.data(project.index(0, 0), DrillProject::XRole).toDouble() > 47.99);
+        transport.seekTick(30720);
+        QCOMPARE(project.playhead(), 1.0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 48.0);
+    }
+
     void liveSetMovePreservesCardsAndDurations()
     {
         DrillProject project; project.newProject(); project.addSet(QStringLiteral("Second"), 8); project.addSet(QStringLiteral("Third"), 12);
@@ -941,6 +988,10 @@ private slots:
         QCOMPARE(project.musicTrackInfo(1).value(QStringLiteral("noteCount")).toInt(), 2);
         QCOMPARE(project.musicMeasureInfo(0).value(QStringLiteral("numerator")).toInt(), 3);
         QVERIFY(qAbs(project.musicDurationMs() - 3000.0) < 0.01);
+        const QString sectionId = project.addMusicSection(QStringLiteral("Opening"), QStringLiteral("movement"),
+                                                           QStringLiteral("#8b5cf6"), 0, 1);
+        QVERIFY(!sectionId.isEmpty()); QCOMPARE(project.musicSections().size(), 1);
+        QCOMPARE(project.musicMeasureInfo(1).value(QStringLiteral("sections")).toList().size(), 1);
 
         const auto oneMove = project.previewSetGeneration(0, 1, QStringLiteral("oneMove"), 16, 1.0);
         QCOMPARE(oneMove.size(), 1); QCOMPARE(oneMove.first().toMap().value(QStringLiteral("counts")).toInt(), 6);
@@ -956,6 +1007,8 @@ private slots:
         QCOMPARE(project.setInfo(2).value(QStringLiteral("stepMultiplier")).toDouble(), 2.0);
         project.undo(); QCOMPARE(project.setCount(), 1); project.redo(); QCOMPARE(project.setCount(), 3);
         project.selectSetRange(0, false); project.selectSetRange(2, true);
+        QVERIFY(project.musicMeasureInfo(0).value(QStringLiteral("inSetRange")).toBool());
+        QVERIFY(project.musicMeasureInfo(1).value(QStringLiteral("inSetRange")).toBool());
         project.setLoopEnabled(true); project.setPlaybackSource(QStringLiteral("mute"));
         project.setMidiMasterVolume(0.42); project.setMusicTrackMuted(1, true);
         TransportController transport(&project);
@@ -971,6 +1024,8 @@ private slots:
         QVERIFY(restored.loopEnabled()); QCOMPARE(restored.playbackSource(), QStringLiteral("mute"));
         QVERIFY(qAbs(restored.midiMasterVolume()-0.42)<0.001);
         QVERIFY(restored.musicTrackInfo(1).value(QStringLiteral("muted")).toBool());
+        QCOMPARE(restored.musicSections().size(), 1);
+        QCOMPARE(restored.musicSections().first().toMap().value(QStringLiteral("name")).toString(), QStringLiteral("Opening"));
     }
 
     void suppliedFocalPointMidiAcceptance()

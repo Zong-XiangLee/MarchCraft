@@ -25,6 +25,7 @@
 #include <QSet>
 #include <QTextStream>
 #include <QUrl>
+#include <QUuid>
 #include <QXmlStreamReader>
 #include <QtConcurrent>
 #include <QtMath>
@@ -1040,6 +1041,7 @@ void DrillProject::applyMusicDocument(MarchCraft::MusicDocument document, const 
 {
     const auto before = toJson();
     m_music = std::move(document);
+    m_musicSections.clear();
     if (m_music.sourceType == QStringLiteral("midi")) setPlaybackSource(QStringLiteral("midi"));
     m_musicSelectionStart = m_music.measures.isEmpty() ? -1 : 0;
     m_musicSelectionEnd = m_musicSelectionStart;
@@ -1071,6 +1073,24 @@ void DrillProject::rebuildTimingFromMusic()
     if (!m_music.tempos.isEmpty()) m_bpm = m_music.tempos.first().bpm;
 }
 
+QVariantList DrillProject::musicSections() const
+{
+    QVariantList result;
+    result.reserve(m_musicSections.size());
+    for (const auto &section : m_musicSections) {
+        result.push_back(QVariantMap{{QStringLiteral("id"), section.id},
+            {QStringLiteral("name"), section.name}, {QStringLiteral("type"), section.type},
+            {QStringLiteral("color"), section.color},
+            {QStringLiteral("startMeasure"), section.startMeasure},
+            {QStringLiteral("endMeasure"), section.endMeasure},
+            {QStringLiteral("startNumber"), section.startMeasure < m_music.measures.size()
+                ? m_music.measures[section.startMeasure].displayNumber : section.startMeasure + 1},
+            {QStringLiteral("endNumber"), section.endMeasure < m_music.measures.size()
+                ? m_music.measures[section.endMeasure].displayNumber : section.endMeasure + 1}});
+    }
+    return result;
+}
+
 QVariantMap DrillProject::musicMeasureInfo(int index) const
 {
     if (index < 0 || index >= m_music.measures.size()) return {};
@@ -1079,11 +1099,22 @@ QVariantMap DrillProject::musicMeasureInfo(int index) const
     for (const auto &tempo : m_music.tempos) { if (tempo.tick > measure.startTick) break; bpm = tempo.bpm; }
     int setIndex = -1;
     for (int i = 0; i < m_sets.size(); ++i)
-        if (m_sets[i].startTick >= measure.startTick && m_sets[i].startTick <= measure.endTick) { setIndex = i; break; }
+        if (m_sets[i].startTick >= measure.startTick && m_sets[i].startTick < measure.endTick) { setIndex = i; break; }
     const int rangeA=m_sets.isEmpty()?0:qBound(0,qMin(m_selectedSetStart,m_selectedSetEnd),m_sets.size()-1);
     const int rangeB=m_sets.isEmpty()?0:qBound(0,qMax(m_selectedSetStart,m_selectedSetEnd),m_sets.size()-1);
     const qint64 rangeStart = m_sets.isEmpty() ? -1 : m_sets[rangeA].startTick;
     const qint64 rangeEnd = m_sets.isEmpty() ? -1 : m_sets[rangeB].startTick;
+    QVariantList sections;
+    for (const auto &section : m_musicSections) {
+        if (index >= section.startMeasure && index <= section.endMeasure)
+            sections.push_back(QVariantMap{{QStringLiteral("id"), section.id},
+                {QStringLiteral("name"), section.name}, {QStringLiteral("type"), section.type},
+                {QStringLiteral("color"), section.color},
+                {QStringLiteral("first"), index == section.startMeasure},
+                {QStringLiteral("last"), index == section.endMeasure}});
+    }
+    const bool singleSetMeasure = !m_sets.isEmpty() && rangeA == rangeB
+        && m_sets[rangeA].startTick >= measure.startTick && m_sets[rangeA].startTick < measure.endTick;
     return {{QStringLiteral("index"), index}, {QStringLiteral("number"), measure.displayNumber},
             {QStringLiteral("startTick"), measure.startTick}, {QStringLiteral("endTick"), measure.endTick},
             {QStringLiteral("numerator"), measure.numerator}, {QStringLiteral("denominator"), measure.denominator},
@@ -1093,7 +1124,9 @@ QVariantMap DrillProject::musicMeasureInfo(int index) const
             {QStringLiteral("selected"), index >= qMin(m_musicSelectionStart, m_musicSelectionEnd)
                 && index <= qMax(m_musicSelectionStart, m_musicSelectionEnd)},
             {QStringLiteral("setIndex"), setIndex},
-            {QStringLiteral("inSetRange"), rangeEnd > rangeStart && measure.endTick > rangeStart && measure.startTick < rangeEnd}};
+            {QStringLiteral("sections"), sections},
+            {QStringLiteral("inSetRange"), singleSetMeasure
+                || (rangeEnd > rangeStart && measure.endTick > rangeStart && measure.startTick < rangeEnd)}};
 }
 
 QVariantMap DrillProject::musicTrackInfo(int index) const
@@ -1145,14 +1178,53 @@ void DrillProject::setMusicSelection(int startMeasure, int endMeasure)
     m_musicSelectionStart = startMeasure; m_musicSelectionEnd = endMeasure; emit musicChanged();
 }
 
+QString DrillProject::addMusicSection(const QString &name, const QString &type,
+                                      const QString &color, int startMeasure, int endMeasure)
+{
+    if (m_music.measures.isEmpty()) return {};
+    const int requestedStart = qMin(startMeasure, endMeasure);
+    const int requestedEnd = qMax(startMeasure, endMeasure);
+    startMeasure = qBound(0, requestedStart, m_music.measures.size() - 1);
+    endMeasure = qBound(startMeasure, requestedEnd, m_music.measures.size() - 1);
+    const QString cleanName = name.simplified().left(60);
+    if (cleanName.isEmpty()) return {};
+    const QString cleanType = type == QStringLiteral("part") ? QStringLiteral("part") : QStringLiteral("movement");
+    const QColor parsedColor(color);
+    const QString cleanColor = parsedColor.isValid() ? parsedColor.name() : QStringLiteral("#8b5cf6");
+    const auto before = toJson();
+    MusicSection section{QUuid::createUuid().toString(QUuid::WithoutBraces), cleanName,
+                         cleanType, cleanColor, startMeasure, endMeasure};
+    m_musicSections.push_back(section);
+    std::sort(m_musicSections.begin(), m_musicSections.end(), [](const auto &a, const auto &b) {
+        if (a.startMeasure != b.startMeasure) return a.startMeasure < b.startMeasure;
+        return a.endMeasure < b.endMeasure;
+    });
+    emit musicChanged();
+    commitSnapshot(before, QStringLiteral("Group music measures"));
+    return section.id;
+}
+
+void DrillProject::removeMusicSection(const QString &id)
+{
+    const auto it = std::find_if(m_musicSections.cbegin(), m_musicSections.cend(),
+                                 [&](const auto &section) { return section.id == id; });
+    if (it == m_musicSections.cend()) return;
+    const auto before = toJson();
+    m_musicSections.erase(it);
+    emit musicChanged();
+    commitSnapshot(before, QStringLiteral("Remove music group"));
+}
+
 QVariantList DrillProject::previewSetGeneration(int startMeasure, int endMeasure,
                                                  const QString &mode, int subdivision,
                                                  double stepMultiplier) const
 {
     QVariantList result;
     if (m_music.measures.isEmpty()) return result;
-    startMeasure = qBound(0, qMin(startMeasure, endMeasure), m_music.measures.size() - 1);
-    endMeasure = qBound(startMeasure, qMax(startMeasure, endMeasure), m_music.measures.size() - 1);
+    const int requestedStart = qMin(startMeasure, endMeasure);
+    const int requestedEnd = qMax(startMeasure, endMeasure);
+    startMeasure = qBound(0, requestedStart, m_music.measures.size() - 1);
+    endMeasure = qBound(startMeasure, requestedEnd, m_music.measures.size() - 1);
     subdivision = qBound(1, subdivision, 256); stepMultiplier = qBound(0.0, stepMultiplier, 2.0);
     const qint64 selectionStart = m_music.measures[startMeasure].startTick;
     const qint64 selectionEnd = m_music.measures[endMeasure].endTick;
@@ -1200,8 +1272,16 @@ bool DrillProject::commitSetGenerationPlan(const QVariantList &segments)
         previousEnd = end;
     }
     const auto before = toJson();
-    auto insertMarker = [this](qint64 tick, double multiplier, const QString &measureText) {
-        for (int i = 0; i < m_sets.size(); ++i) if (m_sets[i].startTick == tick) return i;
+    auto insertMarker = [this](qint64 tick, double multiplier, const QString &measureText,
+                               bool updateExisting) {
+        for (int i = 0; i < m_sets.size(); ++i) {
+            if (m_sets[i].startTick != tick) continue;
+            if (updateExisting) {
+                m_sets[i].stepMultiplier = multiplier;
+                m_sets[i].measure = measureText;
+            }
+            return i;
+        }
         int insertAt = 0; while (insertAt < m_sets.size() && m_sets[insertAt].startTick < tick) ++insertAt;
         const int source = qBound(0, insertAt - 1, m_sets.size() - 1);
         DrillSet set;
@@ -1212,14 +1292,14 @@ bool DrillProject::commitSetGenerationPlan(const QVariantList &segments)
     };
     const auto first = segments.first().toMap();
     insertMarker(first.value(QStringLiteral("startTick")).toLongLong(), 0.0,
-                 QString::number(first.value(QStringLiteral("startMeasure")).toInt()));
+                 QString::number(first.value(QStringLiteral("startMeasure")).toInt()), false);
     int lastIndex = 0;
     for (const auto &value : segments) {
         const auto segment = value.toMap();
         const double multiplier = qBound(0.0, segment.value(QStringLiteral("stepMultiplier"), 1.0).toDouble(), 2.0);
         lastIndex = insertMarker(segment.value(QStringLiteral("endTick")).toLongLong(), multiplier,
             QStringLiteral("%1-%2").arg(segment.value(QStringLiteral("startMeasure")).toInt())
-                                      .arg(segment.value(QStringLiteral("endMeasure")).toInt()));
+                                      .arg(segment.value(QStringLiteral("endMeasure")).toInt()), true);
     }
     for (int i = 0; i < m_sets.size(); ++i) m_sets[i].number = QString::number(i + 1);
     if (!m_sets.isEmpty()) m_sets.first().stepMultiplier = 0.0;
@@ -1578,6 +1658,7 @@ void DrillProject::newProject()
     m_props.clear();
     m_audioSource.clear();
     m_music.clear();
+    m_musicSections.clear();
     m_musicSelectionStart = m_musicSelectionEnd = -1;
     m_audioOffsetMs = 0.0; m_waveformPeaks.clear();
     m_projectPath.clear();
@@ -1602,6 +1683,7 @@ void DrillProject::newProject()
 void DrillProject::loadDemo()
 {
     m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
+    m_musicSections.clear();
     if (QFile::exists(QStringLiteral(":/samples/coordinates.json"))) {
         importCoordinateJson(QStringLiteral(":/samples/coordinates.json"));
         m_projectPath.clear();
@@ -4401,13 +4483,22 @@ QJsonObject DrillProject::toJson() const
     for (const auto &region : m_tempoRegions) tempos.push_back(region.toJson());
     QJsonArray props;
     for (const auto &prop : m_props) props.push_back(prop.toJson());
+    QJsonArray musicSections;
+    for (const auto &section : m_musicSections) {
+        musicSections.push_back(QJsonObject{{QStringLiteral("id"), section.id},
+            {QStringLiteral("name"), section.name}, {QStringLiteral("type"), section.type},
+            {QStringLiteral("color"), section.color},
+            {QStringLiteral("startMeasure"), section.startMeasure},
+            {QStringLiteral("endMeasure"), section.endMeasure}});
+    }
     return {{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 9},
+            {QStringLiteral("version"), 10},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
             {QStringLiteral("audioOffsetMs"), m_audioOffsetMs},
             {QStringLiteral("music"), m_music.toJson()},
+            {QStringLiteral("musicSections"), musicSections},
             {QStringLiteral("bpm"), m_bpm},
             {QStringLiteral("currentSet"), m_currentSet},
             {QStringLiteral("selectedSetStart"), m_selectedSetStart},
@@ -4430,7 +4521,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 9) {
+        || object.value(QStringLiteral("version")).toInt() > 10) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
@@ -4441,6 +4532,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     QVector<MarchCraft::MeterRegion> meterRegions;
     QVector<MarchCraft::TempoRegion> tempoRegions;
     QVector<MarchCraft::PropInstance> props;
+    QVector<MusicSection> musicSections;
     for (const auto &value : object.value(QStringLiteral("performers")).toArray())
         performers.push_back(Performer::fromJson(value.toObject()));
     for (const auto &value : object.value(QStringLiteral("sets")).toArray())
@@ -4453,6 +4545,20 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
         tempoRegions.push_back(MarchCraft::TempoRegion::fromJson(value.toObject()));
     for (const auto &value : object.value(QStringLiteral("props")).toArray())
         props.push_back(MarchCraft::PropInstance::fromJson(value.toObject()));
+    for (const auto &value : object.value(QStringLiteral("musicSections")).toArray()) {
+        const auto section = value.toObject();
+        const QString name = section.value(QStringLiteral("name")).toString().simplified().left(60);
+        if (name.isEmpty()) continue;
+        const QString type = section.value(QStringLiteral("type")).toString() == QStringLiteral("part")
+            ? QStringLiteral("part") : QStringLiteral("movement");
+        QColor color(section.value(QStringLiteral("color")).toString());
+        if (!color.isValid()) color = QColor(QStringLiteral("#8b5cf6"));
+        musicSections.push_back({section.value(QStringLiteral("id")).toString(
+                                     QUuid::createUuid().toString(QUuid::WithoutBraces)),
+                                 name, type, color.name(),
+                                 section.value(QStringLiteral("startMeasure")).toInt(),
+                                 section.value(QStringLiteral("endMeasure")).toInt()});
+    }
     for (int i = 0; i < sets.size(); ++i)
         if (sets[i].number.isEmpty()) sets[i].number = QString::number(i + 1);
     if (sets.isEmpty()) {
@@ -4468,6 +4574,13 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_audioSource = object.value(QStringLiteral("audioSource")).toString();
     m_audioOffsetMs = object.value(QStringLiteral("audioOffsetMs")).toDouble();
     m_music = MarchCraft::MusicDocument::fromJson(object.value(QStringLiteral("music")).toObject());
+    m_musicSections.clear();
+    for (auto section : musicSections) {
+        if (m_music.measures.isEmpty()) break;
+        section.startMeasure = qBound(0, section.startMeasure, m_music.measures.size() - 1);
+        section.endMeasure = qBound(section.startMeasure, section.endMeasure, m_music.measures.size() - 1);
+        m_musicSections.push_back(std::move(section));
+    }
     if (m_music.sourceType == QStringLiteral("midi") && QFileInfo::exists(m_music.sourcePath)) {
         const auto reparsed = MarchCraft::parseMidiFile(m_music.sourcePath);
         if (reparsed.ok) m_music.playbackEvents = reparsed.document.playbackEvents;
