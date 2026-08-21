@@ -9,6 +9,10 @@ var attentionToeOutDegrees = 45.0
 var attentionHeadPitchDegrees = 10.0
 var attentionPelvisDropMeters = -0.00141
 var slidePelvisFromFacingDegrees = 60.0
+// The shoe meshes are about 0.112 m wide from the bind ankle to the inside
+// edge. Moving each ankle inward by that amount puts both inside edges on the
+// body centerline and keeps each foot on its own straight track.
+var marchingTrackInsetMeters = 0.112
 var sole0 = [-0.00072,-0.00485,-0.00215,-0.00048,-0.00049,0.00001,0.00001,0.00000,-0.00000,-0.00026,-0.00049,-0.00070,-0.00080,-0.00068,-0.00075,-0.00066,-0.00070,-0.00454,-0.00192,-0.00037,-0.00046,-0.00001,-0.00001,-0.00002,-0.00003,-0.00028,-0.00052,-0.00072,-0.00082,-0.00070,-0.00077,-0.00068]
 var sole45 = [0.00034,-0.00452,-0.00254,-0.00090,-0.00084,0.00036,0.00021,-0.00048,-0.00198,-0.00335,-0.00458,-0.00568,-0.00635,-0.00507,-0.00249,-0.00012,0.00070,-0.00406,-0.00458,-0.00565,-0.00659,-0.00556,-0.00424,-0.00292,-0.00172,-0.00061,0.00019,0.00032,0.00049,0.00071,0.00083,0.00068]
 var sole90 = [-0.00380,-0.00706,-0.00966,-0.01377,-0.01596,-0.01313,-0.00854,-0.00804,-0.00698,-0.00478,-0.00246,-0.00009,-0.00000,0.00008,0.00021,0.00032,0.00001,-0.00439,-0.00177,-0.00020,-0.00035,-0.00029,-0.00239,-0.00455,-0.00672,-0.00900,-0.00278,-0.00313,-0.01307,-0.01432,-0.00781,-0.00144]
@@ -28,7 +32,7 @@ var halfStrideCorrections = [
     [-0.00141,-0.00025,0.00157,0.00418,0.00308,0.00199,0.00132,0.00063,0.00000,-0.00058,-0.00097,-0.00062,-0.00019,-0.00025,-0.00032,-0.00018,-0.00041,0.00007,0.00015,0.00017,0.00012,-0.00008,-0.00033,-0.00063,-0.00000,0.00055,0.00104,0.00147,0.00171,0.00109,0.00159,-0.00079],
 ]
 var extendedStrideCorrections = [
-    [-0.00388,-0.00000,-0.00000,0.00000,0.00000,0.00000,0.00000,-0.00000,0.00000,-0.00003,-0.00005,-0.00007,-0.00005,0.00006,0.00002,-0.00013,-0.00388,-0.00000,-0.00000,0.00000,0.00000,0.00000,0.00000,-0.00000,-0.00000,-0.00003,-0.00005,-0.00007,-0.00005,0.00006,0.00002,-0.00013],
+    [-0.01081,0.00081,0.00046,0.00031,0.00018,-0.00024,-0.00016,-0.00004,0.00008,0.00045,0.00084,0.00125,0.00160,0.00187,0.00192,-0.00273,-0.01081,0.00081,0.00046,0.00030,0.00017,-0.00024,-0.00016,-0.00005,0.00009,0.00045,0.00085,0.00124,0.00160,0.00187,0.00192,-0.00273],
     [0.00053,0.00019,-0.00008,-0.00011,-0.00008,0.00007,0.00002,0.00029,0.00000,-0.00025,-0.00046,-0.00063,-0.00069,-0.00026,-0.00213,-0.00777,-0.01759,-0.00191,-0.00052,-0.00130,-0.00124,-0.00089,-0.00060,-0.00028,-0.00000,0.00026,0.00001,0.00005,0.00013,0.00028,0.00041,0.00040],
     [-0.03400,-0.01963,-0.00159,-0.00234,-0.00058,-0.00053,-0.00010,0.00191,0.00000,0.00055,0.00112,-0.00001,-0.00001,0.00003,0.00014,0.00033,0.00045,0.00010,0.00003,0.00000,0.00002,-0.00002,0.00097,0.00050,-0.00000,-0.00041,0.00148,-0.00210,-0.00571,-0.00555,-0.01463,-0.02556],
     [-0.02134,-0.00990,-0.00060,-0.00136,-0.00161,-0.00126,-0.00084,-0.00042,0.00000,-0.00000,-0.00001,-0.00003,-0.00006,-0.00015,-0.00025,0.00011,0.00010,0.00022,0.00034,0.00021,0.00010,0.00004,0.00001,-0.00000,0.00000,-0.00041,-0.00086,-0.00133,-0.00179,-0.00162,-0.00086,-0.00989],
@@ -237,10 +241,11 @@ function targetForDirection(relativeDegrees, gaitPhase, leftSide, strideMeters, 
              lift: lift, footPitch: pitch, toePitch: toe }
 }
 
-function pelvisTransferPose(leftTarget, rightTarget, pelvisYaw, spatial) {
+function pelvisTransferPose(leftTarget, rightTarget, pelvisYaw, spatial,
+                            trackWeight) {
     var reach = thighLength + shinLength - 0.001
-    function availableVertical(target) {
-        var horizontal = Math.sqrt(target.x * target.x + target.z * target.z)
+    function availableVertical(target, point) {
+        var horizontal = Math.sqrt(point.x * point.x + point.z * point.z)
         return Math.sqrt(Math.max(0, reach * reach - horizontal * horizontal)) + target.lift
     }
     // Let the support leg determine the pelvis adjustment. In particular, a
@@ -255,12 +260,19 @@ function pelvisTransferPose(leftTarget, rightTarget, pelvisYaw, spatial) {
             return { x: target.x, z: target.z }
         var yaw = pelvisYaw * Math.PI / 180
         var hipBind = leftSide ? -0.105 : 0.105
-        return { x: target.x + hipBind - Math.cos(yaw) * hipBind,
+        var track = (leftSide ? marchingTrackInsetMeters : -marchingTrackInsetMeters)
+                * (trackWeight || 0)
+        return { x: target.x + hipBind + track - Math.cos(yaw) * hipBind,
                  z: target.z + Math.sin(yaw) * hipBind }
     }
     var supportPoint = effectivePoint(support, support === leftTarget)
     var movingPoint = effectivePoint(moving, moving === leftTarget)
-    var supportAdjustment = clamp(availableVertical(support) - standingHipHeight, -0.06, 0.05)
+    var calibratedSupportPoint = {
+        x: mix(support.x, supportPoint.x, trackWeight || 0),
+        z: mix(support.z, supportPoint.z, trackWeight || 0)
+    }
+    var supportAdjustment = clamp(availableVertical(support, calibratedSupportPoint)
+                                  - standingHipHeight, -0.06, 0.05)
     // At the count boundary the old support shoe has just become the recovery
     // shoe, but it must remain completely flat while the opposite heel lands.
     // Transfer ownership to the new support as its sole rolls down. Keep that
@@ -447,7 +459,10 @@ function directionalBodyPose(relativeDegrees, gaitPhase, strideMeters, motionWei
     var pelvisYaw = (slideStrength * (slidePelvisFromFacingDegrees
                                      + Math.sin(rhythm) * 1.0)
                      + longitudinalWeight * Math.sin(rhythm) * 1.4) * motionWeight
-    var transfer = pelvisTransferPose(left, right, pelvisYaw, true)
+    var forwardTrackWeight = 1 - smootherStep(
+                Math.abs(normalizeDegrees(relativeDegrees)) / 15)
+    var transfer = pelvisTransferPose(left, right, pelvisYaw, true,
+                                      forwardTrackWeight)
     var pelvisDrop = transfer.y * motionWeight + soleCorrection
     var pelvisRoll = -Math.cos(rhythm) * 0.38 * motionWeight
     var pelvisYawRadians = pelvisYaw * Math.PI / 180
@@ -579,9 +594,12 @@ function handSetPose(leftSide) {
              forearmX: leftSide ? 72.0 : 68.0,
              forearmY: leftSide ? -57.0 : 55.0,
              forearmZ: leftSide ? -43.8 : 42.1,
-             handX: leftSide ? -8 : 12,
-             handY: leftSide ? -10 : 14,
-             handZ: leftSide ? -6 : 10 }
+             // The source mesh has no finger bones. These wrist rotations turn
+             // the open palms edge-on into one compact, high grip: left nearer
+             // the face, with the right visibly above and in front.
+             handX: leftSide ? 5 : 10,
+             handY: leftSide ? 35 : -50,
+             handZ: leftSide ? 35 : -70 }
 }
 
 function applyClosingPose(pose, gaitPhase, leftSide, amount, closingLeftSide) {
@@ -632,19 +650,24 @@ function directionalLegPose(relativeDegrees, gaitPhase, leftSide, strideMeters,
                                     strideMeters, motionWeight)
     var weights = directionalWeights(relativeDegrees)
     var hipBindX = leftSide ? -0.105 : 0.105
-    var crossingWeight = !target.stance
+    var passingWeight = !target.stance
             ? 1 - smootherStep(Math.abs(target.progress - 0.5) / 0.45) : 0
-    // Move the recovering shoe toward the support shoe in body/world space
-    // before solving the leg. Unlike an extra hip roll, this preserves the
-    // same crossing plane through slides and rear diagonals as the pelvis turns.
+    // Keep the shoes on two fixed, narrow rails instead of pulling only the
+    // recovering foot across the centerline. The inside edges meet beneath the
+    // navel while each shoe travels straight through the whole step.
+    var trackX = leftSide ? marchingTrackInsetMeters : -marchingTrackInsetMeters
     var lateralWeight = weights.left + weights.right
     var crossingDistance = 0.233 + 0.007 * lateralWeight
-    var crossingX = (leftSide ? crossingDistance : -crossingDistance) * crossingWeight
+    var crossingX = (leftSide ? crossingDistance : -crossingDistance)
+            * passingWeight
+    var forwardTrackWeight = 1 - smootherStep(
+                Math.abs(normalizeDegrees(relativeDegrees)) / 15)
+    var lateralX = mix(crossingX, trackX, forwardTrackWeight)
     var slideStrength = weights.right - weights.left
     var crossingForward = (leftSide ? -1 : 1) * slideStrength
-            * 0.026 * crossingWeight
+            * 0.026 * passingWeight
     var facingYaw = bodyPoseValue.pelvisYaw * Math.PI / 180
-    var worldX = hipBindX + target.x + crossingX
+    var worldX = hipBindX + target.x + lateralX
             + Math.sin(facingYaw) * crossingForward - bodyPoseValue.pelvisX
     var worldY = 0.075 + target.lift - (0.91 + bodyPoseValue.pelvisY)
     var worldZ = target.z + Math.cos(facingYaw) * crossingForward

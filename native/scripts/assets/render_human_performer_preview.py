@@ -33,7 +33,7 @@ HALF_STRIDE_CORRECTIONS = (
     (-0.00141, -0.00025, 0.00157, 0.00418, 0.00308, 0.00199, 0.00132, 0.00063, 0.00000, -0.00058, -0.00097, -0.00062, -0.00019, -0.00025, -0.00032, -0.00018, -0.00041, 0.00007, 0.00015, 0.00017, 0.00012, -0.00008, -0.00033, -0.00063, -0.00000, 0.00055, 0.00104, 0.00147, 0.00171, 0.00109, 0.00159, -0.00079),
 )
 EXTENDED_STRIDE_CORRECTIONS = (
-    (-0.00388, -0.00000, -0.00000, 0.00000, 0.00000, 0.00000, 0.00000, -0.00000, 0.00000, -0.00003, -0.00005, -0.00007, -0.00005, 0.00006, 0.00002, -0.00013, -0.00388, -0.00000, -0.00000, 0.00000, 0.00000, 0.00000, 0.00000, -0.00000, -0.00000, -0.00003, -0.00005, -0.00007, -0.00005, 0.00006, 0.00002, -0.00013),
+    (-0.01081, 0.00081, 0.00046, 0.00031, 0.00018, -0.00024, -0.00016, -0.00004, 0.00008, 0.00045, 0.00084, 0.00125, 0.00160, 0.00187, 0.00192, -0.00273, -0.01081, 0.00081, 0.00046, 0.00030, 0.00017, -0.00024, -0.00016, -0.00005, 0.00009, 0.00045, 0.00085, 0.00124, 0.00160, 0.00187, 0.00192, -0.00273),
     (0.00053, 0.00019, -0.00008, -0.00011, -0.00008, 0.00007, 0.00002, 0.00029, 0.00000, -0.00025, -0.00046, -0.00063, -0.00069, -0.00026, -0.00213, -0.00777, -0.01759, -0.00191, -0.00052, -0.00130, -0.00124, -0.00089, -0.00060, -0.00028, -0.00000, 0.00026, 0.00001, 0.00005, 0.00013, 0.00028, 0.00041, 0.00040),
     (-0.03400, -0.01963, -0.00159, -0.00234, -0.00058, -0.00053, -0.00010, 0.00191, 0.00000, 0.00055, 0.00112, -0.00001, -0.00001, 0.00003, 0.00014, 0.00033, 0.00045, 0.00010, 0.00003, 0.00000, 0.00002, -0.00002, 0.00097, 0.00050, -0.00000, -0.00041, 0.00148, -0.00210, -0.00571, -0.00555, -0.01463, -0.02556),
     (-0.02134, -0.00990, -0.00060, -0.00136, -0.00161, -0.00126, -0.00084, -0.00042, 0.00000, -0.00000, -0.00001, -0.00003, -0.00006, -0.00015, -0.00025, 0.00011, 0.00010, 0.00022, 0.00034, 0.00021, 0.00010, 0.00004, 0.00001, -0.00000, 0.00000, -0.00041, -0.00086, -0.00133, -0.00179, -0.00162, -0.00086, -0.00989),
@@ -171,11 +171,12 @@ def leg_target(mode, phase, left, stride):
             "foot": pitch, "toe": toe_pitch(mode, cycle)}
 
 
-def pelvis_transfer_pose(targets, pelvis_yaw=0.0, spatial=False):
+def pelvis_transfer_pose(targets, pelvis_yaw=0.0, spatial=False,
+                         track_weight=0.0):
     reach = 0.39 + 0.415 - 0.001
 
-    def available(target):
-        horizontal = math.hypot(target["x"], target["z"])
+    def available(target, point):
+        horizontal = math.hypot(*point)
         return math.sqrt(max(0.0, reach * reach - horizontal * horizontal)) + target["lift"]
 
     support = next(target for target in targets if target["stance"])
@@ -186,12 +187,17 @@ def pelvis_transfer_pose(targets, pelvis_yaw=0.0, spatial=False):
             return target["x"], target["z"]
         yaw = math.radians(pelvis_yaw)
         hip_bind = -0.105 if left else 0.105
-        return (target["x"] + hip_bind - math.cos(yaw) * hip_bind,
+        track = (0.112 if left else -0.112) * track_weight
+        return (target["x"] + hip_bind + track - math.cos(yaw) * hip_bind,
                 target["z"] + math.sin(yaw) * hip_bind)
 
     support_point = effective_point(support, support is targets[0])
     moving_point = effective_point(moving, moving is targets[0])
-    support_adjustment = clamp(available(support) - 0.805, -0.06, 0.05)
+    calibrated_support_point = (
+        mix(support["x"], support_point[0], track_weight),
+        mix(support["z"], support_point[1], track_weight))
+    support_adjustment = clamp(
+        available(support, calibrated_support_point) - 0.805, -0.06, 0.05)
     if 0.30 <= moving["t"] <= 0.70:
         return {"x": 0.0, "y": support_adjustment, "z": 0.0, "weight": 0.0}
     delta_x = support_point[0] - moving_point[0]
@@ -375,7 +381,9 @@ def directional_body_pose(angle_degrees, phase, stride):
     slide_strength = weights[3] - weights[2]
     longitudinal_weight = weights[0] + weights[1]
     yaw = slide_strength * (60.0 + math.sin(rhythm)) + longitudinal_weight * math.sin(rhythm) * 1.4
-    transfer = pelvis_transfer_pose(targets, yaw, True)
+    forward_track_weight = 1.0 - smoother_step(
+        abs(((angle_degrees + 180.0) % 360.0) - 180.0) / 15.0)
+    transfer = pelvis_transfer_pose(targets, yaw, True, forward_track_weight)
     drop = transfer["y"] + sole_correction
     roll = -math.cos(rhythm) * 0.38
     yaw_radians = math.radians(yaw)
@@ -466,14 +474,19 @@ def directional_leg_pose(angle_degrees, phase, left, stride, body):
     target = directional_target(angle_degrees, phase, left, stride)
     weights = directional_weights(angle_degrees)
     hip_bind_x = -0.105 if left else 0.105
-    crossing = ((1.0 - smoother_step(abs(target["t"] - 0.5) / 0.45))
-                if not target["stance"] else 0.0)
-    crossing_distance = 0.233 + 0.007 * (weights[2] + weights[3])
-    crossing_x = (crossing_distance if left else -crossing_distance) * crossing
+    passing = ((1.0 - smoother_step(abs(target["t"] - 0.5) / 0.45))
+               if not target["stance"] else 0.0)
+    track_x = 0.112 if left else -0.112
+    lateral_weight = weights[2] + weights[3]
+    crossing_distance = 0.233 + 0.007 * lateral_weight
+    crossing_x = (crossing_distance if left else -crossing_distance) * passing
+    forward_track_weight = 1.0 - smoother_step(
+        abs(((angle_degrees + 180.0) % 360.0) - 180.0) / 15.0)
+    lateral_x = mix(crossing_x, track_x, forward_track_weight)
     slide_strength = weights[3] - weights[2]
-    crossing_forward = (-1.0 if left else 1.0) * slide_strength * 0.026 * crossing
+    crossing_forward = (-1.0 if left else 1.0) * slide_strength * 0.026 * passing
     facing_yaw = math.radians(body["pelvis_yaw"])
-    world_x = (hip_bind_x + target["x"] + crossing_x
+    world_x = (hip_bind_x + target["x"] + lateral_x
                + math.sin(facing_yaw) * crossing_forward - body["pelvis_x"])
     world_y = 0.075 + target["lift"] - (0.91 + body["pelvis_y"])
     world_z = (target["z"] + math.cos(facing_yaw) * crossing_forward
@@ -511,7 +524,7 @@ def pose_matrices(mode: str, phase: float, stride: float = 0.5715):
         14: (-4.0, 0.0, 0.0), 18: (-4.0, 0.0, 0.0),
         15: (111.7, -56.8, -63.0), 19: (111.7, 56.8, 63.0),
         16: (72.0, -57.0, -43.8), 20: (68.0, 55.0, 42.1),
-        17: (-8.0, -10.0, -6.0), 21: (12.0, 14.0, 10.0),
+        17: (5.0, 35.0, 35.0), 21: (10.0, -50.0, -70.0),
     }
     translations = {1: (body["pelvis_x"], body["pelvis_y"], body["pelvis_z"]),
                     2: (body["spine_x"], body["spine_lift"], body["spine_z"])}

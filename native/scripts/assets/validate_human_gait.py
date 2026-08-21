@@ -56,22 +56,32 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     left_toe_rows = foot_rows((8, 9), True)
     right_heel_rows = foot_rows((12, 13), False)
     right_toe_rows = foot_rows((12, 13), True)
+    left_hand_rows = [row for row, (joint_row, weight_row) in enumerate(
+        zip(joints, weights))
+        if sum(weight_row[influence] for influence in range(4)
+               if int(joint_row[influence]) == 17) > 0.55]
+    right_hand_rows = [row for row, (joint_row, weight_row) in enumerate(
+        zip(joints, weights))
+        if sum(weight_row[influence] for influence in range(4)
+               if int(joint_row[influence]) == 21) > 0.55]
     left_heel_center = center(attention_vertices, left_heel_rows)
     left_toe_center = center(attention_vertices, left_toe_rows)
     right_heel_center = center(attention_vertices, right_heel_rows)
     right_toe_center = center(attention_vertices, right_toe_rows)
     pelvis = transform(attention_matrices[1], JOINTS[1].global_position)
     head = transform(attention_matrices[5], JOINTS[5].global_position)
-    left_hand = transform(attention_matrices[17], JOINTS[17].global_position)
-    right_hand = transform(attention_matrices[21], JOINTS[21].global_position)
+    left_wrist = transform(attention_matrices[17], JOINTS[17].global_position)
+    right_wrist = transform(attention_matrices[21], JOINTS[21].global_position)
+    left_hand = center(attention_vertices, left_hand_rows)
+    right_hand = center(attention_vertices, right_hand_rows)
     left_shoulder = transform(attention_matrices[15], JOINTS[15].global_position)
     right_shoulder = transform(attention_matrices[19], JOINTS[19].global_position)
     left_elbow = transform(attention_matrices[16], JOINTS[16].global_position)
     right_elbow = transform(attention_matrices[20], JOINTS[20].global_position)
     heel_separation = interval_gap(attention_vertices, left_heel_rows, right_heel_rows)
     hand_separation = math.dist(left_hand, right_hand)
-    left_forearm = tuple(left_hand[axis] - left_elbow[axis] for axis in range(3))
-    right_forearm = tuple(right_hand[axis] - right_elbow[axis] for axis in range(3))
+    left_forearm = tuple(left_wrist[axis] - left_elbow[axis] for axis in range(3))
+    right_forearm = tuple(right_wrist[axis] - right_elbow[axis] for axis in range(3))
     forearm_angle = math.degrees(math.acos(max(-1.0, min(1.0,
         sum(left_forearm[axis] * right_forearm[axis] for axis in range(3))
         / (math.sqrt(sum(value * value for value in left_forearm))
@@ -109,7 +119,7 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         violations.append("attention torso is not vertically stacked")
     if not 9.0 <= head_pitch <= 12.0:
         violations.append(f"attention head pitch is {head_pitch:.2f} degrees")
-    if hand_separation > 0.025 or min(left_hand[1], right_hand[1]) < 1.55:
+    if hand_separation > 0.045 or min(left_hand[1], right_hand[1]) < 1.53:
         violations.append(f"set hands miss the face-height grip ({hand_separation:.4f} m)")
     if not 82.0 <= forearm_angle <= 96.0:
         violations.append(f"set forearms form a {forearm_angle:.2f}-degree angle")
@@ -117,9 +127,9 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         violations.append(
             f"set upper arms are not level and forward "
             f"({upper_arm_level_delta:.4f} m, {upper_arm_forward_angle:.2f} degrees)")
-    if right_hand[1] <= left_hand[1] + 0.002:
+    if right_hand[1] <= left_hand[1] + 0.015:
         violations.append("set right hand is not visibly above the left")
-    if right_hand[2] >= left_hand[2] - 0.008:
+    if right_hand[2] >= left_hand[2] - 0.015:
         violations.append("set right hand is not visibly forward of the left")
     report["attention"] = {
         "minimumGroundContactMeters": round(attention_ground, 6),
@@ -128,6 +138,7 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "headPitchDegrees": round(head_pitch, 3),
         "handSeparationMeters": round(hand_separation, 6),
         "handHeightMeters": round((left_hand[1] + right_hand[1]) * 0.5, 6),
+        "wristSeparationMeters": round(math.dist(left_wrist, right_wrist), 6),
         "forearmAngleDegrees": round(forearm_angle, 3),
         "upperArmLevelDeltaMeters": round(upper_arm_level_delta, 6),
         "upperArmForwardAngleDegrees": round(upper_arm_forward_angle, 3),
@@ -208,6 +219,46 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     backward_heel = min(backward_vertices[row][1] for row in right_heel_rows)
     if backward_heel - backward_toe < 0.015:
         violations.append("backward contact is not supported on the forefoot")
+
+    # Forward marching uses two narrow, parallel tracks. The inside edge of
+    # each visible shoe stays at the body centerline for the whole cycle; the
+    # recovering foot must never cross to the opposite side as in a catwalk.
+    track_samples = []
+    left_centers = []
+    right_centers = []
+    for sample in range(16):
+        phase = sample / 16.0
+        track_vertices = skinned_vertices(
+            positions, joints, weights,
+            pose_matrices("direction.0", phase, 0.5715))
+        left_interval = (min(track_vertices[row][0]
+                             for row in left_heel_rows + left_toe_rows),
+                         max(track_vertices[row][0]
+                             for row in left_heel_rows + left_toe_rows))
+        right_interval = (min(track_vertices[row][0]
+                              for row in right_heel_rows + right_toe_rows),
+                          max(track_vertices[row][0]
+                              for row in right_heel_rows + right_toe_rows))
+        left_center_x = center(
+            track_vertices, left_heel_rows + left_toe_rows)[0]
+        right_center_x = center(
+            track_vertices, right_heel_rows + right_toe_rows)[0]
+        left_centers.append(left_center_x)
+        right_centers.append(right_center_x)
+        if left_center_x >= 0.0 or right_center_x <= 0.0:
+            violations.append(f"forward shoes cross tracks at phase {phase:.4f}")
+        if max(abs(left_interval[1]), abs(right_interval[0])) > 0.012:
+            violations.append(
+                f"forward inside edges miss centerline at phase {phase:.4f}")
+        track_samples.append({
+            "phase": round(phase, 4),
+            "leftInsideEdgeMeters": round(left_interval[1], 6),
+            "rightInsideEdgeMeters": round(right_interval[0], 6),
+        })
+    left_track_variation = max(left_centers) - min(left_centers)
+    right_track_variation = max(right_centers) - min(right_centers)
+    if max(left_track_variation, right_track_variation) > 0.004:
+        violations.append("forward shoes do not follow straight lateral tracks")
 
     passing_checks = []
     for phase in (0.25, 0.75):
@@ -290,6 +341,9 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "preTransferHeelMeters": round(pretransfer_heel, 6),
         "backwardToeMeters": round(backward_toe, 6),
         "backwardHeelMeters": round(backward_heel, 6),
+        "forwardTrackVariationMeters": round(
+            max(left_track_variation, right_track_variation), 6),
+        "forwardTrackSamples": track_samples,
         "passingChecks": passing_checks,
     }
     core_cases = [(angle, 0.5715, samples) for angle in (0, 45, 90, 135, 180, -135, -90, -45)]
