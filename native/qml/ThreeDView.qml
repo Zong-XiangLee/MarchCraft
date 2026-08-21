@@ -416,9 +416,6 @@ Item {
         } // drillWorld
 
         Repeater3D {
-            // Props are intentionally out of the editor surface until the
-            // asset-import workflow is ready.
-            visible: false
             model: drillProject.props
             delegate: Prop3D {
                 required property var modelData

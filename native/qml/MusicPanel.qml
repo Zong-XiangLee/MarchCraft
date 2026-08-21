@@ -11,7 +11,24 @@ Item {
     property var mappingRows: []
     property var mappingMeasures: []
     property int setRangeRevision: 0
-    Connections { target: drillProject; function onSetRangeChanged() { root.setRangeRevision++ } }
+    property int musicRevision: 0
+    readonly property bool compact: height < 210
+    function revealSetRange() {
+        for (let i = 0; i < drillProject.musicMeasureCount; ++i) {
+            if (drillProject.musicMeasureInfo(i).inSetRange) {
+                measureList.positionViewAtIndex(i, ListView.Contain)
+                return
+            }
+        }
+    }
+    Connections {
+        target: drillProject
+        function onMusicChanged() { root.musicRevision++ }
+        function onSetRangeChanged() {
+            root.setRangeRevision++
+            Qt.callLater(root.revealSetRange)
+        }
+    }
 
     function refreshPreview() {
         const multiplier = movementMode.currentIndex === 0 ? 1.0
@@ -48,7 +65,7 @@ Item {
 
         Label {
             Layout.fillWidth: true
-            visible: drillProject.musicDiagnostics.length > 0
+            visible: !root.compact && drillProject.musicDiagnostics.length > 0
             text: drillProject.musicDiagnostics
             color: "#d6b66a"; elide: Text.ElideRight; font.pixelSize: 10
         }
@@ -58,6 +75,8 @@ Item {
             visible: drillProject.musicLoaded
             Label { text: "Measures " + (Math.min(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1)
                           + "–" + (Math.max(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1); color: "#b8c8bf" }
+            Button { text: "Group selection…"; onClicked: groupDialog.open() }
+            Button { text: "Groups (" + drillProject.musicSections.length + ")"; onClicked: groupsDialog.open() }
             ComboBox { id: generationMode; model: ["Subdivide", "One move"]; Layout.preferredWidth: 116 }
             ComboBox { id: subdivision; model: ["8", "16", "32"]; currentIndex: 1; enabled: generationMode.currentIndex === 0; Layout.preferredWidth: 70 }
             ComboBox { id: movementMode; model: ["Full time", "Half time", "Double time", "Hold"]; Layout.preferredWidth: 118 }
@@ -78,7 +97,7 @@ Item {
 
         Rectangle {
             Layout.fillWidth: true
-            Layout.preferredHeight: drillProject.waveformPeakCount > 0 ? 24 : 0
+            Layout.preferredHeight: !root.compact && drillProject.waveformPeakCount > 0 ? 24 : 0
             visible: height > 0; color: "#0c1217"; radius: 3
             Canvas {
                 id: waveform
@@ -100,28 +119,62 @@ Item {
             id: measureList
             Layout.fillWidth: true
             Layout.fillHeight: true
+            Layout.minimumHeight: 54
             orientation: ListView.Horizontal; clip: true; spacing: 2
             model: drillProject.musicMeasureCount
             boundsBehavior: Flickable.StopAtBounds
             ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
+            WheelHandler {
+                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
+                onWheel: function(event) {
+                    const delta = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
+                                ? event.angleDelta.x : event.angleDelta.y
+                    measureList.contentX = Math.max(0, Math.min(
+                        Math.max(0, measureList.contentWidth - measureList.width),
+                        measureList.contentX - delta))
+                    event.accepted = true
+                }
+            }
             delegate: Rectangle {
+                id: measureCard
                 required property int index
-                property var info: { root.setRangeRevision; return drillProject.musicMeasureInfo(index) }
+                property var info: { root.setRangeRevision; root.musicRevision; return drillProject.musicMeasureInfo(index) }
                 width: Math.max(92, Math.min(132, measureList.height * 0.65)); height: measureList.height - 10; radius: 4
-                color: info.selected ? "#244d3d" : info.inSetRange ? "#233440" : "#172127"
-                border.width: info.setIndex >= 0 ? 2 : 1
-                border.color: info.setIndex >= 0 ? "#f3c969" : "#30414b"
+                color: info.selected ? "#285f49" : info.inSetRange ? "#203c51" : "#172127"
+                border.width: info.selected ? 3 : info.setIndex >= 0 ? 2 : 1
+                border.color: info.selected ? "#6ee7b7" : info.setIndex >= 0 ? "#f3c969" : "#30414b"
+                Rectangle {
+                    anchors.fill: parent; anchors.margins: measureCard.border.width
+                    radius: 3; color: info.sections && info.sections.length ? info.sections[0].color : "transparent"
+                    opacity: info.selected ? 0.10 : 0.20
+                }
+                Row {
+                    z: 2; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
+                    height: 5
+                    Repeater {
+                        model: info.sections || []
+                        Rectangle { required property var modelData; width: measureCard.width / Math.max(1, (info.sections || []).length); height: 5; color: modelData.color }
+                    }
+                }
                 Column {
-                    anchors.fill: parent; anchors.margins: 5; spacing: 2
+                    z: 3; anchors.fill: parent; anchors.margins: 7; anchors.topMargin: 9; spacing: 2
                     Row {
                         width: parent.width
                         Label { text: info.number || ""; font.bold: true; color: "#e7f5ed" }
                         Label { text: "  " + (info.numerator || 4) + "/" + (info.denominator || 4); color: "#a5afbc"; font.pixelSize: 10 }
                     }
                     Rectangle { width: parent.width; height: Math.max(3, (info.density || 0) * 25); color: "#5ee0a0"; opacity: 0.65; radius: 2 }
-                    Label { text: (info.counts || 0) + " ct · " + Math.round(info.tempo || 0); color: "#a9bbb1"; font.pixelSize: 9 }
+                    Label { visible: measureCard.height >= 66; text: (info.counts || 0) + " ct · " + Math.round(info.tempo || 0); color: "#a9bbb1"; font.pixelSize: 9 }
                     Label { visible: info.setIndex >= 0; text: "SET " + (info.setIndex + 1); color: "#f3c969"; font.bold: true; font.pixelSize: 9 }
+                    Label {
+                        visible: measureCard.height >= 82 && info.sections && info.sections.length > 0
+                        text: info.sections && info.sections.length ? info.sections[0].name : ""
+                        color: "#f8fafc"; font.bold: true; font.pixelSize: 9
+                        width: parent.width; elide: Text.ElideRight
+                    }
                 }
+                Rectangle { visible: info.inSetRange; z: 4; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 5; color: "#60a5fa" }
+                Label { visible: info.selected; z: 5; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 7; text: "SELECTED"; color: "#a7f3d0"; font.bold: true; font.pixelSize: 8 }
                 Rectangle {
                     visible: transport.currentTick >= info.startTick && transport.currentTick < info.endTick
                     x: Math.max(1, Math.min(parent.width - 2,
@@ -145,6 +198,77 @@ Item {
             }
         }
 
+    }
+
+    Dialog {
+        id: groupDialog
+        title: "Group selected measures"
+        modal: true; width: 410; anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.NoButton
+        onOpened: {
+            groupName.text = ""
+            groupType.currentIndex = 0
+            groupColor.currentIndex = drillProject.musicSections.length % groupColor.count
+        }
+        contentItem: GridLayout {
+            columns: 2; rowSpacing: 10; columnSpacing: 12
+            Label { text: "Measures" }
+            Label { text: (Math.min(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1) + "–" + (Math.max(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1); font.bold: true }
+            Label { text: "Name" }
+            TextField { id: groupName; Layout.fillWidth: true; placeholderText: "Opening, Ballad, Part 1…" }
+            Label { text: "Group as" }
+            ComboBox { id: groupType; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Movement",value:"movement"},{text:"Part",value:"part"}] }
+            Label { text: "Color" }
+            ComboBox {
+                id: groupColor; Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                model: [{text:"Violet",value:"#8b5cf6"},{text:"Blue",value:"#3b82f6"},{text:"Teal",value:"#14b8a6"},{text:"Amber",value:"#f59e0b"},{text:"Rose",value:"#f43f5e"}]
+            }
+            RowLayout {
+                Layout.columnSpan: 2; Layout.fillWidth: true; Layout.topMargin: 6
+                Item { Layout.fillWidth: true }
+                Button { text: "Cancel"; onClicked: groupDialog.close() }
+                Button {
+                    text: "Create group"; highlighted: true; enabled: groupName.text.trim().length > 0
+                    onClicked: {
+                        drillProject.addMusicSection(groupName.text, groupType.currentValue, groupColor.currentValue,
+                                                     drillProject.musicSelectionStart, drillProject.musicSelectionEnd)
+                        groupDialog.close()
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: groupsDialog
+        title: "Show movements and parts"
+        modal: true; width: 520; height: 430; anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Close
+        contentItem: ListView {
+            clip: true; spacing: 5; model: drillProject.musicSections
+            delegate: Frame {
+                required property var modelData
+                width: ListView.view.width; height: 58; padding: 8
+                background: Rectangle { color: "#121b21"; border.color: modelData.color; radius: 6 }
+                RowLayout {
+                    anchors.fill: parent
+                    Rectangle { width: 8; Layout.fillHeight: true; radius: 3; color: modelData.color }
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: 0
+                        Label { text: modelData.name; font.bold: true }
+                        Label { text: modelData.type.toUpperCase() + " · measures " + modelData.startNumber + "–" + modelData.endNumber; color: "#8fa197"; font.pixelSize: 10 }
+                    }
+                    Button { text: "Show"; onClicked: { drillProject.setMusicSelection(modelData.startMeasure, modelData.endMeasure); measureList.positionViewAtIndex(modelData.startMeasure, ListView.Beginning); groupsDialog.close() } }
+                    ToolButton {
+                        id: removeGroupButton
+                        text: "×"
+                        ToolTip.text: "Remove group"
+                        ToolTip.visible: removeGroupButton.hovered
+                        onClicked: drillProject.removeMusicSection(modelData.id)
+                    }
+                }
+            }
+        }
     }
 
     Dialog {
