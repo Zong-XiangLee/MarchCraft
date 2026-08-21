@@ -4677,9 +4677,13 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     const double facing = interpolatedFacing(performerIndex);
     const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
     const double absoluteRelative = std::abs(relative);
-    if (absoluteRelative <= 45.0)
+    // Slides are reserved for travel that is genuinely perpendicular to the
+    // authored facing. Rear diagonals already have a clear backward component
+    // and must use forefoot technique instead of inheriting a forward slide.
+    constexpr double slideHalfWidthDegrees = 7.5;
+    if (absoluteRelative < 90.0 - slideHalfWidthDegrees)
         state.locomotion = QStringLiteral("march.forward");
-    else if (absoluteRelative >= 135.0)
+    else if (absoluteRelative > 90.0 + slideHalfWidthDegrees)
         state.locomotion = QStringLiteral("march.backward");
     else if (relative > 0.0)
         state.locomotion = QStringLiteral("slide.right");

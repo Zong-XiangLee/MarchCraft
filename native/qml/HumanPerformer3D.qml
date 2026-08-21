@@ -50,12 +50,14 @@ Node {
     readonly property var bodyPose: HumanGait.applyClosingBodyPose(rawBodyPose, closingWeight)
     readonly property var rawLeftLegPose: directionChange
                                        ? HumanGait.legPose(locomotionMode, gaitPhase, true,
-                                                           strideMeters, motionWeight, bodyPose.pelvisY)
+                                                           strideMeters, motionWeight,
+                                                           bodyPose.pelvisY, bodyPose.pelvisZ)
                                        : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, true,
                                                                       strideMeters, motionWeight, bodyPose)
     readonly property var rawRightLegPose: directionChange
                                         ? HumanGait.legPose(locomotionMode, gaitPhase, false,
-                                                            strideMeters, motionWeight, bodyPose.pelvisY)
+                                                            strideMeters, motionWeight,
+                                                            bodyPose.pelvisY, bodyPose.pelvisZ)
                                         : HumanGait.directionalLegPose(relativeTravelDegrees, gaitPhase, false,
                                                                        strideMeters, motionWeight, bodyPose)
     readonly property bool closingLeftSide: countsInMove % 2 !== 0
@@ -116,6 +118,7 @@ Node {
                 id: pelvis
                 x: root.bodyPose.pelvisX
                 y: 0.91 + root.bodyPose.pelvisY
+                z: root.bodyPose.pelvisZ
                 eulerRotation: Qt.vector3d(0,
                                            root.directionChange
                                                ? Math.sin(root.phaseAngle) * 8 * root.motionWeight
@@ -123,7 +126,9 @@ Node {
                                            root.bodyPose.pelvisRoll)
                     Node {
                         id: spineLower
+                        x: root.bodyPose.spineX
                         y: 0.17 + root.bodyPose.spineLift + root.bodyPose.breath
+                        z: root.bodyPose.spineZ
                         eulerRotation: Qt.vector3d(root.bodyPose.spinePitch,
                                                    root.bodyPose.spineYaw * 0.50,
                                                    root.bodyPose.spineRoll * 0.45)

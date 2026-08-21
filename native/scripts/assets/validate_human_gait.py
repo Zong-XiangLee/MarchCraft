@@ -64,6 +64,8 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     head = transform(attention_matrices[5], JOINTS[5].global_position)
     left_hand = transform(attention_matrices[17], JOINTS[17].global_position)
     right_hand = transform(attention_matrices[21], JOINTS[21].global_position)
+    left_shoulder = transform(attention_matrices[15], JOINTS[15].global_position)
+    right_shoulder = transform(attention_matrices[19], JOINTS[19].global_position)
     left_elbow = transform(attention_matrices[16], JOINTS[16].global_position)
     right_elbow = transform(attention_matrices[20], JOINTS[20].global_position)
     heel_separation = interval_gap(attention_vertices, left_heel_rows, right_heel_rows)
@@ -74,6 +76,16 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         sum(left_forearm[axis] * right_forearm[axis] for axis in range(3))
         / (math.sqrt(sum(value * value for value in left_forearm))
            * math.sqrt(sum(value * value for value in right_forearm)))))))
+    left_upper_arm = tuple(left_elbow[axis] - left_shoulder[axis] for axis in range(3))
+    right_upper_arm = tuple(right_elbow[axis] - right_shoulder[axis] for axis in range(3))
+
+    def forward_projection_angle(vector):
+        length = math.sqrt(sum(value * value for value in vector))
+        return math.degrees(math.acos(max(-1.0, min(1.0, -vector[2] / length))))
+
+    upper_arm_level_delta = max(abs(left_upper_arm[1]), abs(right_upper_arm[1]))
+    upper_arm_forward_angle = max(forward_projection_angle(left_upper_arm),
+                                  forward_projection_angle(right_upper_arm))
 
     def foot_heading(heel, toe):
         return math.degrees(math.atan2(toe[0] - heel[0], toe[2] - heel[2]))
@@ -97,11 +109,17 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         violations.append("attention torso is not vertically stacked")
     if not 9.0 <= head_pitch <= 12.0:
         violations.append(f"attention head pitch is {head_pitch:.2f} degrees")
-    if hand_separation > 0.05 or min(left_hand[1], right_hand[1]) < 1.35:
+    if hand_separation > 0.025 or min(left_hand[1], right_hand[1]) < 1.55:
         violations.append(f"set hands miss the face-height grip ({hand_separation:.4f} m)")
-    if not 82.0 <= forearm_angle <= 108.0:
+    if not 82.0 <= forearm_angle <= 96.0:
         violations.append(f"set forearms form a {forearm_angle:.2f}-degree angle")
-    if right_hand[2] >= left_hand[2] - 0.015:
+    if upper_arm_level_delta > 0.015 or upper_arm_forward_angle > 16.0:
+        violations.append(
+            f"set upper arms are not level and forward "
+            f"({upper_arm_level_delta:.4f} m, {upper_arm_forward_angle:.2f} degrees)")
+    if right_hand[1] <= left_hand[1] + 0.002:
+        violations.append("set right hand is not visibly above the left")
+    if right_hand[2] >= left_hand[2] - 0.008:
         violations.append("set right hand is not visibly forward of the left")
     report["attention"] = {
         "minimumGroundContactMeters": round(attention_ground, 6),
@@ -111,6 +129,10 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "handSeparationMeters": round(hand_separation, 6),
         "handHeightMeters": round((left_hand[1] + right_hand[1]) * 0.5, 6),
         "forearmAngleDegrees": round(forearm_angle, 3),
+        "upperArmLevelDeltaMeters": round(upper_arm_level_delta, 6),
+        "upperArmForwardAngleDegrees": round(upper_arm_forward_angle, 3),
+        "rightHandAboveLeftMeters": round(right_hand[1] - left_hand[1], 6),
+        "rightHandForwardOfLeftMeters": round(left_hand[2] - right_hand[2], 6),
     }
 
     contact_checks = []
@@ -187,26 +209,69 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     if backward_heel - backward_toe < 0.015:
         violations.append("backward contact is not supported on the forefoot")
 
-    passing_vertices = skinned_vertices(
-        positions, joints, weights, pose_matrices("march.forward", 0.75, 0.5715))
-    passing_gap = interval_gap(passing_vertices,
-                               left_heel_rows + left_toe_rows,
-                               right_heel_rows + right_toe_rows)
-    passing_left_heel = center(passing_vertices, left_heel_rows)
-    passing_left_toe = center(passing_vertices, left_toe_rows)
-    passing_right_heel = center(passing_vertices, right_heel_rows)
-    passing_right_toe = center(passing_vertices, right_toe_rows)
-    passing_left_heading = foot_heading(passing_left_heel, passing_left_toe)
-    passing_right_heading = foot_heading(passing_right_heel, passing_right_toe)
-    passing_heading_delta = abs((passing_left_heading - passing_right_heading + 180) % 360 - 180)
-    passing_z_delta = abs((passing_left_heel[2] + passing_left_toe[2]) * 0.5
-                          - (passing_right_heel[2] + passing_right_toe[2]) * 0.5)
-    if passing_gap > 0.005:
-        violations.append(f"passing shoes are {passing_gap:.4f} m apart instead of touching")
-    if passing_heading_delta > 2.0:
-        violations.append(f"passing shoes differ by {passing_heading_delta:.2f} degrees")
-    if passing_z_delta > 0.03:
-        violations.append(f"passing shoes miss the crossing plane by {passing_z_delta:.4f} m")
+    passing_checks = []
+    for phase in (0.25, 0.75):
+        for angle in (0, 45, 75, 90, 105, 120, 135, 180, -45, -90, -120, -135):
+            passing_vertices = skinned_vertices(
+                positions, joints, weights,
+                pose_matrices(f"direction.{angle}", phase, 0.5715))
+            passing_left_heel = center(passing_vertices, left_heel_rows)
+            passing_left_toe = center(passing_vertices, left_toe_rows)
+            passing_right_heel = center(passing_vertices, right_heel_rows)
+            passing_right_toe = center(passing_vertices, right_toe_rows)
+            left_heading_radians = math.radians(
+                foot_heading(passing_left_heel, passing_left_toe))
+            right_heading_radians = math.radians(
+                foot_heading(passing_right_heel, passing_right_toe))
+            average_heading = math.atan2(
+                math.sin(left_heading_radians) + math.sin(right_heading_radians),
+                math.cos(left_heading_radians) + math.cos(right_heading_radians))
+            lateral_axis = (math.cos(average_heading), -math.sin(average_heading))
+            forward_axis = (math.sin(average_heading), math.cos(average_heading))
+
+            def projected_interval(rows, axis):
+                values = [passing_vertices[row][0] * axis[0]
+                          + passing_vertices[row][2] * axis[1] for row in rows]
+                return min(values), max(values)
+
+            left_interval = projected_interval(left_heel_rows + left_toe_rows,
+                                               lateral_axis)
+            right_interval = projected_interval(right_heel_rows + right_toe_rows,
+                                                lateral_axis)
+            passing_gap = max(right_interval[0] - left_interval[1],
+                              left_interval[0] - right_interval[1], 0.0)
+            passing_overlap = max(0.0, min(left_interval[1], right_interval[1])
+                                  - max(left_interval[0], right_interval[0]))
+            left_center = center(passing_vertices, left_heel_rows + left_toe_rows)
+            right_center = center(passing_vertices, right_heel_rows + right_toe_rows)
+            passing_longitudinal_delta = abs(
+                (left_center[0] - right_center[0]) * forward_axis[0]
+                + (left_center[2] - right_center[2]) * forward_axis[1])
+            passing_heading_delta = abs(math.degrees(
+                (left_heading_radians - right_heading_radians + math.pi)
+                % (2.0 * math.pi) - math.pi))
+            label = f"direction.{angle}@{phase:.2f}"
+            if passing_gap > 0.004:
+                violations.append(
+                    f"{label} passing shoes are {passing_gap:.4f} m apart")
+            if passing_overlap > 0.012:
+                violations.append(
+                    f"{label} passing shoes overlap by {passing_overlap:.4f} m")
+            if passing_heading_delta > 5.1:
+                violations.append(
+                    f"{label} passing shoes differ by {passing_heading_delta:.2f} degrees")
+            if passing_longitudinal_delta > 0.008:
+                violations.append(
+                    f"{label} misses the crossing plane by "
+                    f"{passing_longitudinal_delta:.4f} m")
+            passing_checks.append({
+                "directionDegrees": angle,
+                "phase": phase,
+                "gapMeters": round(passing_gap, 6),
+                "overlapMeters": round(passing_overlap, 6),
+                "headingDeltaDegrees": round(passing_heading_delta, 3),
+                "longitudinalDeltaMeters": round(passing_longitudinal_delta, 6),
+            })
     report["footTechnique"] = {
         "heelStrikeContacts": contact_checks,
         "leftStepOffContactMeters": {key: round(value, 6)
@@ -225,9 +290,7 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "preTransferHeelMeters": round(pretransfer_heel, 6),
         "backwardToeMeters": round(backward_toe, 6),
         "backwardHeelMeters": round(backward_heel, 6),
-        "passingShoeGapMeters": round(passing_gap, 6),
-        "passingHeadingDeltaDegrees": round(passing_heading_delta, 3),
-        "passingLongitudinalDeltaMeters": round(passing_z_delta, 6),
+        "passingChecks": passing_checks,
     }
     core_cases = [(angle, 0.5715, samples) for angle in (0, 45, 90, 135, 180, -135, -90, -45)]
     stride_samples = min(samples, 16)

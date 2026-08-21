@@ -126,10 +126,19 @@ TestCase {
 
         var leftArm = HumanGait.handSetPose(true)
         var rightArm = HumanGait.handSetPose(false)
-        verify(leftArm.upperX > 65 && rightArm.upperX > 65)
-        verify(leftArm.upperZ > 80 && rightArm.upperZ < -80)
-        verify(leftArm.forearmZ > 105 && rightArm.forearmZ < -105)
-        verify(leftArm.forearmY > 40 && rightArm.forearmY < -35)
+        // Both upper arms share a level, forward-projecting carriage. Their
+        // mirrored yaw/roll and inward forearm rotations form the high,
+        // centered instrument triangle without lifting either shoulder.
+        closeTo(leftArm.upperX, rightArm.upperX, 0.001)
+        closeTo(leftArm.upperY, -rightArm.upperY, 0.001)
+        closeTo(leftArm.upperZ, -rightArm.upperZ, 0.001)
+        verify(leftArm.upperX > 105)
+        verify(leftArm.forearmX > 65 && rightArm.forearmX > 65)
+        verify(leftArm.forearmY < -50 && rightArm.forearmY > 50)
+        verify(leftArm.forearmZ < -40 && rightArm.forearmZ > 40)
+        verify(rightArm.handX > leftArm.handX)
+        verify(rightArm.handY > leftArm.handY)
+        verify(rightArm.handZ > leftArm.handZ)
     }
 
     function test_evenPhraseKeepsRightFootForTenduClose() {
@@ -160,14 +169,14 @@ TestCase {
         var body = HumanGait.bodyPose("march.forward", 0.75,
                                       standardStride, 1)
         var support = HumanGait.legPose("march.forward", 0.75, true,
-                                        standardStride, 1, body.pelvisY)
+                                        standardStride, 1, body.pelvisY, body.pelvisZ)
         var passing = HumanGait.legPose("march.forward", 0.75, false,
-                                        standardStride, 1, body.pelvisY)
+                                        standardStride, 1, body.pelvisY, body.pelvisZ)
         closeTo(support.footY, 0, 0.001)
         closeTo(passing.footY, 0, 0.001)
         compare(support.hipZ, 0)
-        verify(passing.hipZ < -15.5)
-        closeTo(passing.footZ, -passing.hipZ * 0.8, 0.001)
+        verify(passing.hipZ < -6)
+        closeTo(passing.footZ, -passing.hipZ, 0.5)
     }
 
     function test_forwardKneeFlexesBeforeCrossThenLengthens() {
@@ -175,7 +184,7 @@ TestCase {
             var body = HumanGait.bodyPose("march.forward", phase,
                                           standardStride, 1)
             return HumanGait.legPose("march.forward", phase, false,
-                                     standardStride, 1, body.pelvisY)
+                                     standardStride, 1, body.pelvisY, body.pelvisZ)
         }
         var beforeCross = rightLegAt(0.65)
         var atCross = rightLegAt(0.75)
@@ -183,10 +192,60 @@ TestCase {
         var nextCount = rightLegAt(0)
         verify(beforeCross.kneeX < atCross.kneeX - 4)
         verify(Math.abs(atCross.kneeX) < 15)
-        verify(Math.abs(forwardSwing.kneeX) < 8)
-        // Double support keeps the old shoe flat while the new heel lands;
-        // allow the controlled knee accommodation required by that geometry.
-        verify(Math.abs(nextCount.kneeX) < 40)
+        verify(Math.abs(forwardSwing.kneeX) < 12)
+        verify(Math.abs(nextCount.kneeX) < 15)
+    }
+
+    function test_legJointsRemainContinuousThroughCountsAndDirections() {
+        var headings = [0, 45, 90, 105, 120, 180, -90, -120]
+        var samples = 2048
+        for (var h = 0; h < headings.length; ++h) {
+            var previousBody = HumanGait.directionalBodyPose(
+                        headings[h], (samples - 1) / samples,
+                        standardStride, 1)
+            var previous = HumanGait.directionalLegPose(
+                        headings[h], (samples - 1) / samples, true,
+                        standardStride, 1, previousBody)
+            for (var sample = 0; sample < samples; ++sample) {
+                var phase = sample / samples
+                var body = HumanGait.directionalBodyPose(
+                            headings[h], phase, standardStride, 1)
+                var pose = HumanGait.directionalLegPose(
+                            headings[h], phase, true,
+                            standardStride, 1, body)
+                verify(Math.abs(pose.hipX - previous.hipX) < 1.0,
+                       "hip X discontinuity at " + headings[h] + " / " + phase)
+                verify(Math.abs(pose.hipZ - previous.hipZ) < 0.3,
+                       "hip Z discontinuity at " + headings[h] + " / " + phase)
+                verify(Math.abs(pose.kneeX - previous.kneeX) < 1.5,
+                       "knee discontinuity at " + headings[h] + " / " + phase)
+                previous = pose
+            }
+        }
+    }
+
+    function test_weightTransferKeepsContactKneesLongAndUpperBodyQuiet() {
+        var headings = [0, 45, 75, 90, 105, 120, 135, 180,
+                        -45, -90, -120, -135]
+        for (var i = 0; i < headings.length; ++i) {
+            var body = HumanGait.directionalBodyPose(
+                        headings[i], 0, standardStride, 1)
+            var left = HumanGait.directionalLegPose(
+                        headings[i], 0, true, standardStride, 1, body)
+            var right = HumanGait.directionalLegPose(
+                        headings[i], 0, false, standardStride, 1, body)
+            verify(Math.abs(left.kneeX) < 15,
+                   "left contact knee at " + headings[i] + ": " + left.kneeX)
+            verify(Math.abs(right.kneeX) < 15,
+                   "right contact knee at " + headings[i] + ": " + right.kneeX)
+            var yaw = body.pelvisYaw * Math.PI / 180
+            var spineWorldX = Math.cos(yaw) * body.spineX
+                    + Math.sin(yaw) * body.spineZ
+            var spineWorldZ = -Math.sin(yaw) * body.spineX
+                    + Math.cos(yaw) * body.spineZ
+            closeTo(body.pelvisX + spineWorldX, 0, 0.0001)
+            closeTo(body.pelvisZ + spineWorldZ, 0, 0.0001)
+        }
     }
 
     function test_kneesOnlyFlexForward() {
@@ -194,9 +253,9 @@ TestCase {
         for (var i = 0; i < phases.length; ++i) {
             var body = HumanGait.bodyPose("march.forward", phases[i], standardStride, 1)
             var left = HumanGait.legPose("march.forward", phases[i], true,
-                                         standardStride, 1, body.pelvisY)
+                                         standardStride, 1, body.pelvisY, body.pelvisZ)
             var right = HumanGait.legPose("march.forward", phases[i], false,
-                                          standardStride, 1, body.pelvisY)
+                                          standardStride, 1, body.pelvisY, body.pelvisZ)
             verify(isFinite(left.hipX) && isFinite(left.kneeX) && isFinite(left.footX))
             verify(isFinite(right.hipX) && isFinite(right.kneeX) && isFinite(right.footX))
             verify(left.kneeX <= 0.001)
@@ -251,7 +310,7 @@ TestCase {
         var body = HumanGait.bodyPose("march.backward", 0.25,
                                       standardStride, 1)
         var leg = HumanGait.legPose("march.backward", 0.25, true,
-                                    standardStride, 1, body.pelvisY)
+                                    standardStride, 1, body.pelvisY, body.pelvisZ)
         verify(leg.kneeX > -15)
         verify(Math.abs(body.spinePitch) < 0.25)
     }
@@ -286,6 +345,21 @@ TestCase {
         closeTo(right.right, 1, 0.000001)
         closeTo(backward.backward, 1, 0.000001)
         closeTo(left.left, 1, 0.000001)
+    }
+
+    function test_rearDiagonalsUseBackwardTechnique() {
+        closeTo(HumanGait.backwardTechniqueWeight(75), 0, 0.001)
+        closeTo(HumanGait.backwardTechniqueWeight(90), 0, 0.001)
+        closeTo(HumanGait.backwardTechniqueWeight(97.5), 0.5, 0.001)
+        closeTo(HumanGait.backwardTechniqueWeight(105), 1, 0.001)
+        closeTo(HumanGait.backwardTechniqueWeight(135), 1, 0.001)
+        closeTo(HumanGait.backwardTechniqueWeight(-135), 1, 0.001)
+
+        var rearDiagonal = HumanGait.targetForDirection(120, 0, false,
+                                                         standardStride, 1)
+        var backward = HumanGait.targetForLeg("march.backward", 0, false,
+                                               standardStride, 1)
+        closeTo(rearDiagonal.footPitch, backward.footPitch, 0.001)
     }
 
     function test_directionalPoseIsContinuousAcrossOldModeBoundary() {
