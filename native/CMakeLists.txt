@@ -14,6 +14,8 @@ set(CMAKE_AUTORCC ON)
 find_package(Qt6 6.6 REQUIRED COMPONENTS
     Core Concurrent Gui Quick QuickControls2 Quick3D Multimedia Xml Sql Test)
 
+set_source_files_properties(qml/MarchCraftTheme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
+
 qt_standard_project_setup(REQUIRES 6.6)
 qt_policy(SET QTP0004 NEW)
 
@@ -28,6 +30,8 @@ qt_add_executable(marchcraft
     src/MidiSynthEngine.h
     src/TransportController.cpp
     src/TransportController.h
+    src/WorkspaceController.cpp
+    src/WorkspaceController.h
     src/SceneTypes.h
     src/AssetCatalog.cpp
     src/AssetCatalog.h
@@ -46,6 +50,11 @@ qt_add_qml_module(marchcraft
         qml/Prop3D.qml
         qml/FormationDialog.qml
         qml/MusicPanel.qml
+        qml/MarchCraftTheme.qml
+        qml/AppButton.qml
+        qml/AppToolButton.qml
+        qml/AppMenuItem.qml
+        qml/WorkspaceLogic.qml
     SOURCES
         src/HumanGeometry.cpp
         src/HumanGeometry.h
@@ -171,6 +180,8 @@ if(BUILD_TESTING)
         src/MidiSynthEngine.h
         src/TransportController.cpp
         src/TransportController.h
+        src/WorkspaceController.cpp
+        src/WorkspaceController.h
         src/SceneTypes.h
         src/AssetCatalog.cpp
         src/AssetCatalog.h

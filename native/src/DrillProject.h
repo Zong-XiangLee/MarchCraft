@@ -101,6 +101,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
     Q_PROPERTY(int selectedGroupedCount READ selectedGroupedCount NOTIFY selectionChanged)
     Q_PROPERTY(bool selectionIsExactGroup READ selectionIsExactGroup NOTIFY selectionChanged)
+    Q_PROPERTY(bool canGroupSelection READ canGroupSelection NOTIFY selectionChanged)
+    Q_PROPERTY(bool canRemoveSelectionFromGroup READ canRemoveSelectionFromGroup NOTIFY selectionChanged)
+    Q_PROPERTY(bool canUngroupSelection READ canUngroupSelection NOTIFY selectionChanged)
     Q_PROPERTY(double averageDistance READ averageDistance NOTIFY statisticsChanged)
     Q_PROPERTY(double totalDistance READ totalDistance NOTIFY statisticsChanged)
     Q_PROPERTY(double longestDistance READ longestDistance NOTIFY statisticsChanged)
@@ -265,6 +268,9 @@ public:
     int selectedCount() const;
     int selectedGroupedCount() const;
     bool selectionIsExactGroup() const;
+    bool canGroupSelection() const;
+    bool canRemoveSelectionFromGroup() const;
+    bool canUngroupSelection() const;
     double averageDistance() const;
     double totalDistance() const;
     double longestDistance() const;

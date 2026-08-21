@@ -463,9 +463,9 @@ Item {
         anchors.top: parent.top
         anchors.margins: 14
         spacing: 6
-        Button { text: "Press box"; onClicked: root.setCameraPreset("press") }
-        Button { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
-        Button { text: "Field"; onClicked: root.setCameraPreset("field") }
+        AppButton { text: "Press box"; onClicked: root.setCameraPreset("press") }
+        AppButton { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
+        AppButton { text: "Field"; onClicked: root.setCameraPreset("field") }
     }
 
     Flow {
@@ -520,7 +520,7 @@ Item {
         Label {
             visible: !assetCatalog.valid
             text: "Asset catalog error"
-            color: "#fb7185"
+            color: "#e07178"
             ToolTip.visible: hovered
             ToolTip.text: assetCatalog.validationErrors.join("\n")
             property bool hovered: catalogHover.hovered

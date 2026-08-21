@@ -66,9 +66,9 @@ Dialog {
                     Layout.fillWidth: true
                     text: "Placement: " + (drillProject.shapePlacementMode === "openSpace" ? "Nearest open space" :
                           drillProject.shapePlacementMode === "fieldCenter" ? "Field center" : "Selection centered")
-                    color: "#8fa197"
+                    color: "#a5afbc"
                 }
-                Button { text: "Settings…"; flat: true; onClicked: dialog.settingsRequested() }
+                AppButton { text: "Settings…"; flat: true; onClicked: dialog.settingsRequested() }
             }
 
             GridLayout {
@@ -105,7 +105,7 @@ Dialog {
                 Label { text: "Direction"; visible: kind.currentValue === "spiral" }
                 ComboBox { id: spiralDirection; Layout.fillWidth: true; visible: kind.currentValue === "spiral"; model: ["Counterclockwise", "Clockwise"] }
                 Label { text: "Core radius"; visible: kind.currentValue === "spiral" }
-                Label { text: spiralStyle.currentValue === "golden" ? "Golden ratio derived" : spiralStyle.currentValue === "galaxy" ? "Two arms; extra turns limited by radius" : "Automatic tight core"; color: "#8fa197"; visible: kind.currentValue === "spiral" }
+                Label { text: spiralStyle.currentValue === "golden" ? "Golden ratio derived" : spiralStyle.currentValue === "galaxy" ? "Two arms; extra turns limited by radius" : "Automatic tight core"; color: "#a5afbc"; visible: kind.currentValue === "spiral" }
                 Label { text: "Outer radius"; visible: kind.currentValue === "spiral" }
                 SpinBox { id: outerRadius; from: 1; to: 78; editable: true; Layout.fillWidth: true; visible: kind.currentValue === "spiral" }
                 Label { text: "Rows"; visible: kind.currentValue === "block" }
@@ -143,27 +143,27 @@ Dialog {
                 GridLayout {
                     anchors.fill: parent; columns: 2
                     property var metrics: drillProject.formationPreviewActive ? drillProject.formationPreviewMetrics : dialog.estimate
-                    Label { text: drillProject.formationPreviewActive ? "Preview average move" : "Estimated equal spacing"; color: "#8fa197" }
+                    Label { text: drillProject.formationPreviewActive ? "Preview average move" : "Estimated equal spacing"; color: "#a5afbc" }
                     Label { text: drillProject.formatDistance(drillProject.formationPreviewActive ? (parent.metrics.averageMove || 0) : (parent.metrics.estimatedSpacing || 0)); font.bold: true; Layout.alignment: Qt.AlignRight }
-                    Label { text: "Maximum move"; color: "#8fa197"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Maximum move"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
                     Label { text: drillProject.formatDistance(parent.metrics.maximumMove || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Max steps / count"; color: "#8fa197"; visible: drillProject.formationPreviewActive }
-                    Label { text: Number(parent.metrics.maximumStepsPerCount || 0).toFixed(2); color: (parent.metrics.maximumStepsPerCount || 0) > drillProject.maximumStepsPerCount ? drillProject.markerWarningColor : "#86efac"; font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Crossings / collisions"; color: "#8fa197"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Max steps / count"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
+                    Label { text: Number(parent.metrics.maximumStepsPerCount || 0).toFixed(2); color: (parent.metrics.maximumStepsPerCount || 0) > drillProject.maximumStepsPerCount ? drillProject.markerWarningColor : "#5ead83"; font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
+                    Label { text: "Crossings / collisions"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
                     Label { text: (parent.metrics.crossings || 0) + " / " + (parent.metrics.predictedCollisions || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Minimum spacing"; color: "#8fa197"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Minimum spacing"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
                     Label { text: drillProject.formatDistance(parent.metrics.minimumSpacing || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
                 }
             }
             Label {
-                Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#8fa197"
+                Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#a5afbc"
                 text: "The entire formation is fitted onto the field before performers are placed, so points never collapse at a sideline or corner."
             }
             RowLayout {
                 Layout.fillWidth: true
-                Button { text: "Cancel preview"; visible: drillProject.formationPreviewActive || drillProject.formationPreviewBusy; onClicked: drillProject.cancelFormationPreview() }
+                AppButton { text: "Cancel preview"; visible: drillProject.formationPreviewActive || drillProject.formationPreviewBusy; onClicked: drillProject.cancelFormationPreview() }
                 Item { Layout.fillWidth: true }
-                Button {
+                AppButton {
                     text: drillProject.formationPreviewBusy ? "Optimizing..." : drillProject.formationPreviewActive ? "Try another mode" : "Preview formation"
                     enabled: drillProject.selectedCount > 0 && !drillProject.formationPreviewBusy
                     onClicked: drillProject.requestFormationPreview(kind.currentValue, {
@@ -177,7 +177,7 @@ Dialog {
                         rows: gridRows.value, spacing: spacing.value
                     }, assignmentMode.currentValue)
                 }
-                Button { text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { drillProject.commitFormationPreview(); dialog.close() } }
+                AppButton { text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { drillProject.commitFormationPreview(); dialog.close() } }
             }
         }
     }
