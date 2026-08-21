@@ -148,6 +148,7 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     left_roll_zones = zone_heights(left_roll_vertices, (8, 9))
     left_flat_zones = zone_heights(left_flat_vertices, (8, 9))
     right_release_zones = zone_heights(left_roll_vertices, (12, 13))
+    right_clear_zones = zone_heights(left_flat_vertices, (12, 13))
     if not (left_contact_zones["heel"] + 0.015 < left_contact_zones["arch"]
             < left_contact_zones["ball"] < left_contact_zones["toe"]):
         violations.append("left step-off does not begin on the visible heel")
@@ -163,6 +164,8 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     if not (right_release_zones["heel"] > right_release_zones["arch"]
             > right_release_zones["ball"] > right_release_zones["toe"] >= 0.008):
         violations.append("right shoe remains on its toe after left-foot weight transfer")
+    if min(right_clear_zones.values()) < 0.015:
+        violations.append("right shoe is not fully clear when the left toe reaches the turf")
 
     flat_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.15, 0.5715))
@@ -214,6 +217,8 @@ def validate(source: pathlib.Path, samples: int) -> dict:
                                    for key, value in left_roll_zones.items()},
         "rightReleaseMeters": {key: round(value, 6)
                                 for key, value in right_release_zones.items()},
+        "rightAtLeftFlatMeters": {key: round(value, 6)
+                                   for key, value in right_clear_zones.items()},
         "flatSupportToeMeters": round(flat_toe, 6),
         "flatSupportHeelMeters": round(flat_heel, 6),
         "preTransferToeMeters": round(pretransfer_toe, 6),
