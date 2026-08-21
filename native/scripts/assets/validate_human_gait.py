@@ -144,33 +144,39 @@ def validate(source: pathlib.Path, samples: int) -> dict:
     left_flat_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.65, 0.5715))
     left_contact_zones = zone_heights(left_contact_vertices, (8, 9))
+    right_flat_zones = zone_heights(left_contact_vertices, (12, 13))
     left_roll_zones = zone_heights(left_roll_vertices, (8, 9))
     left_flat_zones = zone_heights(left_flat_vertices, (8, 9))
     right_release_zones = zone_heights(left_roll_vertices, (12, 13))
     if not (left_contact_zones["heel"] + 0.015 < left_contact_zones["arch"]
             < left_contact_zones["ball"] < left_contact_zones["toe"]):
         violations.append("left step-off does not begin on the visible heel")
+    if (max(right_flat_zones.values()) > 0.006
+            or max(right_flat_zones.values()) - min(right_flat_zones.values()) > 0.006):
+        violations.append("right shoe is not completely flat when the left heel lands")
     if not (left_roll_zones["heel"] <= 0.005
             and left_roll_zones["arch"] > left_roll_zones["heel"] + 0.006
             and left_roll_zones["toe"] > left_roll_zones["arch"] + 0.025):
         violations.append("left shoe does not progressively roll heel-to-toe")
     if max(left_flat_zones.values()) - min(left_flat_zones.values()) > 0.006:
         violations.append("left shoe does not finish its roll on a flat platform")
-    if min(right_release_zones.values()) < 0.008:
+    if not (right_release_zones["heel"] > right_release_zones["arch"]
+            > right_release_zones["ball"] > right_release_zones["toe"] >= 0.008):
         violations.append("right shoe remains on its toe after left-foot weight transfer")
 
     flat_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.15, 0.5715))
-    release_vertices = skinned_vertices(
+    pretransfer_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.forward", 0.49, 0.5715))
     flat_toe = min(flat_vertices[row][1] for row in right_toe_rows)
     flat_heel = min(flat_vertices[row][1] for row in right_heel_rows)
-    release_toe = min(release_vertices[row][1] for row in right_toe_rows)
-    release_heel = min(release_vertices[row][1] for row in right_heel_rows)
+    pretransfer_toe = min(pretransfer_vertices[row][1] for row in right_toe_rows)
+    pretransfer_heel = min(pretransfer_vertices[row][1] for row in right_heel_rows)
     if abs(flat_toe - flat_heel) > 0.006:
         violations.append("forward shoe does not roll from heel to a flat platform")
-    if release_heel - release_toe < 0.02:
-        violations.append("forward support does not transfer through the forefoot")
+    if (max(pretransfer_heel, pretransfer_toe) > 0.006
+            or abs(pretransfer_heel - pretransfer_toe) > 0.006):
+        violations.append("old support shoe lifts before the opposite heel arrives")
     backward_vertices = skinned_vertices(
         positions, joints, weights, pose_matrices("march.backward", 0.0, 0.5715))
     backward_toe = min(backward_vertices[row][1] for row in right_toe_rows)
@@ -202,14 +208,16 @@ def validate(source: pathlib.Path, samples: int) -> dict:
         "heelStrikeContacts": contact_checks,
         "leftStepOffContactMeters": {key: round(value, 6)
                                       for key, value in left_contact_zones.items()},
+        "rightAtLeftHeelContactMeters": {key: round(value, 6)
+                                          for key, value in right_flat_zones.items()},
         "leftStepOffRollMeters": {key: round(value, 6)
                                    for key, value in left_roll_zones.items()},
         "rightReleaseMeters": {key: round(value, 6)
                                 for key, value in right_release_zones.items()},
         "flatSupportToeMeters": round(flat_toe, 6),
         "flatSupportHeelMeters": round(flat_heel, 6),
-        "releaseToeMeters": round(release_toe, 6),
-        "releaseHeelMeters": round(release_heel, 6),
+        "preTransferToeMeters": round(pretransfer_toe, 6),
+        "preTransferHeelMeters": round(pretransfer_heel, 6),
         "backwardToeMeters": round(backward_toe, 6),
         "backwardHeelMeters": round(backward_heel, 6),
         "passingShoeGapMeters": round(passing_gap, 6),

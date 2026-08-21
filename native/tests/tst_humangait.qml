@@ -71,8 +71,8 @@ TestCase {
         }
         closeTo(HumanGait.targetForLeg("march.forward", 0.25, false,
                                        standardStride, 1).footPitch, 0, 0.001)
-        verify(HumanGait.targetForLeg("march.forward", 0.499, false,
-                                      standardStride, 1).footPitch > 11)
+        closeTo(HumanGait.targetForLeg("march.forward", 0.499, false,
+                                       standardStride, 1).footPitch, 0, 0.001)
         closeTo(HumanGait.targetForLeg("march.forward", 0.75, false,
                                        standardStride, 1).footPitch, 0, 0.001)
         verify(HumanGait.targetForLeg("march.forward", 0.999, false,
@@ -98,6 +98,21 @@ TestCase {
         closeTo(closed.footY, -45, 0.001)
         closeTo(closed.toeX, 0, 0.001)
         verify(closed.planted)
+    }
+
+    function test_leftHeelArrivesBeforeRightShoeReleases() {
+        var leftContact = HumanGait.targetForLeg("march.forward", 0.5, true,
+                                                 standardStride, 1)
+        var rightFlat = HumanGait.targetForLeg("march.forward", 0.5, false,
+                                                standardStride, 1)
+        var leftRolling = HumanGait.targetForLeg("march.forward", 0.575, true,
+                                                  standardStride, 1)
+        var rightReleasing = HumanGait.targetForLeg("march.forward", 0.575, false,
+                                                     standardStride, 1)
+        closeTo(leftContact.footPitch, -32, 0.001)
+        closeTo(rightFlat.footPitch, 0, 0.001)
+        verify(leftRolling.footPitch > leftContact.footPitch)
+        verify(rightReleasing.footPitch > rightFlat.footPitch)
     }
 
     function test_attentionPostureIsTallNeutralAndPerformanceReady() {
@@ -169,7 +184,9 @@ TestCase {
         verify(beforeCross.kneeX < atCross.kneeX - 4)
         verify(Math.abs(atCross.kneeX) < 15)
         verify(Math.abs(forwardSwing.kneeX) < 8)
-        verify(Math.abs(nextCount.kneeX) < 15)
+        // Double support keeps the old shoe flat while the new heel lands;
+        // allow the controlled knee accommodation required by that geometry.
+        verify(Math.abs(nextCount.kneeX) < 40)
     }
 
     function test_kneesOnlyFlexForward() {
