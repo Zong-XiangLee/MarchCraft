@@ -63,7 +63,7 @@ Item {
             detailLevel: drillProject.graphicsProfile === "presentation" ? 0
                        : drillProject.graphicsProfile === "performance" ? 2
                        : drillProject.graphicsProfile === "automatic"
-                         ? (drillProject.performerCount > 150 ? 1 : 0) : 1
+                         ? (drillProject.performerCount > 150 ? 2 : 0) : 1
         }
 
         Node {
@@ -369,6 +369,9 @@ Item {
                     locomotionMode: performerNode.locomotionMode
                     closingTransition: performerNode.closingTransition
                     debugOverlay: drillProject.debug3D
+                    castBodyShadow: drillProject.graphicsProfile === "presentation" ||
+                                    (drillProject.graphicsProfile !== "performance" &&
+                                     drillProject.performerCount <= 150)
                 }
             }
         }

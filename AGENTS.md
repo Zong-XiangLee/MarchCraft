@@ -95,3 +95,15 @@ MarchCraft is a clean-room native implementation. OpenMarch was consulted only a
 - Reuse existing patterns in the repository.
 - Fix build/test errors caused by the task before declaring completion.
 - If unrelated issues are found, report them rather than changing them automatically.
+
+## Windows Build Workflow
+
+- `build-worktree-mingw` is the canonical development build directory.
+- Never create another build directory unless explicitly instructed.
+- After every implementation task, rebuild the Windows executable.
+- Use the existing CMake/MinGW configuration in `build-worktree-mingw`.
+- A task is not complete until the executable builds successfully.
+- Always report the exact path to the generated `.exe`.
+- Do not commit build output or `.exe` files to Git.
+- If the build configuration is stale, regenerate it in `build-worktree-mingw` rather than creating a new directory.
+- If the executable is currently running and prevents rebuilding, stop the existing MarchCraft process before rebuilding.

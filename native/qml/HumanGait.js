@@ -5,22 +5,54 @@
 var thighLength = 0.39
 var shinLength = 0.415
 var standingHipHeight = 0.805
-var sole0 = [-0.00118,-0.00103,-0.00039,-0.00007,0.00001,0.00001,0.00001,0.00000,-0.00000,-0.00026,-0.00049,-0.00070,-0.00085,-0.00069,0.00044,0.00168,-0.00130,-0.00118,-0.00047,-0.00010,-0.00001,-0.00001,-0.00001,-0.00002,-0.00003,-0.00028,-0.00052,-0.00072,-0.00087,-0.00067,0.00049,0.00177]
-var sole45 = [0.00148,0.00088,0.00077,0.00074,0.00060,0.00039,0.00023,-0.00098,-0.00257,-0.00401,-0.00532,-0.00649,-0.00754,-0.00857,-0.00874,-0.00493,-0.00143,-0.00207,-0.01241,-0.01001,-0.00764,-0.00621,-0.00485,-0.00344,-0.00215,-0.00096,0.00015,0.00034,0.00050,-0.00001,0.00099,0.00208]
-var sole90 = [-0.00069,-0.01232,-0.02541,-0.02238,-0.01962,-0.01699,-0.01435,-0.01166,-0.00889,-0.00604,-0.00306,-0.00003,0.00010,0.00080,0.00201,0.00319,0.00136,0.00014,-0.00043,-0.00040,-0.00028,-0.00030,-0.00287,-0.00556,-0.00822,-0.01101,-0.01397,-0.01716,-0.02062,-0.02519,-0.02148,-0.01254]
-var sole135 = [-0.00161,-0.00599,-0.01604,-0.01439,-0.01218,-0.00986,-0.00751,-0.00511,-0.00265,-0.00012,0.00009,0.00015,0.00021,0.00025,0.00028,0.00030,-0.00002,-0.00032,-0.00048,0.00023,0.00005,0.00000,-0.00003,-0.00004,-0.00218,-0.00466,-0.00727,-0.01003,-0.01294,-0.01603,-0.01928,-0.01443]
-var sole180 = [-0.00068,-0.00063,-0.00052,-0.00020,-0.00012,-0.00008,-0.00003,0.00001,0.00003,0.00004,0.00004,-0.00008,-0.00018,-0.00027,-0.00039,0.00001,-0.00061,-0.00057,-0.00047,-0.00016,-0.00008,-0.00004,0.00000,0.00004,0.00007,0.00009,0.00009,-0.00004,-0.00013,-0.00023,-0.00034,0.00006]
-var sole225 = [0.00007,-0.00027,-0.00047,0.00021,0.00003,-0.00002,-0.00005,-0.00007,-0.00247,-0.00510,-0.00784,-0.01069,-0.01363,-0.01667,-0.01981,-0.01485,-0.00172,-0.00580,-0.01562,-0.01376,-0.01150,-0.00921,-0.00694,-0.00466,-0.00235,0.00001,0.00011,0.00018,0.00023,0.00027,0.00031,0.00034]
-var sole270 = [0.00152,0.00024,-0.00038,-0.00040,-0.00030,-0.00031,-0.00314,-0.00612,-0.00911,-0.01216,-0.01534,-0.01864,-0.02209,-0.02656,-0.02299,-0.01343,-0.00087,-0.01185,-0.02441,-0.02104,-0.01815,-0.01553,-0.01302,-0.01054,-0.00805,-0.00550,-0.00282,-0.00004,0.00009,0.00080,0.00205,0.00328]
-var sole315 = [-0.00126,-0.00193,-0.01252,-0.01024,-0.00794,-0.00652,-0.00515,-0.00372,-0.00239,-0.00116,-0.00000,0.00037,0.00052,-0.00001,0.00097,0.00201,0.00128,0.00070,0.00066,0.00069,0.00056,0.00036,0.00020,-0.00077,-0.00232,-0.00374,-0.00503,-0.00621,-0.00727,-0.00832,-0.00852,-0.00477]
-var halfStrideCorrections = [[0.00043,0.00000,0.00000,0.00017,0.00057,0.00000,0.00000,0.00016],[-0.00080,-0.00019,0.00000,0.00204,-0.00074,0.00286,0.00000,-0.00055],[-0.00083,0.00612,0.00000,-0.00304,-0.00109,-0.00248,0.00000,0.00644],[0.00157,0.00498,0.00000,0.00000,-0.00038,-0.00008,0.00000,0.00516],[-0.00002,-0.00001,0.00000,0.00019,-0.00003,-0.00001,0.00000,0.00019],[-0.00043,-0.00008,0.00000,0.00539,0.00158,0.00475,0.00000,0.00000],[-0.00124,-0.00267,0.00000,0.00688,-0.00086,0.00566,0.00000,-0.00283],[-0.00070,0.00291,0.00000,-0.00068,-0.00058,-0.00018,0.00000,0.00199]]
-var extendedStrideCorrections = [[0.00040,0.00000,0.00000,-0.00008,0.00054,0.00000,0.00000,-0.00008],[0.00110,0.00016,0.00000,-0.00085,0.00064,-0.00131,0.00000,0.00010],[-0.00151,-0.00289,0.00000,-0.00004,0.00269,0.00009,0.00000,-0.00307],[-0.00458,-0.00206,0.00000,-0.00005,0.00050,0.00004,0.00000,-0.00215],[0.00002,0.00001,0.00000,0.00008,0.00002,0.00000,0.00000,0.00008],[0.00040,0.00003,0.00000,-0.00219,-0.00459,-0.00211,0.00000,-0.00005],[0.00273,0.00011,0.00000,-0.00327,-0.00157,-0.00267,0.00000,-0.00004],[0.00069,-0.00133,0.00000,0.00010,0.00134,0.00015,0.00000,-0.00082]]
-var halfBackDiagonalCorrections = [[0.00054,-0.00202,0.00000,0.00206,0.00002,0.00205,0.00000,-0.00179],[0.00115,-0.00331,-0.00025,0.00283,0.00004,0.00234,-0.00022,-0.00149],[0.00004,0.00253,-0.00023,-0.00048,0.00115,-0.00330,-0.00025,0.00264],[0.00002,0.00208,0.00000,-0.00074,0.00054,-0.00200,0.00000,0.00203]]
-var extendedBackDiagonalCorrections = [[-0.00065,-0.00518,0.00000,0.00012,-0.00666,-0.00041,0.00000,-0.00395],[0.00168,-0.00702,0.00014,0.00028,-0.00717,-0.00031,0.00014,-0.00656],[-0.00740,-0.00032,0.00015,-0.00623,0.00173,-0.00767,0.00011,0.00028],[-0.00690,-0.00042,0.00000,-0.00382,-0.00062,-0.00523,0.00000,0.00012]]
+var attentionToeOutDegrees = 45.0
+var attentionHeadPitchDegrees = 10.0
+var attentionPelvisDropMeters = -0.00141
+var slidePelvisFromFacingDegrees = 60.0
+var sole0 = [-0.00077,-0.00475,-0.00215,-0.00578,-0.00154,0.00001,0.00001,0.00000,-0.00000,-0.00026,-0.00049,-0.00070,-0.00085,-0.00094,-0.00096,-0.00089,-0.00075,-0.00453,-0.00191,-0.00568,-0.00151,-0.00001,-0.00001,-0.00002,-0.00003,-0.00028,-0.00052,-0.00072,-0.00087,-0.00096,-0.00098,-0.00092]
+var sole45 = [0.00176,0.00019,-0.00296,-0.00129,-0.00081,0.00036,0.00021,-0.00048,-0.00198,-0.00335,-0.00458,-0.00568,-0.00664,-0.00746,-0.00816,-0.00378,-0.00545,-0.00459,-0.00166,-0.01182,-0.00880,-0.00556,-0.00424,-0.00292,-0.00172,0.00109,0.00029,0.00032,0.00048,0.00069,0.00097,0.00132]
+var sole90 = [-0.00736,-0.00617,-0.01086,-0.02503,-0.01844,-0.01313,-0.01114,-0.00835,-0.00698,-0.00473,-0.00246,-0.00009,-0.00000,0.00007,0.00013,0.00018,0.00023,-0.00233,-0.00160,-0.00217,-0.00036,-0.00029,-0.00239,-0.00455,-0.00658,-0.00900,-0.01144,-0.01408,-0.01696,-0.02007,-0.02342,-0.00876]
+var sole135 = [-0.01649,-0.00603,-0.01249,-0.01679,-0.01032,-0.00789,-0.00606,-0.00420,-0.00229,-0.00041,-0.00050,-0.00059,-0.00068,-0.00075,-0.00081,-0.00086,-0.00083,-0.00073,-0.00050,-0.00020,-0.00058,-0.00060,-0.00056,-0.00048,-0.00207,-0.00415,-0.00635,-0.00868,-0.01117,-0.01382,-0.01665,-0.01967]
+var sole180 = [-0.00061,-0.00058,-0.00058,-0.00060,-0.00062,-0.00062,-0.00063,-0.00064,-0.00065,-0.00067,-0.00071,-0.00077,-0.00084,-0.00093,-0.00106,-0.00121,-0.00071,-0.00069,-0.00069,-0.00070,-0.00072,-0.00073,-0.00073,-0.00074,-0.00075,-0.00078,-0.00082,-0.00087,-0.00094,-0.00104,-0.00116,-0.00131]
+var sole225 = [-0.00096,-0.00086,-0.00059,-0.00021,-0.00053,-0.00055,-0.00051,-0.00042,-0.00213,-0.00428,-0.00653,-0.00890,-0.01140,-0.01403,-0.01681,-0.01973,-0.01635,-0.00576,-0.01217,-0.01648,-0.01007,-0.00766,-0.00587,-0.00407,-0.00223,-0.00047,-0.00056,-0.00065,-0.00073,-0.00080,-0.00087,-0.00092]
+var sole270 = [0.00024,-0.00236,-0.00182,-0.00212,-0.00038,-0.00031,-0.00252,-0.00480,-0.00700,-0.00952,-0.01206,-0.01475,-0.01762,-0.02066,-0.02388,-0.00877,-0.00702,-0.00588,-0.01013,-0.02429,-0.01771,-0.01245,-0.01052,-0.00830,-0.00660,-0.00453,-0.00236,-0.00009,0.00000,0.00007,0.00013,0.00019]
+var sole315 = [-0.00578,-0.00491,-0.00189,-0.01201,-0.00897,-0.00572,-0.00438,-0.00304,-0.00182,0.00102,0.00023,0.00035,0.00051,0.00072,0.00099,0.00134,0.00179,0.00024,-0.00272,-0.00116,-0.00078,0.00033,0.00019,-0.00040,-0.00188,-0.00323,-0.00445,-0.00555,-0.00651,-0.00735,-0.00808,-0.00409]
+var halfStrideCorrections = [
+    [0.00002,0.00052,-0.00000,-0.00483,-0.00018,-0.00000,0.00000,0.00000,0.00000,0.00006,0.00011,0.00014,0.00017,0.00017,0.00015,0.00010,0.00002,0.00034,-0.00000,-0.00483,-0.00018,-0.00000,0.00000,0.00000,-0.00000,0.00006,0.00011,0.00014,0.00017,0.00017,0.00015,0.00010],
+    [-0.00112,-0.00165,0.00050,-0.00819,-0.00049,-0.00008,-0.00042,-0.00063,0.00000,0.00056,0.00106,0.00149,0.00186,0.00216,0.00736,-0.00009,0.00015,0.00014,-0.00347,-0.00166,0.00267,0.00196,0.00130,0.00062,-0.00000,-0.00227,0.00069,-0.00055,-0.00027,-0.00025,-0.00045,-0.00073],
+    [0.00116,0.00091,-0.00253,0.01142,0.00473,0.00356,0.00239,0.00046,0.00000,-0.00075,-0.00228,-0.00363,-0.00238,-0.00110,0.00001,-0.00001,-0.00005,0.00019,-0.00020,-0.00987,-0.00387,-0.00308,-0.00215,-0.00111,0.00000,0.00117,0.00244,0.00382,0.00536,0.00707,0.02046,0.00402],
+    [0.00924,-0.00084,0.00097,0.00909,0.00372,0.00319,0.00214,0.00108,-0.00000,-0.00101,-0.00000,-0.00000,0.00000,0.00001,0.00002,0.00005,0.00001,-0.00047,-0.00311,-0.00563,-0.00016,-0.00007,-0.00003,-0.00058,0.00000,0.00103,0.00212,0.00329,0.00457,0.00596,0.00750,0.00919],
+    [-0.00002,-0.00004,-0.00004,-0.00002,-0.00001,-0.00000,-0.00000,-0.00000,-0.00000,-0.00006,-0.00011,-0.00014,-0.00016,-0.00016,-0.00013,-0.00007,-0.00002,-0.00004,-0.00004,-0.00002,-0.00001,-0.00000,-0.00000,-0.00000,0.00000,-0.00006,-0.00011,-0.00014,-0.00016,-0.00016,-0.00013,-0.00007],
+    [0.00008,-0.00047,-0.00306,-0.00558,-0.00015,-0.00007,-0.00002,-0.00066,0.00000,0.00106,0.00219,0.00339,0.00468,0.00607,0.00759,0.00925,0.00924,-0.00090,0.00091,0.00891,0.00360,0.00309,0.00207,0.00104,0.00000,-0.00093,-0.00000,-0.00000,0.00000,0.00001,0.00003,0.00005],
+    [-0.00005,0.00018,-0.00021,-0.01007,-0.00396,-0.00325,-0.00228,-0.00118,0.00000,0.00124,0.00257,0.00400,0.00557,0.00727,0.02071,0.00434,0.00115,0.00092,-0.00270,0.01083,0.00453,0.00337,0.00226,0.00085,0.00000,-0.00064,-0.00226,-0.00346,-0.00229,-0.00106,0.00002,-0.00001],
+    [0.00015,0.00014,-0.00354,-0.00163,0.00271,0.00199,0.00132,0.00063,0.00000,-0.00228,0.00064,-0.00062,-0.00032,-0.00024,-0.00044,-0.00073,-0.00112,-0.00166,0.00050,-0.00816,-0.00043,-0.00008,-0.00033,-0.00063,-0.00000,0.00055,0.00104,0.00147,0.00183,0.00213,0.00711,-0.00008],
+]
+var extendedStrideCorrections = [
+    [-0.00493,-0.00010,0.00000,0.00336,0.00044,0.00000,0.00000,-0.00000,0.00000,-0.00003,-0.00005,-0.00007,-0.00008,-0.00008,-0.00007,-0.00166,-0.00462,0.00000,0.00000,0.00336,0.00044,0.00000,0.00000,-0.00000,-0.00000,-0.00003,-0.00005,-0.00007,-0.00008,-0.00008,-0.00007,-0.00166],
+    [-0.00869,-0.00661,-0.00043,0.00029,-0.00008,0.00007,0.00002,0.00029,0.00000,-0.00025,-0.00046,-0.00063,-0.00076,-0.00084,-0.00088,-0.00337,-0.00016,0.00006,-0.00006,-0.00095,-0.00086,-0.00089,-0.00060,-0.00028,-0.00000,0.00141,-0.00009,0.00005,0.00013,0.00026,0.00047,0.00063],
+    [-0.01429,-0.00037,0.00324,0.00027,-0.00115,-0.00164,-0.00109,0.00000,0.00000,0.00050,0.00112,-0.00001,-0.00001,0.00000,0.00003,0.00011,-0.00044,-0.00075,0.00021,0.00193,0.00001,-0.00002,0.00097,0.00050,0.00000,-0.00053,-0.00112,-0.00179,-0.00258,-0.00350,-0.00459,-0.01437],
+    [-0.01352,-0.00328,0.00417,0.00104,-0.00133,-0.00126,-0.00084,-0.00042,-0.00000,-0.00000,-0.00001,-0.00003,-0.00006,-0.00014,-0.00023,-0.00030,-0.00021,0.00010,0.00026,0.00015,0.00011,0.00004,0.00001,-0.00000,0.00000,-0.00041,-0.00086,-0.00133,-0.00188,-0.00250,-0.00324,-0.00410],
+    [0.00002,0.00003,0.00003,0.00002,0.00001,0.00000,0.00000,-0.00001,-0.00000,0.00003,0.00005,0.00006,0.00007,0.00007,0.00006,0.00003,0.00002,0.00003,0.00003,0.00002,0.00001,0.00000,0.00000,-0.00001,0.00000,0.00003,0.00005,0.00006,0.00007,0.00007,0.00006,0.00003],
+    [-0.00032,0.00005,0.00024,0.00014,0.00009,0.00004,0.00002,0.00000,0.00000,-0.00042,-0.00087,-0.00133,-0.00186,-0.00248,-0.00323,-0.00410,-0.01352,-0.00324,0.00423,0.00102,-0.00144,-0.00131,-0.00084,-0.00042,0.00000,0.00000,0.00000,-0.00003,-0.00006,-0.00015,-0.00024,-0.00043],
+    [-0.00044,-0.00073,0.00022,0.00178,0.00001,-0.00002,0.00103,0.00053,0.00000,-0.00056,-0.00118,-0.00188,-0.00267,-0.00359,-0.00467,-0.01443,-0.01429,-0.00038,0.00332,0.00037,-0.00172,-0.00155,-0.00103,0.00000,0.00000,0.00052,0.00106,-0.00001,-0.00001,0.00000,0.00003,0.00011],
+    [-0.00017,0.00006,-0.00007,-0.00102,-0.00087,-0.00090,-0.00061,-0.00029,0.00000,0.00135,-0.00000,0.00005,0.00013,0.00026,0.00046,0.00063,-0.00839,-0.00634,-0.00043,0.00028,-0.00008,0.00006,0.00002,0.00028,-0.00000,-0.00025,-0.00045,-0.00062,-0.00074,-0.00082,-0.00086,-0.00330],
+]
+var halfBackDiagonalCorrections = [
+    [0.00029,0.00019,-0.00296,0.00001,-0.00197,-0.00144,-0.00096,-0.00046,-0.00000,0.00092,0.00177,0.00163,0.00194,0.00113,0.00001,0.00002,0.00002,0.00002,0.00003,0.00244,0.00194,0.00145,0.00097,0.00049,-0.00000,-0.00049,-0.00097,-0.00145,-0.00194,-0.00242,-0.00379,0.00024],
+    [0.00095,0.00075,-0.00496,0.00001,-0.00321,-0.00228,-0.00150,-0.00063,0.00002,0.00136,0.00262,0.00274,0.00177,0.00062,-0.00069,-0.00075,-0.00077,-0.00010,0.00025,0.00403,0.00331,0.00221,0.00154,0.00082,-0.00008,-0.00074,-0.00153,-0.00231,-0.00308,-0.00386,-0.00686,0.00105],
+    [-0.00080,-0.00010,0.00024,0.00406,0.00334,0.00226,0.00158,0.00084,-0.00005,-0.00075,-0.00155,-0.00234,-0.00312,-0.00389,-0.00690,0.00105,0.00095,0.00075,-0.00493,0.00002,-0.00318,-0.00226,-0.00149,-0.00072,0.00002,0.00134,0.00263,0.00261,0.00167,0.00055,-0.00071,-0.00078],
+    [0.00002,0.00002,0.00003,0.00247,0.00197,0.00147,0.00098,0.00049,0.00000,-0.00049,-0.00099,-0.00148,-0.00196,-0.00245,-0.00382,0.00024,0.00029,0.00019,-0.00294,0.00001,-0.00195,-0.00143,-0.00095,-0.00047,0.00000,0.00090,0.00174,0.00145,0.00192,0.00109,0.00001,0.00002],
+]
+var extendedBackDiagonalCorrections = [
+    [-0.01173,-0.00478,-0.00798,-0.00648,0.00021,-0.00363,-0.00220,0.00008,-0.00000,0.00164,0.00098,-0.00004,0.00012,0.00021,0.00029,-0.00138,-0.00216,-0.00170,-0.00141,-0.00086,-0.00032,-0.00021,0.00105,0.00116,-0.00000,-0.00098,-0.00197,-0.00279,-0.00363,-0.00442,-0.00523,-0.00979],
+    [-0.01612,-0.00885,-0.01118,-0.00913,-0.00209,-0.00420,-0.00289,-0.00037,0.00041,0.00240,0.00108,-0.00011,-0.00021,-0.00043,-0.00023,-0.00266,-0.00405,-0.00197,-0.00150,-0.00079,-0.00016,-0.00023,0.00116,0.00230,0.00028,-0.00116,-0.00272,-0.00424,-0.00573,-0.00724,-0.00878,-0.01505],
+    [-0.00412,-0.00200,-0.00153,-0.00079,-0.00016,-0.00021,0.00124,0.00234,0.00033,-0.00103,-0.00248,-0.00393,-0.00537,-0.00693,-0.00850,-0.01492,-0.01612,-0.00871,-0.01161,-0.00958,-0.00137,-0.00521,-0.00325,0.00017,0.00038,0.00223,0.00104,-0.00011,-0.00023,-0.00045,-0.00037,-0.00270],
+    [-0.00222,-0.00175,-0.00145,-0.00087,-0.00032,-0.00021,0.00111,0.00118,0.00000,-0.00093,-0.00185,-0.00264,-0.00343,-0.00424,-0.00507,-0.00971,-0.01172,-0.00439,-0.00796,-0.00644,0.00018,-0.00371,-0.00237,-0.00001,0.00000,0.00152,0.00094,-0.00003,0.00012,0.00022,0.00031,-0.00140],
+]
 var residual105 = [0.00166,0.00064,0.00017,-0.00017,0,0.00022,-0.00010,-0.00030,0.00294,0.00168,0.00044,0.00005,0,-0.00041,-0.00112,-0.00197]
 var residual120 = [0.00037,-0.00058,-0.00078,-0.00087,-0.00039,-0.00008,-0.00023,-0.00009,0.00363,0.00163,0.00034,-0.00022,-0.00036,-0.00108,-0.00187,-0.00266]
 var residual135 = [-0.00094,-0.00040,-0.00029,-0.00014,0,0.00001,0.00005,0.00020,0.00046,0.00006,0.00003,0.00001,0,-0.00010,-0.00028,-0.00054]
-var residual150 = [-0.00223,-0.00088,-0.00026,-0.00003,0.00001,0.00002,0.00039,0.00102,0.00039,-0.00015,-0.00005,0.00003,0.00001,-0.00021,-0.00042,-0.00088]
+var residual150 = [0.00032,0.00126,0.00086,0.00124,0.00089,0.00045,0.00027,0.00017,0.00013,0.00001,0.00001,0.00004,0.00006,0.00008,0.00010,0.00008,0.00040,0.00322,0.00222,0.00108,0.00042,0.00018,0.00007,0.00003,0.00014,0.00008,-0.00004,-0.00025,-0.00057,-0.00101,-0.00161,-0.00237]
 var residual165 = [-0.00117,-0.00043,-0.00014,-0.00002,0,0,0.00035,0.00082,0.00062,0.00020,0.00004,0.00001,0,-0.00009,-0.00019,-0.00052]
 var residual195 = [0.00063,0.00020,0.00004,0.00001,0,-0.00014,-0.00019,-0.00051,-0.00116,-0.00043,-0.00014,-0.00002,0,0,0.00036,0.00081]
 var residual210 = [0.00053,-0.00013,-0.00002,0.00003,0.00001,-0.00021,-0.00043,-0.00088,-0.00223,-0.00088,-0.00027,-0.00004,0.00001,0.00002,0.00039,0.00102]
@@ -78,36 +110,38 @@ function footPitch(mode, cycle) {
     var t = stance ? cycle * 2 : (cycle - 0.5) * 2
     if (mode === "march.forward") {
         if (stance) {
-            // Establish the count with the heel, then place arch, ball and toe
-            // onto the turf. The support foot stays whole-footed until weight
-            // has transferred; forward marching never departs toe-only.
-            if (t < 0.24) return mix(20, 0, smootherStep(t / 0.24))
+            // Every count begins on a clearly presented heel. Roll through
+            // heel, arch, ball and toe, then lift the heel for the transfer.
+            // This mesh's visible toe extends along local +Z, opposite the
+            // generated toe bone. Negative pitch raises that visible toe.
+            if (t < 0.30) return mix(-32, 0, smootherStep(t / 0.30))
+            // Stay completely flat until the opposite heel arrives. The
+            // release belongs to the next recovery half-cycle so both shoes
+            // exchange heel/arch/ball/toe support at the same time.
             return 0
         }
-        if (t < 0.24) return mix(0, 2, smootherStep(t / 0.24))
-        if (t < 0.70) return mix(2, 8, smootherStep((t - 0.24) / 0.46))
-        return mix(8, 20, smootherStep((t - 0.70) / 0.30))
+        // Begin from a completely flat old shoe as the opposite heel lands,
+        // then release heel-to-toe while that arriving shoe rolls down.
+        if (t < 0.30) return mix(0, 20, smootherStep(t / 0.30))
+        if (t < 0.50) return mix(20, 0, smootherStep((t - 0.30) / 0.20))
+        if (t < 0.76) return 0
+        return mix(0, -32, smootherStep((t - 0.76) / 0.24))
     }
     if (mode === "march.backward") {
         // Backward marching keeps the platform close to the turf.  The ankle
         // stays slightly plantar-flexed instead of replaying heel-first
         // forward articulation in reverse.
-        if (stance)
-            return t < 0.24 ? mix(-5, -2, smootherStep(t / 0.24))
-                            : mix(-2, -4, smootherStep((t - 0.24) / 0.76))
-        return t < 0.55 ? mix(-4, -1, smootherStep(t / 0.55))
-                        : mix(-1, -5, smootherStep((t - 0.55) / 0.45))
+        // Keep one calm forefoot platform instead of oscillating the ankle
+        // through several pitch targets, which made backward legs chatter.
+        if (stance) return 8
+        return 8 - 2 * Math.sin(Math.PI * t)
     }
     return 0
 }
 
 function toePitch(mode, cycle) {
-    var stance = cycle < 0.5
-    var t = stance ? cycle * 2 : (cycle - 0.5) * 2
-    // Forward and slide technique articulates the whole foot at the ankle.
-    // Keeping this joint neutral makes heel/arch/ball/toe support together.
-    if (mode === "march.backward" && stance)
-        return 2 + 2 * smootherStep(t)
+    // The generated toe bone points opposite the visible shoe. Keep it neutral
+    // and articulate the actual heel/arch/ball/toe sequence at the ankle.
     return 0
 }
 
@@ -126,9 +160,20 @@ function targetForLeg(mode, gaitPhase, leftSide, strideMeters, motionWeight) {
     var along = direction * strideMeters * (stance ? 0.5 - travel : travel - 0.5)
     var lift = 0
     if (!stance) {
-        var arc = Math.pow(Math.sin(Math.PI * t), 1.35)
-        lift = arc * (mode === "march.backward" ? 0.005
-                      : mode === "march.forward" ? 0.026 : 0.018)
+        if (mode === "march.forward") {
+            // Controlled clearance peaks before the legs pass. At and after
+            // the crossing point the shoe returns close to the turf so the
+            // advancing leg can lengthen into the straight-leg silhouette.
+            lift = t < 0.30
+                    ? 0.018 * smootherStep(t / 0.30)
+                    : t < 0.55
+                      ? mix(0.018, 0.0015, smootherStep((t - 0.30) / 0.25))
+                      : t < 0.72
+                        ? mix(0.0015, 0, smootherStep((t - 0.55) / 0.17)) : 0
+        } else {
+            var arc = Math.pow(Math.sin(Math.PI * t), 1.35)
+            lift = arc * (mode === "march.backward" ? 0.003 : 0.018)
+        }
     }
     var pitch = footPitch(mode, cycle)
     // Raising the ankle by the rotated sole's lowest extent keeps heel strike
@@ -186,23 +231,33 @@ function requiredPelvisDrop(leftTarget, rightTarget) {
         var horizontal = Math.sqrt(target.x * target.x + target.z * target.z)
         return Math.sqrt(Math.max(0, reach * reach - horizontal * horizontal)) + target.lift
     }
-    // The support leg determines body height through most of the count. Near
-    // toe departure and heel/platform arrival, both legs constrain the pelvis
-    // so the support exchange remains continuous instead of popping vertically.
+    // Let the support leg determine the pelvis adjustment. In particular, a
+    // high-toe heel strike raises the ankle: allowing the pelvis to follow by
+    // a few centimetres keeps that landing knee straight. The spine applies
+    // the opposite lift, so head/chest height remains quiet. The recovering
+    // leg may flex and must not force the newly landed support knee to buckle.
     var support = leftTarget.stance ? leftTarget : rightTarget
     var moving = leftTarget.stance ? rightTarget : leftTarget
-    var supportDrop = Math.min(0, availableVertical(support) - standingHipHeight)
-    var movingDrop = Math.min(0, availableVertical(moving) - standingHipHeight)
-    var edgeDistance = Math.min(moving.progress, 1 - moving.progress)
-    var doubleSupportWeight = 1 - smootherStep(edgeDistance / 0.12)
-    return mix(supportDrop, Math.min(supportDrop, movingDrop), doubleSupportWeight)
+    var supportAdjustment = clamp(availableVertical(support) - standingHipHeight, -0.06, 0.05)
+    var landingAdjustment = clamp(availableVertical(moving) - standingHipHeight, -0.06, 0.05)
+    // At the count boundary the old support shoe has just become the recovery
+    // shoe, but it must remain completely flat while the opposite heel lands.
+    // Transfer ownership to the new support as its sole rolls down. Keep that
+    // support in charge through the rest of the count so it cannot float and
+    // snap back to the turf while the next heel approaches.
+    if (moving.progress < 0.30)
+        return mix(landingAdjustment, supportAdjustment,
+                   smootherStep(moving.progress / 0.30))
+    return supportAdjustment
 }
 
 function bodyPose(mode, gaitPhase, strideMeters, motionWeight) {
     if (!isLocomotion(mode) || motionWeight <= 0.0001)
-        return { pelvisX: 0, pelvisY: 0, ikPelvisY: 0, pelvisYaw: 0, pelvisRoll: 0,
-                 spineYaw: 0, spineRoll: 0, spinePitch: 0,
-                 spineLift: 0, headPitch: 0, breath: 0 }
+        return { pelvisX: 0, pelvisY: attentionPelvisDropMeters,
+                 ikPelvisY: attentionPelvisDropMeters, pelvisYaw: 0, pelvisRoll: 0,
+                 spineYaw: 0, spineRoll: 0, spinePitch: 1.6,
+                 spineLift: -attentionPelvisDropMeters * 0.95,
+                 headPitch: attentionHeadPitchDegrees, breath: 0 }
     var left = targetForLeg(mode, gaitPhase, true, strideMeters, motionWeight)
     var right = targetForLeg(mode, gaitPhase, false, strideMeters, motionWeight)
     var rhythm = gaitPhase * Math.PI * 2
@@ -225,7 +280,8 @@ function bodyPose(mode, gaitPhase, strideMeters, motionWeight) {
             pelvisDrop += 0.00002 * clamp(strideMeters / 0.70, 0, 1) * motionWeight
     }
     var pelvisYaw = slideDirection !== 0
-            ? slideDirection * (68 + Math.sin(rhythm) * 2.0) * motionWeight
+            ? slideDirection * (slidePelvisFromFacingDegrees
+                                + Math.sin(rhythm) * 1.0) * motionWeight
             : Math.sin(rhythm) * 1.4 * motionWeight
     var pelvisRoll = -Math.cos(rhythm) * 0.38 * motionWeight
     return {
@@ -234,11 +290,12 @@ function bodyPose(mode, gaitPhase, strideMeters, motionWeight) {
         ikPelvisY: pelvisDrop,
         pelvisYaw: pelvisYaw,
         pelvisRoll: pelvisRoll,
-        spineYaw: -pelvisYaw * (slideDirection !== 0 ? 0.985 : 0.78),
+        spineYaw: -pelvisYaw * (slideDirection !== 0 ? 1.0 : 0.78),
         spineRoll: -pelvisRoll * 0.92,
         spinePitch: Math.sin(rhythm + 0.18) * 0.22 * motionWeight,
         spineLift: -pelvisDrop * 0.95,
-        headPitch: -Math.sin(rhythm + 0.18) * 0.16 * motionWeight,
+        headPitch: attentionHeadPitchDegrees
+                   - Math.sin(rhythm + 0.18) * 0.12 * motionWeight,
         breath: Math.sin(rhythm * 0.5) * 0.0007 * motionWeight
     }
 }
@@ -319,22 +376,30 @@ function directionalBodyPose(relativeDegrees, gaitPhase, strideMeters, motionWei
     var weights = directionalWeights(relativeDegrees)
     var left = targetForDirection(relativeDegrees, gaitPhase, true, strideMeters, motionWeight)
     var right = targetForDirection(relativeDegrees, gaitPhase, false, strideMeters, motionWeight)
-    var pelvisDrop = requiredPelvisDrop(left, right) * motionWeight
+    // Exclude ground calibration from the reach solve, then apply it afterward
+    // to shoe and pelvis together. This grounds the lower body rigidly while
+    // preventing the calibration from feeding back into hip/knee articulation.
+    var soleCorrection = directionalSoleOffset(relativeDegrees, gaitPhase, strideMeters) * motionWeight
+    left.lift -= soleCorrection
+    right.lift -= soleCorrection
+    var pelvisDrop = requiredPelvisDrop(left, right) * motionWeight + soleCorrection
     var rhythm = gaitPhase * Math.PI * 2
     var slideStrength = weights.right - weights.left
     var longitudinalWeight = weights.forward + weights.backward
-    var pelvisYaw = (slideStrength * (68 + Math.sin(rhythm) * 2.0)
+    var pelvisYaw = (slideStrength * (slidePelvisFromFacingDegrees
+                                     + Math.sin(rhythm) * 1.0)
                      + longitudinalWeight * Math.sin(rhythm) * 1.4) * motionWeight
     var pelvisRoll = -Math.cos(rhythm) * 0.38 * motionWeight
     return { pelvisX: Math.cos(rhythm) * 0.0065 * motionWeight,
              pelvisY: pelvisDrop, ikPelvisY: pelvisDrop,
              pelvisYaw: pelvisYaw, pelvisRoll: pelvisRoll,
-             spineYaw: -pelvisYaw * mix(0.78, 0.985,
+             spineYaw: -pelvisYaw * mix(0.78, 1.0,
                                          smootherStep(Math.abs(slideStrength) * 2)),
              spineRoll: -pelvisRoll * 0.92,
              spinePitch: Math.sin(rhythm + 0.18) * 0.22 * motionWeight,
              spineLift: -pelvisDrop * 0.95,
-             headPitch: -Math.sin(rhythm + 0.18) * 0.16 * motionWeight,
+             headPitch: attentionHeadPitchDegrees
+                        - Math.sin(rhythm + 0.18) * 0.12 * motionWeight,
              breath: Math.sin(rhythm * 0.5) * 0.0007 * motionWeight }
 }
 
@@ -376,8 +441,11 @@ function legPose(mode, gaitPhase, leftSide, strideMeters, motionWeight, pelvisDr
         var minimumFlex = mode === "march.backward" ? -0.7 : -1.4
         var knee = Math.min(ik.knee, minimumFlex)
         var hip = ik.hip - (knee - ik.knee) * 0.5
-        return { hipX: hip, hipZ: 0, kneeX: knee, kneeZ: 0,
-                 footX: target.footPitch - hip - knee, footY: 0, footZ: 0,
+        var crossingWeight = mode === "march.forward" && !target.stance
+                ? 1 - smootherStep(Math.abs(target.progress - 0.5) / 0.20) : 0
+        var inward = (leftSide ? 15.9 : -15.9) * crossingWeight
+        return { hipX: hip, hipZ: inward, kneeX: knee, kneeZ: 0,
+                 footX: target.footPitch - hip - knee, footY: 0, footZ: -inward * 0.8,
                  toeX: target.toePitch, planted: target.stance }
     }
     if (mode === "slide.left" || mode === "slide.right") {
@@ -394,17 +462,38 @@ function legPose(mode, gaitPhase, leftSide, strideMeters, motionWeight, pelvisDr
 }
 
 function attentionLegPose(leftSide) {
-    var inward = leftSide ? 5.5 : -5.5
+    var inward = leftSide ? 4.7 : -4.7
     return { hipX: 0, hipZ: inward, kneeX: -0.8, kneeZ: 0,
-             footX: 0.8, footY: leftSide ? 45 : -45, footZ: -inward,
+             footX: 0.8,
+             footY: leftSide ? -attentionToeOutDegrees : attentionToeOutDegrees,
+             footZ: -inward,
              toeX: 0, planted: true }
 }
 
-function applyClosingPose(pose, gaitPhase, leftSide, amount) {
+// The source rig has hand bones but no articulated fingers. Raise the hands to
+// face height while the upper arms and forearms make the broad triangular
+// "coat-hanger" set. The right hand sits slightly forward and wraps the left;
+// the left remains closest to the face. Clavicles stay relaxed in QML.
+function handSetPose(leftSide) {
+    return { upperX: leftSide ? 79 : 71,
+             upperY: leftSide ? -34 : 30,
+             upperZ: leftSide ? 94 : -84,
+             forearmX: leftSide ? 0 : -8,
+             forearmY: leftSide ? 66 : -44,
+             forearmZ: leftSide ? 117 : -112,
+             handX: leftSide ? -12 : 18,
+             handY: leftSide ? -18 : 22,
+             handZ: leftSide ? -10 : 16 }
+}
+
+function applyClosingPose(pose, gaitPhase, leftSide, amount, closingLeftSide) {
     var blend = smootherStep(amount)
     if (blend <= 0) return pose
     var attention = attentionLegPose(leftSide)
-    var recovering = legCycle(gaitPhase, leftSide) >= 0.5
+    // Lock the closing gesture to the phrase's final foot. Re-evaluating the
+    // recovery leg from a changing gait phase switched feet halfway through
+    // the close and was the main source of end-of-phrase leg spasms.
+    var recovering = leftSide === closingLeftSide
     // The closing foot reaches with a pointed toe, then returns to a flat,
     // turned-out attention position. Only the recovery foot performs tendu.
     var tendu = recovering ? -18 * Math.sin(Math.PI * clamp(amount, 0, 1)) : 0
@@ -422,19 +511,20 @@ function applyClosingPose(pose, gaitPhase, leftSide, amount) {
 function applyClosingBodyPose(pose, amount) {
     var blend = smootherStep(amount)
     return { pelvisX: mix(pose.pelvisX, 0, blend),
-             pelvisY: mix(pose.pelvisY, 0, blend),
-             ikPelvisY: mix(pose.ikPelvisY, 0, blend),
+             pelvisY: mix(pose.pelvisY, attentionPelvisDropMeters, blend),
+             ikPelvisY: mix(pose.ikPelvisY, attentionPelvisDropMeters, blend),
              pelvisYaw: mix(pose.pelvisYaw, 0, blend),
              pelvisRoll: mix(pose.pelvisRoll, 0, blend),
              spineYaw: mix(pose.spineYaw, 0, blend),
              spineRoll: mix(pose.spineRoll, 0, blend),
-             spinePitch: mix(pose.spinePitch, 0, blend),
-             spineLift: mix(pose.spineLift, 0, blend),
-             headPitch: mix(pose.headPitch, 0, blend), breath: pose.breath }
+             spinePitch: mix(pose.spinePitch, 1.6, blend),
+             spineLift: mix(pose.spineLift, -attentionPelvisDropMeters * 0.95, blend),
+             headPitch: mix(pose.headPitch, attentionHeadPitchDegrees, blend),
+             breath: pose.breath }
 }
 
 function directionalLegPose(relativeDegrees, gaitPhase, leftSide, strideMeters,
-                            motionWeight, bodyPoseValue) {
+                             motionWeight, bodyPoseValue) {
     if (motionWeight <= 0.0001)
         return legPose("idle", gaitPhase, leftSide, strideMeters, 0, 0)
     var target = targetForDirection(relativeDegrees, gaitPhase, leftSide,
@@ -460,12 +550,28 @@ function directionalLegPose(relativeDegrees, gaitPhase, leftSide, strideMeters,
     var minimumFlex = mix(-1.4, -0.7, weights.backward)
     var knee = Math.min(ik.kneeX, minimumFlex)
     var hip = ik.hipX - (knee - ik.kneeX) * 0.5
-    return { hipX: hip, hipZ: ik.hipZ,
-             kneeX: knee, kneeZ: 0,
-             footX: target.footPitch - hip - knee,
-             footY: 0,
-             footZ: -ik.hipZ - bodyPoseValue.pelvisRoll,
-             toeX: target.toePitch, planted: target.stance }
+    var crossingWeight = !target.stance
+            ? (1 - smootherStep(Math.abs(target.progress - 0.5) / 0.20)) * weights.forward : 0
+    var inward = (leftSide ? 15.9 : -15.9) * crossingWeight
+    var moving = { hipX: hip, hipZ: ik.hipZ + inward,
+                   kneeX: knee, kneeZ: 0,
+                   footX: target.footPitch - hip - knee,
+                   footY: 0,
+                   footZ: -ik.hipZ - inward * 0.8 - bodyPoseValue.pelvisRoll,
+                   toeX: target.toePitch, planted: target.stance }
+    var setBlend = 1 - smootherStep(motionWeight)
+    if (setBlend <= 0.0001)
+        return moving
+    var attention = attentionLegPose(leftSide)
+    return { hipX: mix(moving.hipX, attention.hipX, setBlend),
+             hipZ: mix(moving.hipZ, attention.hipZ, setBlend),
+             kneeX: mix(moving.kneeX, attention.kneeX, setBlend),
+             kneeZ: mix(moving.kneeZ, attention.kneeZ, setBlend),
+             footX: mix(moving.footX, attention.footX, setBlend),
+             footY: mix(moving.footY, attention.footY, setBlend),
+             footZ: mix(moving.footZ, attention.footZ, setBlend),
+             toeX: mix(moving.toeX, attention.toeX, setBlend),
+             planted: setBlend > 0.98 ? true : moving.planted }
 }
 
 function armPitch(legPoseValue) {

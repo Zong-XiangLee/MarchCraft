@@ -493,6 +493,7 @@ private:
     QPointF interpolatedPosition(int performerIndex) const;
     double interpolatedFacing(int performerIndex) const;
     MarchCraft::AnimationState animationStateAt(int performerIndex) const;
+    const MarchCraft::AnimationState &cachedAnimationStateAt(int performerIndex) const;
     QPointF pathPosition(int performerIndex, int destinationSet, double progress) const;
     double pathDistance(int performerIndex, int destinationSet) const;
     double transitionDistance(int performerIndex, int destinationSet) const;
@@ -545,6 +546,9 @@ private:
     QVector<MarchCraft::Performer> m_performers;
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;
+    mutable QVector<MarchCraft::AnimationState> m_animationStateCache;
+    mutable QVector<quint64> m_animationStateCacheRevisions;
+    quint64 m_animationStateRevision = 1;
     QVector<MarchCraft::MeterRegion> m_meterRegions{{}};
     QVector<MarchCraft::TempoRegion> m_tempoRegions{{}};
     MarchCraft::MusicDocument m_music;
