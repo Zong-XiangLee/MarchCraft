@@ -46,8 +46,10 @@ def main() -> None:
     document = load_document(path)
     primitive = document["meshes"][0]["primitives"][0]
     attributes = primitive["attributes"]
-    assert {"POSITION", "NORMAL", "JOINTS_0", "WEIGHTS_0"} <= set(attributes)
+    assert {"POSITION", "NORMAL", "COLOR_0", "JOINTS_0", "WEIGHTS_0"} <= set(attributes)
     position = document["accessors"][attributes["POSITION"]]
+    color = document["accessors"][attributes["COLOR_0"]]
+    assert color["count"] == position["count"] and color["type"] == "VEC4"
     assert abs(position["min"][1]) <= 0.002, position["min"]
     assert abs(position["max"][1] - 1.75) <= 0.002, position["max"]
     assert 1000 <= position["count"] <= 18057

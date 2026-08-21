@@ -121,8 +121,11 @@ JOINTS = [
     JointDefinition("pelvis", 0, (0.0, 0.91, 0.0)),
     JointDefinition("spine.lower", 1, (0.0, 1.08, 0.0)),
     JointDefinition("spine.upper", 2, (0.0, 1.31, 0.0)),
-    JointDefinition("neck", 3, (0.0, 1.49, 0.0)),
-    JointDefinition("head", 4, (0.0, 1.61, -0.01)),
+    # Retain the source rig's natural neck and full-height head proportions.
+    # The vertical offset accounts for the conditioned marching sole so the
+    # finished crown still lands on the canonical 1.75 m height.
+    JointDefinition("neck", 3, (0.0, 1.42327, -0.07627)),
+    JointDefinition("head", 4, (0.0, 1.50948, -0.08972)),
     JointDefinition("thigh.left", 1, (-0.105, 0.88, 0.0)),
     JointDefinition("shin.left", 6, (-0.105, 0.49, 0.0)),
     JointDefinition("foot.left", 7, (-0.105, 0.075, 0.0)),
@@ -202,16 +205,16 @@ def target_segment(name):
     }
     if name in ("foot.left", "foot.right"):
         x = JOINTS[J[name]].global_position[0]
-        inward = 0.0159 if name.endswith("left") else -0.0159
-        return (x, 0.040, -0.14), (x + inward, 0.035, 0.10)
+        # Match the source ankle-to-ball slope so the visible sole remains
+        # level while the canonical helper bone continues toward local -Z.
+        return (x, 0.1190, 0.0), (x, 0.035, -0.12)
     if name in ("toe.left", "toe.right"):
         x = JOINTS[J[name]].global_position[0]
-        inward = 0.0159 if name.endswith("left") else -0.0159
-        return (x + inward, 0.035, 0.10), (x + inward * 1.55, 0.025, 0.25)
+        return (x, 0.035, -0.12), (x, 0.008, -0.25)
     if name == "head":
-        # Preserve the source crown volume while landing its highest vertex at
-        # the canonical 1.75 m height instead of extending above the guide.
-        return JOINTS[J[name]].global_position, (0.0, 1.7338, -0.01)
+        # Preserve the artist's complete head-bone length and forward rake.
+        # Compressing this segment flattened the eyes, nose, mouth, and skull.
+        return JOINTS[J[name]].global_position, (0.0, 1.72335, -0.17976)
     if name in ("hand.left", "hand.right"):
         head = JOINTS[J[name]].global_position
         parent = JOINTS[JOINTS[J[name]].parent].global_position
@@ -278,11 +281,16 @@ def retarget_rows(rows, source_joints):
         foot_weight = sum(weight for name, weight in row["weights"].items()
                           if name.startswith("foot.") or name.startswith("toe."))
         if foot_weight > 0.55:
-            position = (position[0], position[1] - sole_profile(position[2]), position[2])
+            # Anatomical forward is local -Z. Parameterize the sole from heel
+            # to toe without reversing the visible shoe relative to the body.
+            position = (position[0], position[1] - sole_profile(-position[2]), position[2])
         flattened_positions.append(position)
     output_positions = flattened_positions
     minimum_y = min(position[1] for position in output_positions)
     output_positions = [(x, y - minimum_y, z) for x, y, z in output_positions]
+    maximum_y = max(position[1] for position in output_positions)
+    vertical_scale = 1.75 / maximum_y
+    output_positions = [(x, y * vertical_scale, z) for x, y, z in output_positions]
     return output_positions, output_normals
 
 
@@ -451,12 +459,12 @@ def build_animations(builder: BufferBuilder) -> list[dict]:
     return animations
 
 
-def simplify_geometry(positions, normals, texcoords, joints, weights, indices, grid_size):
+def simplify_geometry(positions, normals, texcoords, colors, joints, weights, indices, grid_size):
     clusters = {}
     remap = []
     for index, position in enumerate(positions):
         key = (round(position[0] / grid_size), round(position[1] / grid_size),
-               round(position[2] / grid_size), joints[index][0])
+               round(position[2] / grid_size), joints[index][0], tuple(colors[index]))
         cluster = clusters.get(key)
         if cluster is None:
             cluster = {"members": [], "index": len(clusters)}
@@ -467,6 +475,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
     simplified_positions = []
     simplified_normals = []
     simplified_texcoords = []
+    simplified_colors = []
     simplified_joints = []
     simplified_weights = []
     for cluster in clusters.values():
@@ -477,6 +486,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
         length = math.sqrt(sum(value * value for value in normal)) or 1.0
         normal = tuple(value / length for value in normal)
         texcoord = tuple(sum(texcoords[index][axis] for index in members) / count for axis in range(2))
+        color = tuple(sum(colors[index][axis] for index in members) / count for axis in range(4))
         influence_totals = {}
         for index in members:
             for joint, weight in zip(joints[index], weights[index]):
@@ -489,6 +499,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
         simplified_positions.append(position)
         simplified_normals.append(normal)
         simplified_texcoords.append(texcoord)
+        simplified_colors.append(color)
         simplified_joints.append(joint_row)
         simplified_weights.append(weight_row)
 
@@ -509,7 +520,7 @@ def simplify_geometry(positions, normals, texcoords, joints, weights, indices, g
             continue
         seen.add(canonical)
         simplified_indices.extend(mapped)
-    return (simplified_positions, simplified_normals, simplified_texcoords,
+    return (simplified_positions, simplified_normals, simplified_texcoords, simplified_colors,
             simplified_joints, simplified_weights, simplified_indices)
 
 
@@ -520,6 +531,7 @@ def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.
     rows = source_data["vertices"]
     positions, normals = retarget_rows(rows, source_data["sourceJoints"])
     texcoords = [tuple(row["texcoord"]) for row in rows]
+    colors = [tuple(row.get("color", (1.0, 1.0, 1.0, 1.0))) for row in rows]
     indices = list(source_data["indices"])
     source_height = float(source_data["sourceHeight"])
     scale = float(source_data["scale"])
@@ -536,13 +548,14 @@ def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.
                              + [0.0] * (4 - len(influences))))
 
     if grid_size > 0.0:
-        positions, normals, texcoords, joints, weights, indices = simplify_geometry(
-            positions, normals, texcoords, joints, weights, indices, grid_size)
+        positions, normals, texcoords, colors, joints, weights, indices = simplify_geometry(
+            positions, normals, texcoords, colors, joints, weights, indices, grid_size)
 
     builder = BufferBuilder()
     position_accessor = builder.add_accessor(positions, 5126, "VEC3", target=ARRAY_BUFFER, include_bounds=True)
     normal_accessor = builder.add_accessor(normals, 5126, "VEC3", target=ARRAY_BUFFER)
     texcoord_accessor = builder.add_accessor(texcoords, 5126, "VEC2", target=ARRAY_BUFFER)
+    color_accessor = builder.add_accessor(colors, 5126, "VEC4", target=ARRAY_BUFFER)
     joint_accessor = builder.add_accessor(joints, 5123, "VEC4", target=ARRAY_BUFFER)
     weight_accessor = builder.add_accessor(weights, 5126, "VEC4", target=ARRAY_BUFFER)
     index_accessor = builder.add_accessor(indices, 5125, "SCALAR", target=ELEMENT_ARRAY_BUFFER)
@@ -597,6 +610,7 @@ def build(source: pathlib.Path, destination: pathlib.Path, grid_size: float = 0.
                     "POSITION": position_accessor,
                     "NORMAL": normal_accessor,
                     "TEXCOORD_0": texcoord_accessor,
+                    "COLOR_0": color_accessor,
                     "JOINTS_0": joint_accessor,
                     "WEIGHTS_0": weight_accessor,
                 },

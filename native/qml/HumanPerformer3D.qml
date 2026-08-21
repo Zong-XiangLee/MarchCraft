@@ -76,6 +76,7 @@ Node {
         metalness: 0
         roughness: 0.72
         specularAmount: 0.32
+        vertexColorsEnabled: true
         cullMode: Material.BackFaceCulling
     }
 
@@ -108,6 +109,10 @@ Node {
     Node {
         id: scaledBody
         scale: Qt.vector3d(root.bodyScale, root.bodyScale, root.bodyScale)
+        // The canonical asset faces local -Z. MarchCraft heading zero points
+        // toward the audience at world +Z, so rotate the complete anatomy as
+        // one unit instead of reversing only the shoe geometry.
+        eulerRotation.y: 180
 
         // Use the explicit Skin API instead of the legacy Skeleton/Joint path.
         // The joint-list order is the canonical GLB joint index, which makes
@@ -140,11 +145,12 @@ Node {
                                                        root.bodyPose.spineRoll * 0.55)
                             Node {
                                 id: neck
-                                y: 0.18
+                                y: 0.11327
+                                z: -0.07627
                                 Node {
                                     id: head
-                                    y: 0.12
-                                    z: -0.01
+                                    y: 0.08621
+                                    z: -0.01345
                                     eulerRotation.x: root.bodyPose.headPitch
                                     Node { id: headSocket }
                                 }
@@ -270,8 +276,8 @@ Node {
                 Qt.matrix4x4(1,0,0,0, 0,1,0,-0.91, 0,0,1,0, 0,0,0,1),
                 Qt.matrix4x4(1,0,0,0, 0,1,0,-1.08, 0,0,1,0, 0,0,0,1),
                 Qt.matrix4x4(1,0,0,0, 0,1,0,-1.31, 0,0,1,0, 0,0,0,1),
-                Qt.matrix4x4(1,0,0,0, 0,1,0,-1.49, 0,0,1,0, 0,0,0,1),
-                Qt.matrix4x4(1,0,0,0, 0,1,0,-1.61, 0,0,1,0.01, 0,0,0,1),
+                Qt.matrix4x4(1,0,0,0, 0,1,0,-1.42327, 0,0,1,0.07627, 0,0,0,1),
+                Qt.matrix4x4(1,0,0,0, 0,1,0,-1.50948, 0,0,1,0.08972, 0,0,0,1),
                 Qt.matrix4x4(1,0,0,0.105, 0,1,0,-0.88, 0,0,1,0, 0,0,0,1),
                 Qt.matrix4x4(1,0,0,0.105, 0,1,0,-0.49, 0,0,1,0, 0,0,0,1),
                 Qt.matrix4x4(1,0,0,0.105, 0,1,0,-0.075, 0,0,1,0, 0,0,0,1),

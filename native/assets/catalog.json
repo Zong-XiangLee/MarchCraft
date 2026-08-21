@@ -9,7 +9,7 @@
     "license": "Creator-Permission",
     "canonicalHeightMeters": 1.75,
     "triangleCount": 3878,
-    "lodTriangleCounts": [3878, 2898, 1911],
+    "lodTriangleCounts": [3878, 3013, 1983],
     "rigFamily": "marchcraft.canonical.v1"
   },
   "assets": [

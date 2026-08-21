@@ -80,12 +80,16 @@ def main():
         mesh.calc_loop_triangles()
         normal_matrix = obj.matrix_world.to_3x3().inverted().transposed()
         groups_by_index = {group.index: group.name for group in obj.vertex_groups}
+        world_points = [obj.matrix_world @ vertex.co for vertex in mesh.vertices]
+        object_center = sum(world_points, Vector()) / max(1, len(world_points))
+        pupil_radius = max(obj.dimensions.x, obj.dimensions.z) * 0.13
 
         for triangle in mesh.loop_triangles:
             for loop_index in triangle.loops:
                 loop = mesh.loops[loop_index]
                 vertex = mesh.vertices[loop.vertex_index]
-                position = transformed(obj.matrix_world @ vertex.co)
+                world_position = obj.matrix_world @ vertex.co
+                position = transformed(world_position)
                 normal = transformed(normal_matrix @ vertex.normal)
                 influences = {}
                 for membership in vertex.groups:
@@ -94,10 +98,19 @@ def main():
                         influences[target] = influences.get(target, 0.0) + membership.weight
                 if not influences:
                     influences["head" if obj.name.startswith("Sphere") else "root"] = 1.0
+                eye_helper = obj.name.startswith("Sphere")
+                pupil = (eye_helper and world_position.y < object_center.y
+                         and math.hypot(world_position.x - object_center.x,
+                                        world_position.z - object_center.z) < pupil_radius)
                 rows.append({
                     "position": list(position),
                     "normal": normalized(normal),
                     "texcoord": [0.0, 0.0],
+                    # The source has no eye materials. Keep most of each eye
+                    # sphere neutral and tint a small front-facing pupil so the
+                    # face reads naturally under the shared skin material.
+                    "color": ([0.04, 0.025, 0.02, 1.0]
+                              if pupil else [1.0, 1.0, 1.0, 1.0]),
                     "weights": influences,
                 })
                 indices.append(len(rows) - 1)
