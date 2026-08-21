@@ -83,6 +83,12 @@ qt_add_resources(marchcraft "marchcraft_catalog"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
 
+set(MARCHCRAFT_LOGO_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/marchcraft-logo.png")
+set_source_files_properties("${MARCHCRAFT_LOGO_PNG}" PROPERTIES QT_RESOURCE_ALIAS "marchcraft-logo.png")
+qt_add_resources(marchcraft "marchcraft_branding"
+    PREFIX "/branding"
+    FILES "${MARCHCRAFT_LOGO_PNG}")
+
 set(MARCHCRAFT_HUMAN_GLB "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer.glb")
 set(MARCHCRAFT_HUMAN_GLB_LOD1 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod1.glb")
 set(MARCHCRAFT_HUMAN_GLB_LOD2 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod2.glb")
@@ -132,6 +138,7 @@ target_compile_definitions(marchcraft PRIVATE
 )
 
 if(WIN32)
+    target_sources(marchcraft PRIVATE marchcraft.rc)
     set_target_properties(marchcraft PROPERTIES WIN32_EXECUTABLE TRUE)
     # A build-tree executable must be runnable on its own, not only from a Qt
     # developer shell. Bundle the Qt DLLs, plugins, and QML imports beside it.

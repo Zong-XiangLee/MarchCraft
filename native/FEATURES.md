@@ -41,3 +41,4 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - New Project uses a single inline setup screen instead of opening a creation dialog.
 - Global project controls and contextual formation controls are separated into two calm command layers; formation shapes live in a labeled palette.
 - Shared motion tokens animate navigation, popovers, buttons, and state changes, while honoring the Windows reduced-animation preference.
+- A dedicated application icon and warmer three-note launch cue replace generic executable branding and notification-like sound.

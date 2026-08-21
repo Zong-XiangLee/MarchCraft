@@ -24,20 +24,28 @@ constexpr int MaximumRecentProjects = 8;
 QByteArray startupWav()
 {
     constexpr int sampleRate = 44100;
-    constexpr double durationSeconds = 0.62;
+    constexpr double durationSeconds = 0.92;
     const int sampleCount = static_cast<int>(sampleRate * durationSeconds);
     QByteArray pcm(sampleCount * 2, Qt::Uninitialized);
     auto *samples = reinterpret_cast<qint16 *>(pcm.data());
     for (int i = 0; i < sampleCount; ++i) {
         const double t = static_cast<double>(i) / sampleRate;
-        const double attack = qMin(1.0, t / 0.035);
-        const double release = qBound(0.0, (durationSeconds - t) / 0.24, 1.0);
-        const double envelope = attack * release * release;
-        const double first = std::sin(2.0 * std::numbers::pi * 523.25 * t);
-        const double second = std::sin(2.0 * std::numbers::pi * 659.25 * t) * qBound(0.0, (t - 0.10) / 0.10, 1.0);
-        const double shimmer = std::sin(2.0 * std::numbers::pi * 1046.5 * t) * 0.12;
+        auto bell = [t](double start, double frequency, double gain) {
+            const double local = t - start;
+            if (local < 0.0) return 0.0;
+            const double attack = qMin(1.0, local / 0.018);
+            const double decay = std::exp(-local * 5.1);
+            const double fundamental = std::sin(2.0 * std::numbers::pi * frequency * local);
+            const double warmth = 0.24 * std::sin(2.0 * std::numbers::pi * frequency * 2.0 * local);
+            const double air = 0.07 * std::sin(2.0 * std::numbers::pi * frequency * 3.0 * local);
+            return gain * attack * decay * (fundamental + warmth + air);
+        };
+        const double chord = bell(0.00, 392.00, 0.34)
+                           + bell(0.15, 493.88, 0.30)
+                           + bell(0.32, 587.33, 0.28);
+        const double finish = qBound(0.0, (durationSeconds - t) / 0.10, 1.0);
         samples[i] = qToLittleEndian<qint16>(static_cast<qint16>(
-            qBound(-1.0, (first * 0.48 + second * 0.34 + shimmer) * envelope, 1.0) * 32767.0));
+            qBound(-0.92, chord * finish, 0.92) * 32767.0));
     }
 
     QByteArray wav;
@@ -63,7 +71,7 @@ WorkspaceController::WorkspaceController(QObject *parent)
     QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
                        QStringLiteral("MarchCraft"), QStringLiteral("MarchCraft"));
     m_startupSoundEnabled = settings.value(QString::fromLatin1(StartupSoundKey), true).toBool();
-    m_startupSound.setVolume(0.22);
+    m_startupSound.setVolume(0.34);
     refreshSystemPreferences();
     refreshRecentProjects();
 }
@@ -188,7 +196,7 @@ QString WorkspaceController::ensureStartupSound()
 {
     const QString root = QStandardPaths::writableLocation(QStandardPaths::CacheLocation);
     QDir().mkpath(root);
-    const QString path = root + QStringLiteral("/marchcraft-startup.wav");
+    const QString path = root + QStringLiteral("/marchcraft-startup-v2.wav");
     QFileInfo info(path);
     if (info.exists() && info.size() > 44) return path;
     QSaveFile file(path);

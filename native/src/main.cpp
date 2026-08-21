@@ -7,6 +7,7 @@
 #include <QColor>
 #include <QDateTime>
 #include <QFile>
+#include <QIcon>
 #include <QQuickWindow>
 #include <QQmlApplicationEngine>
 #include <QQmlContext>
@@ -35,6 +36,7 @@ int main(int argc, char *argv[])
     application.setOrganizationDomain(QStringLiteral("marchcraft.local"));
     application.setApplicationName(QStringLiteral("MarchCraft"));
     application.setApplicationVersion(QStringLiteral("0.6.0"));
+    application.setWindowIcon(QIcon(QStringLiteral(":/branding/marchcraft-logo.png")));
     qInstallMessageHandler(writeApplicationLog);
     QQuickStyle::setStyle(QStringLiteral("Fusion"));
 
@@ -63,13 +65,14 @@ int main(int argc, char *argv[])
     const bool qaHome = arguments.contains(QStringLiteral("--qa-home"));
     const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
     const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
+    const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
         QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"), QStringLiteral("--ground-debug"),
-        QStringLiteral("--midi")
+        QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
     };
     bool startInEditor = false;
     for (const QString &flag : editorFlags)
@@ -120,6 +123,11 @@ int main(int argc, char *argv[])
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &application, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule(QStringLiteral("MarchCraft"), QStringLiteral("Main"));
+
+    if (qaMinimum && !engine.rootObjects().isEmpty()) {
+        engine.rootObjects().first()->setProperty("width", 1120);
+        engine.rootObjects().first()->setProperty("height", 720);
+    }
 
     if (arguments.contains(QStringLiteral("--3d")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("threeD", true);

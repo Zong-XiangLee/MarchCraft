@@ -256,7 +256,7 @@ ApplicationWindow {
                     implicitWidth: 126
                     contentItem: RowLayout {
                         spacing: 8
-                        Rectangle { width: 24; height: 24; radius: 6; color: MarchCraftTheme.accent; Label { anchors.centerIn: parent; text: "M"; color: "white"; font.bold: true; font.pixelSize: 12 } }
+                        Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 26; sourceSize.height: 26; width: 26; height: 26; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
                         Label { text: "MarchCraft"; color: MarchCraftTheme.textPrimary; font.bold: true }
                     }
                     ToolTip.text: "Return Home"
@@ -362,6 +362,25 @@ ApplicationWindow {
         }
     }
 
+    Popup {
+        id: timelineActionsPopup
+        x: Math.min(window.width - width - 16, timelineActionsButton.mapToItem(window.contentItem, 0, 0).x)
+        y: Math.min(window.height - height - 16, timelineActionsButton.mapToItem(window.contentItem, 0, timelineActionsButton.height).y)
+        width: 220; padding: 8; focus: true
+        enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: MarchCraftTheme.motionMedium } }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: MarchCraftTheme.motionFast } }
+        background: Rectangle { color: MarchCraftTheme.surfaceRaised; radius: MarchCraftTheme.radiusLarge; border.color: MarchCraftTheme.dividerStrong }
+        contentItem: ColumnLayout {
+            spacing: 4
+            AppButton { text: "New variant…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); variantDialog.open() } }
+            AppButton { text: "New set…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); setDialog.editing = false; setDialog.open() } }
+            AppButton { text: "Edit current set…"; flat: true; enabled: drillProject.setCount > 0; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); setDialog.editing = true; setDialog.open() } }
+            AppButton { text: "Add sets in batch…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); batchSetDialog.open() } }
+            AppButton { text: drillProject.currentVariantCount > 1 ? "Archive variant" : "Archive set"; flat: true; enabled: drillProject.setCount > 1 || drillProject.currentVariantCount > 1; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); drillProject.archiveCurrentVariant() } }
+            AppButton { text: "Open archive…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); archiveDialog.open() } }
+        }
+    }
+
     Rectangle {
         id: homePage
         anchors.fill: parent
@@ -371,9 +390,9 @@ ApplicationWindow {
         color: MarchCraftTheme.canvas
         transform: Translate {
             y: workspaceState.workspaceActive ? -8 : 0
-            Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
         }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
 
         Rectangle {
             width: 640
@@ -389,8 +408,8 @@ ApplicationWindow {
 
         ColumnLayout {
             anchors.centerIn: parent
-            width: Math.min(1080, parent.width - 80)
-            spacing: 28
+            width: Math.min(1240, parent.width - 64)
+            spacing: 22
 
             RowLayout {
                 id: homeLogo
@@ -398,15 +417,7 @@ ApplicationWindow {
                 opacity: qaMode ? 1 : 0
                 scale: qaMode ? 1 : 0.96
                 spacing: 14
-                Rectangle {
-                    width: 42; height: 42; radius: 10
-                    color: MarchCraftTheme.accent
-                    Label {
-                        anchors.centerIn: parent
-                        text: "M"; color: "white"; font.bold: true; font.pixelSize: 22
-                        font.family: MarchCraftTheme.fontFamily
-                    }
-                }
+                Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 52; sourceSize.height: 52; width: 52; height: 52; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
                 ColumnLayout {
                     spacing: 0
                     Label { text: "MarchCraft"; font.family: MarchCraftTheme.fontFamily; font.bold: true; font.pixelSize: 25; color: MarchCraftTheme.textPrimary }
@@ -424,7 +435,7 @@ ApplicationWindow {
             GridLayout {
                 id: homeContent
                 Layout.fillWidth: true
-                visible: opacity > 0.01
+                visible: window.homeMode === "dashboard"
                 enabled: window.homeMode === "dashboard"
                 columns: 2
                 columnSpacing: 24
@@ -440,7 +451,7 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 365
+                    Layout.preferredHeight: 420
                     radius: MarchCraftTheme.radiusLarge
                     color: MarchCraftTheme.surface
                     border.color: MarchCraftTheme.divider
@@ -480,7 +491,7 @@ ApplicationWindow {
 
                 Rectangle {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 365
+                    Layout.preferredHeight: 420
                     radius: MarchCraftTheme.radiusLarge
                     color: MarchCraftTheme.surface
                     border.color: MarchCraftTheme.divider
@@ -539,8 +550,8 @@ ApplicationWindow {
             ProjectSetupPage {
                 id: inlineProjectSetup
                 Layout.fillWidth: true
-                Layout.preferredHeight: 365
-                visible: opacity > 0.01
+                Layout.preferredHeight: 420
+                visible: window.homeMode === "new"
                 enabled: window.homeMode === "new"
                 opacity: window.homeMode === "new" ? 1 : 0
                 scale: window.homeMode === "new" ? 1 : 0.985
@@ -572,19 +583,19 @@ ApplicationWindow {
         opacity: workspaceState.workspaceActive ? 1 : 0
         transform: Translate {
             y: workspaceState.workspaceActive ? 0 : 8
-            Behavior on y { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+            Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
         }
-        Behavior on opacity { NumberAnimation { duration: 220; easing.type: Easing.OutCubic } }
+        Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
         anchors.fill: parent
-        anchors.margins: 8
+        anchors.margins: 6
         orientation: Qt.Horizontal
         Component.onCompleted: if (workspaceSettings.horizontalSplitState) restoreState(workspaceSettings.horizontalSplitState)
         onResizingChanged: if (!resizing) workspaceSettings.horizontalSplitState = saveState()
         handle: Rectangle {
-            implicitWidth: 8; color: SplitHandle.pressed ? "#5b8def" : SplitHandle.hovered ? "#3b4b5f" : "#293443"
+            implicitWidth: 6; color: SplitHandle.pressed ? "#5b8def" : SplitHandle.hovered ? "#3b4b5f" : "#293443"
             TapHandler { onDoubleTapped: {
-                rosterPanel.SplitView.preferredWidth = 240
-                inspectorPanel.SplitView.preferredWidth = 286
+                rosterPanel.SplitView.preferredWidth = 220
+                inspectorPanel.SplitView.preferredWidth = 270
                 workspaceSettings.horizontalSplitState = undefined
             } }
         }
@@ -592,7 +603,7 @@ ApplicationWindow {
         Frame {
             id: rosterPanel
             visible: !workspaceSettings.rosterCollapsed
-            SplitView.preferredWidth: 240
+            SplitView.preferredWidth: 220
             SplitView.minimumWidth: 180
             SplitView.maximumWidth: 460
             padding: 0
@@ -763,7 +774,7 @@ ApplicationWindow {
             Frame {
                 id: timelinePanel
                 visible: !workspaceSettings.timelineCollapsed
-                SplitView.preferredHeight: workspaceSettings.timelineMaximized ? Math.max(150, verticalSplit.height - 240) : 300
+                SplitView.preferredHeight: workspaceSettings.timelineMaximized ? Math.max(150, verticalSplit.height - 240) : 260
                 SplitView.minimumHeight: 150
                 SplitView.maximumHeight: Math.max(150, verticalSplit.height - 240)
                 padding: 8
@@ -805,10 +816,10 @@ ApplicationWindow {
                     }
                     RowLayout {
                         Layout.fillWidth: true
-                        Label { text: "FORMATION VERSION"; color: "#a5afbc"; font.bold: true }
+                        Label { text: "FORMATION VERSION"; visible: verticalSplit.width > 760; color: "#a5afbc"; font.bold: true }
                         ComboBox {
                             id: variantSelector
-                            Layout.preferredWidth: 210
+                            Layout.preferredWidth: verticalSplit.width > 760 ? 210 : 170
                             model: drillProject.currentVariantCount
                             currentIndex: Math.max(0, drillProject.currentVariantIndex)
                             displayText: {
@@ -824,17 +835,20 @@ ApplicationWindow {
                             }
                             onActivated: drillProject.activateVariant(currentIndex)
                         }
-                        AppButton { text: "+ Variant"; onClicked: variantDialog.open() }
+                        AppButton { text: "+ Variant"; visible: verticalSplit.width > 1050; onClicked: variantDialog.open() }
                         AppButton {
+                            visible: verticalSplit.width > 1050
                             text: drillProject.currentVariantCount > 1 ? "Archive variant" : "Archive set"
                             enabled: drillProject.setCount > 1 || drillProject.currentVariantCount > 1
                             onClicked: drillProject.archiveCurrentVariant()
                         }
-                        AppButton { text: "+ Set"; onClicked: { setDialog.editing = false; setDialog.open() } }
-                        AppButton { text: "Edit set"; enabled: drillProject.setCount > 0; onClicked: { setDialog.editing = true; setDialog.open() } }
-                        AppButton { text: "+ Batch"; onClicked: batchSetDialog.open() }
+                        AppButton { text: "+ Set"; visible: verticalSplit.width > 1050; onClicked: { setDialog.editing = false; setDialog.open() } }
+                        AppButton { text: "Edit set"; visible: verticalSplit.width > 1050; enabled: drillProject.setCount > 0; onClicked: { setDialog.editing = true; setDialog.open() } }
+                        AppButton { text: "+ Batch"; visible: verticalSplit.width > 1050; onClicked: batchSetDialog.open() }
+                        AppButton { id: timelineActionsButton; text: "Set actions…"; visible: verticalSplit.width <= 1050; onClicked: timelineActionsPopup.open() }
                         Item { Layout.fillWidth: true }
                         AppButton {
+                            visible: verticalSplit.width > 1050
                             text: "Archive (" + (drillProject.archivedSetCount + drillProject.currentArchivedVariantCount) + ")"
                             onClicked: archiveDialog.open()
                         }
@@ -964,7 +978,7 @@ ApplicationWindow {
         Frame {
             id: inspectorPanel
             visible: !workspaceSettings.inspectorCollapsed
-            SplitView.preferredWidth: 286
+            SplitView.preferredWidth: 270
             SplitView.minimumWidth: 220
             SplitView.maximumWidth: 480
             padding: 0
