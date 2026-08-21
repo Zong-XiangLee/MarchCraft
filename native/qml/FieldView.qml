@@ -140,12 +140,22 @@ Item {
                                   (drillProject.canvasMaxY - drillProject.fieldDepthSteps) * field.sy)
                     const w = drillProject.fieldWidthSteps * field.sx
                     const h = drillProject.fieldDepthSteps * field.sy
+                    const endZoneSteps = 16
                     const turf = ctx.createLinearGradient(0, 0, 0, h)
                     turf.addColorStop(0, "#123b2a")
                     turf.addColorStop(0.5, "#1b5037")
                     turf.addColorStop(1, "#123b2a")
                     ctx.fillStyle = turf
                     ctx.fillRect(0, 0, w, h)
+
+                    // Regulation ten-yard end zones sit outside the two goal lines.
+                    ctx.fillStyle = drillProject.fieldPreset === "indoor" ? "#8a5d38" : "#103522"
+                    ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
+                    ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
+                    ctx.globalAlpha = 0.34
+                    ctx.fillStyle = "#79a98a"
+                    ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
+                    ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
 
                     // Subtle five-yard mowing bands add depth without changing the field geometry.
                     ctx.globalAlpha = 0.13
@@ -172,11 +182,7 @@ Item {
                     ctx.beginPath(); ctx.moveTo(0, 1); ctx.lineTo(w, 1); ctx.stroke()
                     ctx.beginPath(); ctx.moveTo(0, h - 1); ctx.lineTo(w, h - 1); ctx.stroke()
 
-                    // Each five-yard span has four vertical one-yard inserts.  They sit on
-                    // the two hash rows, not on the sidelines.  The front insert extends
-                    // toward the front sideline from its hash; the back insert extends
-                    // toward the back sideline.  This puts the horizontal hashes on the
-                    // inward ends of the inserts, where the two hash rows are closest.
+                    // Four short one-yard inserts per five-yard span on each hash row.
                     const hashRows = [drillProject.frontHashSteps, drillProject.backHashSteps]
                     const markLengthSteps = 24.0 / 22.5
                     const insertLength = markLengthSteps * field.sy
@@ -186,6 +192,10 @@ Item {
                         ctx.lineWidth = Math.max(1, 0.18 * field.sy)
                         const frontHashY = (drillProject.fieldDepthSteps - hashRows[0]) * field.sy
                         const backHashY = (drillProject.fieldDepthSteps - hashRows[1]) * field.sy
+                        // Independent short marks at the back and front sidelines.
+                        ctx.beginPath(); ctx.moveTo(x, 1); ctx.lineTo(x, 1 + insertLength); ctx.stroke()
+                        ctx.beginPath(); ctx.moveTo(x, h - 1); ctx.lineTo(x, h - 1 - insertLength); ctx.stroke()
+                        // Independent short marks at the two hashes.
                         ctx.beginPath(); ctx.moveTo(x, frontHashY); ctx.lineTo(x, frontHashY + insertLength); ctx.stroke()
                         ctx.beginPath(); ctx.moveTo(x, backHashY); ctx.lineTo(x, backHashY - insertLength); ctx.stroke()
                     }
@@ -229,6 +239,9 @@ Item {
                     ctx.strokeStyle = "#f2f7f4"
                     ctx.lineWidth = Math.max(2, 0.3 * field.sy)
                     ctx.strokeRect(1, 1, w - 2, h - 2)
+                    ctx.strokeRect(-endZoneSteps * field.sx + 1, 1,
+                                   endZoneSteps * field.sx - 1, h - 2)
+                    ctx.strokeRect(w, 1, endZoneSteps * field.sx - 1, h - 2)
                 }
                 Connections {
                     target: drillProject
@@ -352,6 +365,9 @@ Item {
             }
 
             Repeater {
+                // Props are intentionally out of the editor surface until the
+                // asset-import workflow is ready.
+                visible: false
                 model: drillProject.props
                 delegate: Rectangle {
                     required property var modelData

@@ -11,7 +11,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Area | Prototype behavior |
 | --- | --- |
 | Field types | High-school, college, professional, and indoor presets |
-| Canvas | GPU-backed native Qt view, zoom, pan, eight-step staging apron, realistic turf mowing bands, five-yard lines, front/back yard numbers, regulation HS/NCAA/NFL hash placement, and four vertical one-yard inserts per five-yard interval |
+| Canvas | GPU-backed native Qt view, zoom, pan, regulation ten-yard end zones, realistic turf mowing bands, five-yard lines, front/back yard numbers, regulation HS/NCAA/NFL hash placement, and four vertical one-yard inserts per five-yard interval |
 | Animation | Set-to-set or continuous whole-show playback with visible marcher paths and per-set count/BPM timing |
 | Roster | Add, edit, remove, batch-create, search, multi-select, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, and mark subsets |

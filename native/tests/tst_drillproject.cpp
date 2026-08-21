@@ -549,11 +549,13 @@ private slots:
     void stagingApronCoordinatesAndMovement()
     {
         DrillProject project; project.newProject();
-        QCOMPARE(project.canvasMinX(), -8.0); QCOMPARE(project.canvasMaxX(), 168.0);
+        QCOMPARE(project.canvasMinX(), -16.0); QCOMPARE(project.canvasMaxX(), 176.0);
         project.addPerformer(QStringLiteral("A"), QStringLiteral("Guard"), QStringLiteral("Guard"), -7.0, -6.0);
         QVERIFY(project.coordinateFor(0).contains(QStringLiteral("Staging apron")));
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Guard"), QStringLiteral("Guard"), -8.0, 20.0);
+        QVERIFY(project.coordinateFor(1).contains(QStringLiteral("Side 1 end zone")));
         project.selectPerformer(0, false); project.nudgeSelected(-20, -20);
-        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), -8.0);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), -16.0);
         QCOMPARE(project.data(project.index(0, 0), DrillProject::YRole).toDouble(), -8.0);
     }
 

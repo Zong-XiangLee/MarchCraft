@@ -21,6 +21,11 @@ ApplicationWindow {
     property string qa3DView: ""
     property bool qaSetDragPreview: false
 
+    function startNewProject() {
+        drillProject.newProject()
+        projectSetupDialog.open()
+    }
+
     Settings {
         id: workspaceSettings
         property var horizontalSplitState
@@ -85,7 +90,7 @@ ApplicationWindow {
     menuBar: MenuBar {
         Menu {
             title: "&File"
-            Action { text: "New"; shortcut: StandardKey.New; onTriggered: drillProject.newProject() }
+            Action { text: "New project…"; shortcut: StandardKey.New; onTriggered: window.startNewProject() }
             Action { text: "Open…"; shortcut: StandardKey.Open; onTriggered: openDialog.open() }
             Action { text: "Save"; shortcut: StandardKey.Save; onTriggered: drillProject.projectPath ? drillProject.saveProject() : saveDialog.open() }
             Action { text: "Save As…"; shortcut: StandardKey.SaveAs; onTriggered: saveDialog.open() }
@@ -109,7 +114,8 @@ ApplicationWindow {
             Action { text: "Clear selection"; shortcut: "Escape"; onTriggered: drillProject.clearSelection() }
             Action { text: "Delete selected"; shortcut: StandardKey.Delete; onTriggered: drillProject.removeSelectedPerformers() }
             MenuSeparator {}
-            Action { text: "Configure…"; onTriggered: settingsDialog.open() }
+            Action { text: "Project setup…"; onTriggered: projectSetupDialog.open() }
+            Action { text: "Editor preferences…"; onTriggered: settingsDialog.open() }
         }
         Menu {
             title: "&Formation"
@@ -160,6 +166,7 @@ ApplicationWindow {
                 color: "#4ade80"
                 Layout.rightMargin: 10
             }
+            Button { text: "New project"; onClicked: window.startNewProject() }
             ToolButton { text: "↶"; font.pixelSize: 20; enabled: drillProject.canUndo; ToolTip.text: "Undo"; ToolTip.visible: hovered; onClicked: drillProject.undo() }
             ToolButton { text: "↷"; font.pixelSize: 20; enabled: drillProject.canRedo; ToolTip.text: "Redo"; ToolTip.visible: hovered; onClicked: drillProject.redo() }
             ToolSeparator {}
@@ -977,6 +984,27 @@ ApplicationWindow {
         }
     }
 
+    ToolButton {
+        id: rosterRevealButton
+        visible: workspaceSettings.rosterCollapsed
+        z: 20
+        anchors.left: parent.left
+        anchors.top: parent.top
+        anchors.topMargin: 12
+        width: 24
+        height: 42
+        text: "›"
+        font.pixelSize: 17
+        ToolTip.text: "Show roster (Ctrl+Shift+R)"
+        ToolTip.visible: hovered
+        onClicked: workspaceSettings.rosterCollapsed = false
+        background: Rectangle {
+            color: hovered ? "#24343d" : "#121a20"
+            radius: 0
+            border.color: hovered ? "#526772" : "#2a3941"
+        }
+    }
+
     Menu {
         id: fieldContextMenu
         MenuItem { text: "Group selected"; enabled: drillProject.selectedCount >= 2 && !drillProject.selectionIsExactGroup; onTriggered: drillProject.groupSelected() }
@@ -1009,6 +1037,64 @@ ApplicationWindow {
             RowLayout { Layout.alignment: Qt.AlignRight
                 Button { text: "Keep labels"; onClicked: renumberDialog.close() }
                 Button { text: "Renumber"; highlighted: true; onClicked: { drillProject.renumberSets(); renumberDialog.close() } }
+            }
+        }
+    }
+
+    Dialog {
+        id: projectSetupDialog
+        title: "Project setup"
+        modal: true; anchors.centerIn: Overlay.overlay; width: 500; height: 330
+        standardButtons: Dialog.NoButton
+        onOpened: {
+            projectNameField.text = drillProject.showName
+            projectFieldPreset.currentIndex = projectFieldPreset.indexOfValue(drillProject.fieldPreset)
+            projectLightingPreset.currentIndex = projectLightingPreset.indexOfValue(drillProject.lightingPreset)
+        }
+        contentItem: GridLayout {
+            columns: 2
+            columnSpacing: 14
+            rowSpacing: 10
+            Label {
+                text: "Set up the rehearsal environment before you start staging."
+                color: "#9fb1a7"; wrapMode: Text.Wrap
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.bottomMargin: 4
+            }
+            Label { text: "Project name" }
+            TextField { id: projectNameField; Layout.fillWidth: true; text: drillProject.showName; placeholderText: "Untitled show" }
+            Label { text: "Field" }
+            ComboBox {
+                id: projectFieldPreset
+                Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                model: [{text:"High School",value:"hs"},{text:"College",value:"college"},{text:"Professional",value:"nfl"},{text:"Indoor",value:"indoor"}]
+                Component.onCompleted: currentIndex = indexOfValue(drillProject.fieldPreset)
+            }
+            Label { text: "Time of day" }
+            ComboBox {
+                id: projectLightingPreset
+                Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                model: [{text:"Daylight",value:"lighting.daylight"},{text:"Overcast",value:"lighting.overcast"},{text:"Sunset",value:"lighting.sunset"},{text:"Night game",value:"lighting.night"},{text:"Indoor",value:"lighting.indoor"}]
+                Component.onCompleted: currentIndex = indexOfValue(drillProject.lightingPreset)
+            }
+            Label {
+                text: "Markers, grids, overlays, and 3D quality remain available in Editor preferences."
+                color: "#6f8d80"; wrapMode: Text.Wrap
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 4
+            }
+            RowLayout {
+                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 6
+                Item { Layout.fillWidth: true }
+                Button { text: "Cancel"; onClicked: projectSetupDialog.close() }
+                Button {
+                    text: "Create project"
+                    highlighted: true
+                    onClicked: {
+                        drillProject.showName = projectNameField.text.trim().length ? projectNameField.text.trim() : "Untitled Show"
+                        drillProject.fieldPreset = projectFieldPreset.currentValue
+                        drillProject.lightingPreset = projectLightingPreset.currentValue
+                        projectSetupDialog.close()
+                    }
+                }
             }
         }
     }
@@ -1101,7 +1187,7 @@ ApplicationWindow {
                             onClicked: window.toggleQuickShape(modelData.kind)
                         }
                     }
-                    Label { text: "Tip: use Ctrl+, to reopen configuration quickly."; color: "#6f8d80"; font.pixelSize: 11; Layout.topMargin: 8 }
+                    Label { text: "Tip: use Ctrl+, to reopen project setup quickly."; color: "#6f8d80"; font.pixelSize: 11; Layout.topMargin: 8 }
                     Item { Layout.fillHeight: true }
                 }
                 GridLayout {
@@ -1498,7 +1584,7 @@ ApplicationWindow {
     Shortcut { sequence: "Up"; onActivated: drillProject.nudgeSelected(0, -0.25) }
     Shortcut { sequence: "Down"; onActivated: drillProject.nudgeSelected(0, 0.25) }
     Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; onActivated: transport.playPause() }
-    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: settingsDialog.open() }
+    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: projectSetupDialog.open() }
     Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterSearch.forceActiveFocus(); rosterSearch.selectAll() } }
     Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
     Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; onActivated: window.threeD = true }

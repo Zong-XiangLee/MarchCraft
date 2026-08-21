@@ -174,8 +174,8 @@ public:
     int fieldInsertCount() const { return static_cast<int>(fieldWidthSteps() / 8.0) * 4; }
     Q_INVOKABLE double fieldInsertStep(int column) const;
     double fieldDepthSteps() const;
-    double canvasMinX() const { return -8.0; }
-    double canvasMaxX() const { return 168.0; }
+    double canvasMinX() const { return -16.0; }
+    double canvasMaxX() const { return 176.0; }
     double canvasMinY() const { return -8.0; }
     double canvasMaxY() const { return fieldDepthSteps() + 8.0; }
     double frontHashSteps() const;

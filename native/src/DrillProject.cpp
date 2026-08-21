@@ -4330,6 +4330,14 @@ QString DrillProject::coordinateFor(int row, int setIndex) const
     if (row < 0 || row >= m_performers.size()) return {};
     if (setIndex < 0) setIndex = m_currentSet;
     const auto point = placementAt(row, setIndex).position;
+    if (point.y() >= 0.0 && point.y() <= fieldDepthSteps()) {
+        if (point.x() < 0.0 && point.x() >= canvasMinX())
+            return QStringLiteral("Side 1 end zone · %1 steps beyond the goal line")
+                .arg(compactNumber(-point.x()));
+        if (point.x() > fieldWidthSteps() && point.x() <= canvasMaxX())
+            return QStringLiteral("Side 2 end zone · %1 steps beyond the goal line")
+                .arg(compactNumber(point.x() - fieldWidthSteps()));
+    }
     QStringList apronParts;
     if (point.x() < 0.0)
         apronParts << QStringLiteral("%1 steps outside Side 1 goal line").arg(compactNumber(-point.x()));
