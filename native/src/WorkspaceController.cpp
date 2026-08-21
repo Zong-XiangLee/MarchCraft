@@ -64,7 +64,21 @@ WorkspaceController::WorkspaceController(QObject *parent)
                        QStringLiteral("MarchCraft"), QStringLiteral("MarchCraft"));
     m_startupSoundEnabled = settings.value(QString::fromLatin1(StartupSoundKey), true).toBool();
     m_startupSound.setVolume(0.22);
+    refreshSystemPreferences();
     refreshRecentProjects();
+}
+
+void WorkspaceController::refreshSystemPreferences()
+{
+    bool enabled = true;
+#ifdef Q_OS_WIN
+    QSettings animationSettings(QStringLiteral("HKEY_CURRENT_USER\\Control Panel\\Desktop\\WindowMetrics"),
+                                QSettings::NativeFormat);
+    enabled = animationSettings.value(QStringLiteral("MinAnimate"), QStringLiteral("1")).toString() != QStringLiteral("0");
+#endif
+    if (enabled == m_systemAnimationsEnabled) return;
+    m_systemAnimationsEnabled = enabled;
+    emit systemAnimationsEnabledChanged();
 }
 
 void WorkspaceController::setStartupSoundEnabled(bool enabled)

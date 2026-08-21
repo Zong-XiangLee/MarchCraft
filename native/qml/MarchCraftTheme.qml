@@ -22,4 +22,11 @@ QtObject {
     readonly property string fontFamily: "Segoe UI Variable"
     readonly property int radiusSmall: 6
     readonly property int radiusLarge: 8
+    readonly property int motionFast: workspaceController.systemAnimationsEnabled ? 120 : 1
+    readonly property int motionMedium: workspaceController.systemAnimationsEnabled ? 200 : 1
+    readonly property int motionScreen: workspaceController.systemAnimationsEnabled ? 280 : 1
+    readonly property real pressScale: workspaceController.systemAnimationsEnabled ? 0.975 : 1.0
+    readonly property int iconSmall: 16
+    readonly property int iconMedium: 20
+    readonly property int focusWidth: 2
 }

@@ -35,3 +35,9 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
 - GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering, and video export remain production milestones.
 - The undo stack is active during a session; cross-session version browsing will be added with the production project archive format.
+# Apple-studio workspace refinement
+
+- The MarchCraft wordmark in the editor is a keyboard-focusable Home control. Returning Home preserves the current project and exposes Resume.
+- New Project uses a single inline setup screen instead of opening a creation dialog.
+- Global project controls and contextual formation controls are separated into two calm command layers; formation shapes live in a labeled palette.
+- Shared motion tokens animate navigation, popovers, buttons, and state changes, while honoring the Windows reduced-animation preference.

@@ -201,6 +201,9 @@ private slots:
         {
             WorkspaceController workspace;
             QVERIFY(workspace.startupSoundEnabled());
+            const bool systemAnimationsEnabled = workspace.systemAnimationsEnabled();
+            workspace.refreshSystemPreferences();
+            QCOMPARE(workspace.systemAnimationsEnabled(), systemAnimationsEnabled);
             for (int index = 0; index < paths.size(); ++index)
                 workspace.recordRecentProject(paths[index], QStringLiteral("Project %1").arg(index));
             QCOMPARE(workspace.recentProjects().size(), 8);

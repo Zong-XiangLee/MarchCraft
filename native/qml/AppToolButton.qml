@@ -8,6 +8,8 @@ ToolButton {
     font.family: MarchCraftTheme.fontFamily
     font.pixelSize: 12
     opacity: 1
+    scale: down && enabled ? MarchCraftTheme.pressScale : 1
+    Behavior on scale { NumberAnimation { duration: MarchCraftTheme.motionFast; easing.type: Easing.OutCubic } }
 
     contentItem: Text {
         text: control.text
@@ -27,5 +29,7 @@ ToolButton {
         border.width: control.activeFocus ? 2 : 1
         border.color: control.activeFocus ? MarchCraftTheme.accentHover
                     : control.checked || control.highlighted ? "#365987" : "transparent"
+        Behavior on color { ColorAnimation { duration: MarchCraftTheme.motionFast } }
+        Behavior on border.color { ColorAnimation { duration: MarchCraftTheme.motionFast } }
     }
 }

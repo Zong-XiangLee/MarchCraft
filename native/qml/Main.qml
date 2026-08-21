@@ -24,6 +24,8 @@ ApplicationWindow {
     property bool qaSetDragPreview: false
     property bool forceClosing: false
     property string savePurpose: "normal"
+    property string homeMode: initialHomeMode
+    property bool qaShapePalette: false
 
     WorkspaceLogic {
         id: workspaceState
@@ -35,6 +37,21 @@ ApplicationWindow {
 
     function startNewProject() {
         workspaceState.request("new", "", drillProject.dirty)
+    }
+
+    function returnHome() {
+        homeMode = "dashboard"
+        workspaceState.workspaceActive = false
+        Qt.callLater(function() { (resumeButton.visible ? resumeButton : newProjectHomeButton).forceActiveFocus() })
+    }
+
+    function createProject(name, fieldPreset, lightingPreset) {
+        drillProject.newProject()
+        drillProject.showName = name
+        drillProject.fieldPreset = fieldPreset
+        drillProject.lightingPreset = lightingPreset
+        homeMode = "dashboard"
+        workspaceState.enteredProject()
     }
 
     function requestOpenProject() {
@@ -53,8 +70,8 @@ ApplicationWindow {
 
     function executeWorkspaceAction(action, path) {
         if (action === "new") {
-            projectSetupDialog.creationMode = true
-            projectSetupDialog.open()
+            workspaceState.workspaceActive = false
+            homeMode = "new"
         } else if (action === "open") {
             openDialog.open()
         } else if (action === "openPath") {
@@ -154,12 +171,13 @@ ApplicationWindow {
         highlightedText: "#ffffff"
         mid: MarchCraftTheme.divider
     }
+    onQaShapePaletteChanged: if (qaShapePalette) Qt.callLater(function() { shapePalette.open() })
 
     menuBar: MenuBar {
         visible: workspaceState.workspaceActive
         Menu {
             title: "&File"
-            Action { text: "Home"; onTriggered: workspaceState.workspaceActive = false }
+            Action { text: "Home"; onTriggered: window.returnHome() }
             MenuSeparator {}
             Action { text: "New project…"; shortcut: StandardKey.New; onTriggered: window.startNewProject() }
             Action { text: "Open…"; shortcut: StandardKey.Open; onTriggered: window.requestOpenProject() }
@@ -224,100 +242,123 @@ ApplicationWindow {
 
     header: ToolBar {
         visible: workspaceState.workspaceActive
-        height: visible ? 54 : 0
-        RowLayout {
+        height: visible ? 94 : 0
+        background: Rectangle { color: MarchCraftTheme.surface; border.color: MarchCraftTheme.divider }
+        ColumnLayout {
             anchors.fill: parent
-            anchors.leftMargin: 12
-            anchors.rightMargin: 12
-            spacing: 6
-
-            Label {
-                text: "MARCHCRAFT"
-                font.bold: true
-                font.pixelSize: 15
-                color: MarchCraftTheme.accent
-                Layout.rightMargin: 10
-            }
-            AppButton { text: "New project"; onClicked: window.startNewProject() }
-            AppToolButton { text: "↶"; font.pixelSize: 20; enabled: drillProject.canUndo; ToolTip.text: "Undo"; ToolTip.visible: hovered; onClicked: drillProject.undo() }
-            AppToolButton { text: "↷"; font.pixelSize: 20; enabled: drillProject.canRedo; ToolTip.text: "Redo"; ToolTip.visible: hovered; onClicked: drillProject.redo() }
-            ToolSeparator {}
-            AppButton { text: "+ Performer"; onClicked: { performerDialog.editing = false; performerDialog.open() } }
-            AppButton { text: "+ Batch"; onClicked: batchDialog.open() }
-            AppButton {
-                text: "Shapes"
-                enabled: drillProject.selectedCount > 0
-                onClicked: { window.shapeDrawing = ""; formationDialog.open() }
-            }
-            Repeater {
-                model: window.quickShapes
-                delegate: AppToolButton {
-                    required property string modelData
-                    property string toolKind: modelData
-                    implicitWidth: 34
-                    implicitHeight: 32
-                    enabled: drillProject.selectedCount > 0
-                    highlighted: window.shapeDrawing === toolKind
-                    ToolTip.text: "Draw " + toolKind
-                    ToolTip.visible: hovered
-                    contentItem: Canvas {
-                        id: quickShapeIcon
-                        anchors.fill: parent
-                        property string kind: toolKind
-                        onKindChanged: requestPaint()
-                        Component.onCompleted: requestPaint()
-                        onPaint: {
-                            const ctx = getContext("2d")
-                            ctx.reset(); ctx.strokeStyle = "#f2f5f7"; ctx.lineWidth = 2.2
-                            ctx.lineCap = "round"; ctx.lineJoin = "round"
-                            const w = width, h = height
-                            ctx.beginPath()
-                            if (kind === "line") { ctx.moveTo(7, h - 7); ctx.lineTo(w - 7, 7) }
-                            else if (kind === "rectangle") ctx.rect(7, 7, w - 14, h - 14)
-                            else if (kind === "circle") ctx.arc(w / 2, h / 2, Math.min(w, h) / 2 - 7, 0, Math.PI * 2)
-                            else if (kind === "triangle") { ctx.moveTo(w / 2, 6); ctx.lineTo(7, h - 7); ctx.lineTo(w - 7, h - 7); ctx.closePath() }
-                            else if (kind === "arc") ctx.arc(w / 2, h / 2 + 2, Math.min(w, h) / 2 - 7, Math.PI, Math.PI * 2)
-                            else if (kind === "ellipse") ctx.ellipse(w / 2, h / 2, w / 2 - 7, h / 2 - 7, 0, 0, Math.PI * 2)
-                            else if (kind === "diamond") { ctx.moveTo(w / 2, 6); ctx.lineTo(w - 7, h / 2); ctx.lineTo(w / 2, h - 7); ctx.lineTo(7, h / 2); ctx.closePath() }
-                            else if (kind === "polygon" || kind === "star") {
-                                const n = kind === "star" ? 10 : 6, r = Math.min(w, h) / 2 - 7
-                                for (let i = 0; i < n; ++i) { const a = -Math.PI / 2 + i * Math.PI * 2 / n, rr = kind === "star" && i % 2 ? r * .45 : r; if (!i) ctx.moveTo(w/2 + Math.cos(a)*rr, h/2 + Math.sin(a)*rr); else ctx.lineTo(w/2 + Math.cos(a)*rr, h/2 + Math.sin(a)*rr) } ctx.closePath()
-                            } else if (kind === "spiral") { for (let i = 0; i <= 24; ++i) { const a = i * Math.PI * 2 / 12, r = 2 + i * (Math.min(w,h)-14) / 48; if (!i) ctx.moveTo(w/2, h/2); else ctx.lineTo(w/2 + Math.cos(a)*r, h/2 + Math.sin(a)*r) } }
-                            else if (kind === "block") { for (let i = 1; i < 3; ++i) { ctx.moveTo(7 + i*(w-14)/3, 7); ctx.lineTo(7 + i*(w-14)/3, h-7); ctx.moveTo(7, 7 + i*(h-14)/3); ctx.lineTo(w-7, 7 + i*(h-14)/3) } ctx.rect(7,7,w-14,h-14) }
-                            ctx.stroke()
-                        }
+            spacing: 0
+            RowLayout {
+                Layout.fillWidth: true; Layout.preferredHeight: 52
+                Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 8
+                AppButton {
+                    id: editorHomeButton
+                    flat: true
+                    implicitWidth: 126
+                    contentItem: RowLayout {
+                        spacing: 8
+                        Rectangle { width: 24; height: 24; radius: 6; color: MarchCraftTheme.accent; Label { anchors.centerIn: parent; text: "M"; color: "white"; font.bold: true; font.pixelSize: 12 } }
+                        Label { text: "MarchCraft"; color: MarchCraftTheme.textPrimary; font.bold: true }
                     }
-                    onClicked: window.setShapeTool(toolKind)
+                    ToolTip.text: "Return Home"
+                    ToolTip.visible: hovered
+                    onClicked: window.returnHome()
+                }
+                Rectangle { width: 1; height: 24; color: MarchCraftTheme.divider; Layout.leftMargin: 2; Layout.rightMargin: 4 }
+                ColumnLayout {
+                    spacing: 0; Layout.maximumWidth: 280
+                    Label { text: drillProject.showName; color: MarchCraftTheme.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: drillProject.dirty ? "Unsaved changes" : "All changes saved"; color: drillProject.dirty ? MarchCraftTheme.warning : MarchCraftTheme.textMuted; font.pixelSize: 10 }
+                }
+                AppToolButton {
+                    ToolTip.text: "Undo"; ToolTip.visible: hovered; enabled: drillProject.canUndo
+                    contentItem: AppIcon { name: "undo"; iconColor: parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled }
+                    onClicked: drillProject.undo()
+                }
+                AppToolButton {
+                    ToolTip.text: "Redo"; ToolTip.visible: hovered; enabled: drillProject.canRedo
+                    contentItem: AppIcon { name: "redo"; iconColor: parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled }
+                    onClicked: drillProject.redo()
+                }
+                Item { Layout.fillWidth: true }
+                AppButton { text: "+ Performer"; onClicked: { performerDialog.editing = false; performerDialog.open() } }
+                AppButton { text: "+ Batch"; onClicked: batchDialog.open() }
+                AppToolButton { text: "2D"; checkable: true; checked: !window.threeD; onClicked: window.threeD = false }
+                AppToolButton { text: "3D"; checkable: true; checked: window.threeD; onClicked: window.threeD = true }
+                AppToolButton {
+                    ToolTip.text: "More editor actions"; ToolTip.visible: hovered
+                    contentItem: AppIcon { name: "more" }
+                    onClicked: editorActionsPopup.open()
                 }
             }
-            AppButton { text: window.freehandDrawing ? "Draw on field…" : "Freehand"; enabled: drillProject.selectedCount > 0; highlighted: window.freehandDrawing; onClicked: freehandDialog.open() }
-            AppToolButton { text: "Snap"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Snap selection to one-step grid"; ToolTip.visible: hovered; onClicked: drillProject.snapSelected(1) }
-            AppToolButton { text: "Mirror"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Mirror selection side-to-side"; ToolTip.visible: hovered; onClicked: drillProject.mirrorSelected(true) }
-            AppToolButton {
-                text: "Paths"; checkable: true; checked: drillProject.showTransitionPaths
-                ToolTip.text: checked ? "Hide transition paths" : "Show transition paths"; ToolTip.visible: hovered
-                onToggled: drillProject.showTransitionPaths = checked
+            Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider }
+            RowLayout {
+                Layout.fillWidth: true; Layout.preferredHeight: 41
+                Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 6
+                Label { text: drillProject.selectedCount > 0 ? drillProject.selectedCount + " selected" : "Select performers to edit formations"; color: drillProject.selectedCount > 0 ? MarchCraftTheme.textSecondary : MarchCraftTheme.textMuted; font.pixelSize: 11; Layout.rightMargin: 6 }
+                AppButton {
+                    id: shapesButton
+                    text: window.shapeDrawing.length ? "Shape · " + window.shapeDrawing : "Shapes"
+                    enabled: drillProject.selectedCount > 0
+                    highlighted: window.shapeDrawing.length > 0
+                    onClicked: shapePalette.open()
+                }
+                AppButton { text: window.freehandDrawing ? "Drawing…" : "Freehand"; enabled: drillProject.selectedCount > 0; highlighted: window.freehandDrawing; onClicked: freehandDialog.open() }
+                AppToolButton { text: "Snap"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Snap selection to one-step grid"; ToolTip.visible: hovered; onClicked: drillProject.snapSelected(1) }
+                AppToolButton { text: "Mirror"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Mirror selection side-to-side"; ToolTip.visible: hovered; onClicked: drillProject.mirrorSelected(true) }
+                Item { Layout.fillWidth: true }
+                AppToolButton { text: "Paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
+                AppToolButton { text: "Guides"; checkable: true; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides = checked }
+                AppToolButton { text: "Grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
             }
-            AppToolButton {
-                text: "Guides"; checkable: true; checked: drillProject.showShapeGuides
-                ToolTip.text: checked ? "Hide shape guides" : "Show shape guides"; ToolTip.visible: hovered
-                onToggled: drillProject.showShapeGuides = checked
+        }
+    }
+
+    Popup {
+        id: shapePalette
+        x: Math.min(window.width - width - 16, shapesButton.mapToItem(window.contentItem, 0, 0).x)
+        y: 92; width: 360; height: 250; padding: 14; modal: false; focus: true
+        enter: Transition {
+            NumberAnimation { property: "opacity"; from: 0; to: 1; duration: MarchCraftTheme.motionMedium }
+            NumberAnimation { property: "scale"; from: .97; to: 1; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
+        }
+        exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: MarchCraftTheme.motionFast } }
+        background: Rectangle { color: MarchCraftTheme.surfaceRaised; radius: MarchCraftTheme.radiusLarge; border.color: MarchCraftTheme.dividerStrong }
+        contentItem: ColumnLayout {
+            spacing: 10
+            RowLayout {
+                Label { text: "Formation shapes"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 15 }
+                Item { Layout.fillWidth: true }
+                AppButton { text: "Advanced…"; flat: true; onClicked: { shapePalette.close(); window.shapeDrawing = ""; formationDialog.open() } }
             }
-            AppToolButton { text: "Grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
-            ToolSeparator {}
-            AppToolButton { text: "2D"; checkable: true; checked: !window.threeD; onClicked: window.threeD = false }
-            AppToolButton { text: "3D"; checkable: true; checked: window.threeD; onClicked: window.threeD = true }
-            Item { Layout.fillWidth: true }
-            ComboBox {
-                id: fieldPreset
-                model: [{text: "High School", value: "hs"}, {text: "College", value: "college"},
-                        {text: "Professional", value: "nfl"}, {text: "Indoor", value: "indoor"}]
-                textRole: "text"
-                valueRole: "value"
-                Component.onCompleted: currentIndex = indexOfValue(drillProject.fieldPreset)
-                onActivated: drillProject.fieldPreset = currentValue
+            GridLayout {
+                columns: 4; columnSpacing: 6; rowSpacing: 6; Layout.fillWidth: true; Layout.fillHeight: true
+                Repeater {
+                    model: [{kind:"line",label:"Line"},{kind:"rectangle",label:"Rectangle"},{kind:"circle",label:"Circle"},{kind:"triangle",label:"Triangle"},{kind:"arc",label:"Arc"},{kind:"ellipse",label:"Ellipse"},{kind:"diamond",label:"Diamond"},{kind:"block",label:"Block"}]
+                    delegate: AppButton {
+                        required property var modelData
+                        Layout.fillWidth: true; Layout.fillHeight: true
+                        contentItem: ColumnLayout {
+                            spacing: 5
+                            ShapeIcon { kind: modelData.kind; iconColor: parent.parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled; Layout.alignment: Qt.AlignHCenter }
+                            Label { text: modelData.label; color: MarchCraftTheme.textPrimary; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
+                        }
+                        highlighted: window.shapeDrawing === modelData.kind
+                        onClicked: { window.setShapeTool(modelData.kind); shapePalette.close() }
+                    }
+                }
             }
-            Label { text: drillProject.dirty ? "Unsaved" : "Saved"; color: drillProject.dirty ? "#d6a75d" : "#5ead83" }
+        }
+    }
+
+    Popup {
+        id: editorActionsPopup
+        x: window.width - width - 16; y: 52; width: 220; padding: 8; focus: true
+        background: Rectangle { color: MarchCraftTheme.surfaceRaised; radius: MarchCraftTheme.radiusLarge; border.color: MarchCraftTheme.dividerStrong }
+        contentItem: ColumnLayout {
+            spacing: 4
+            AppButton { text: "New project…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); window.startNewProject() } }
+            AppButton { text: "Project setup…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); projectSetupDialog.creationMode = false; projectSetupDialog.open() } }
+            AppButton { text: "Preferences…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); preferencesDialog.open() } }
         }
     }
 
@@ -383,11 +424,19 @@ ApplicationWindow {
             GridLayout {
                 id: homeContent
                 Layout.fillWidth: true
+                visible: opacity > 0.01
+                enabled: window.homeMode === "dashboard"
                 columns: 2
                 columnSpacing: 24
                 rowSpacing: 18
-                opacity: qaMode ? 1 : 0
-                transform: Translate { id: homeContentTranslate; y: qaMode ? 0 : 10 }
+                opacity: window.homeMode === "dashboard" ? (qaMode ? 1 : homeContent.baseOpacity) : 0
+                property real baseOpacity: 0
+                transform: Translate {
+                    id: homeContentTranslate
+                    y: window.homeMode === "dashboard" ? 0 : -8
+                    Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic } }
+                }
+                Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic } }
 
                 Rectangle {
                     Layout.fillWidth: true
@@ -401,9 +450,10 @@ ApplicationWindow {
                         spacing: 14
                         Label { text: "Start"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
                         Label { text: "Create a show, open a project, or explore the included sample."; Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary }
-                        AppButton { text: "New project"; highlighted: true; Layout.fillWidth: true; onClicked: window.startNewProject() }
+                        AppButton { id: newProjectHomeButton; text: "New project"; highlighted: true; Layout.fillWidth: true; onClicked: window.startNewProject() }
                         AppButton { text: "Open project…"; Layout.fillWidth: true; onClicked: window.requestOpenProject() }
                         AppButton {
+                            id: resumeButton
                             visible: workspaceState.hasCurrentProject
                             text: "Resume " + drillProject.showName
                             Layout.fillWidth: true
@@ -485,18 +535,32 @@ ApplicationWindow {
                     }
                 }
             }
+
+            ProjectSetupPage {
+                id: inlineProjectSetup
+                Layout.fillWidth: true
+                Layout.preferredHeight: 365
+                visible: opacity > 0.01
+                enabled: window.homeMode === "new"
+                opacity: window.homeMode === "new" ? 1 : 0
+                scale: window.homeMode === "new" ? 1 : 0.985
+                onCancelled: { window.homeMode = "dashboard"; Qt.callLater(function() { newProjectHomeButton.forceActiveFocus() }) }
+                onCreateRequested: function(name, fieldPreset, lightingPreset) { window.createProject(name, fieldPreset, lightingPreset) }
+                Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
+                Behavior on scale { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
+            }
         }
 
         SequentialAnimation {
             id: homeIntro
             ParallelAnimation {
-                NumberAnimation { target: homeLogo; property: "opacity"; to: 1; duration: 320; easing.type: Easing.OutCubic }
-                NumberAnimation { target: homeLogo; property: "scale"; to: 1; duration: 320; easing.type: Easing.OutCubic }
+                NumberAnimation { target: homeLogo; property: "opacity"; to: 1; duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic }
+                NumberAnimation { target: homeLogo; property: "scale"; to: 1; duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic }
             }
             PauseAnimation { duration: 60 }
             ParallelAnimation {
-                NumberAnimation { target: homeContent; property: "opacity"; to: 1; duration: 220; easing.type: Easing.OutCubic }
-                NumberAnimation { target: homeContentTranslate; property: "y"; to: 0; duration: 220; easing.type: Easing.OutCubic }
+                NumberAnimation { target: homeContent; property: "baseOpacity"; to: 1; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
+                NumberAnimation { target: homeContentTranslate; property: "y"; to: 0; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
             }
         }
     }

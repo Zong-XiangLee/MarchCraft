@@ -61,6 +61,8 @@ int main(int argc, char *argv[])
     WorkspaceController workspaceController;
     const QStringList arguments = application.arguments();
     const bool qaHome = arguments.contains(QStringLiteral("--qa-home"));
+    const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
+    const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
@@ -72,9 +74,12 @@ int main(int argc, char *argv[])
     bool startInEditor = false;
     for (const QString &flag : editorFlags)
         startInEditor |= arguments.contains(flag);
-    startInEditor &= !qaHome;
+    startInEditor |= qaShapes;
+    startInEditor &= !(qaHome || qaNewProject);
     if (startInEditor)
         project.loadDemo();
+    if (qaShapes)
+        project.selectAll();
     const int venueFlag = arguments.indexOf(QStringLiteral("--venue"));
     if (venueFlag >= 0 && venueFlag + 1 < arguments.size())
         project.setVenuePreset(arguments.at(venueFlag + 1));
@@ -109,7 +114,9 @@ int main(int argc, char *argv[])
     engine.rootContext()->setContextProperty(QStringLiteral("assetCatalog"), &assetCatalog);
     engine.rootContext()->setContextProperty(QStringLiteral("workspaceController"), &workspaceController);
     engine.rootContext()->setContextProperty(QStringLiteral("initialWorkspaceActive"), startInEditor);
-    engine.rootContext()->setContextProperty(QStringLiteral("qaMode"), startInEditor || qaHome);
+    engine.rootContext()->setContextProperty(QStringLiteral("qaMode"), startInEditor || qaHome || qaNewProject);
+    engine.rootContext()->setContextProperty(QStringLiteral("initialHomeMode"),
+        qaNewProject ? QStringLiteral("new") : QStringLiteral("dashboard"));
     QObject::connect(&engine, &QQmlApplicationEngine::objectCreationFailed,
                      &application, [] { QCoreApplication::exit(-1); }, Qt::QueuedConnection);
     engine.loadFromModule(QStringLiteral("MarchCraft"), QStringLiteral("Main"));
@@ -121,6 +128,8 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qa3DView", arguments.at(viewFlag + 1));
     if (arguments.contains(QStringLiteral("--qa-set-drag-preview")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
+    if (qaShapes && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("qaShapePalette", true);
     const int screenshotFlag = arguments.indexOf(QStringLiteral("--screenshot"));
     const bool screenshotRequested = screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size();
     if (screenshotRequested) {

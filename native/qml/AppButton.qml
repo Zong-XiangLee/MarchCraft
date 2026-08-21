@@ -10,6 +10,8 @@ Button {
     font.family: MarchCraftTheme.fontFamily
     font.pixelSize: 12
     opacity: 1
+    scale: down && enabled ? MarchCraftTheme.pressScale : 1
+    Behavior on scale { NumberAnimation { duration: MarchCraftTheme.motionFast; easing.type: Easing.OutCubic } }
 
     contentItem: Text {
         text: control.text
@@ -36,5 +38,7 @@ Button {
                     : control.activeFocus ? MarchCraftTheme.accentHover
                     : control.highlighted ? "transparent"
                     : control.checked ? "#365987" : MarchCraftTheme.divider
+        Behavior on color { ColorAnimation { duration: MarchCraftTheme.motionFast } }
+        Behavior on border.color { ColorAnimation { duration: MarchCraftTheme.motionFast } }
     }
 }

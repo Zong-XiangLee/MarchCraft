@@ -55,6 +55,9 @@ qt_add_qml_module(marchcraft
         qml/AppToolButton.qml
         qml/AppMenuItem.qml
         qml/WorkspaceLogic.qml
+        qml/AppIcon.qml
+        qml/ShapeIcon.qml
+        qml/ProjectSetupPage.qml
     SOURCES
         src/HumanGeometry.cpp
         src/HumanGeometry.h

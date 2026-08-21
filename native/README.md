@@ -57,7 +57,7 @@ Run `build/marchcraft.exe` (or the configuration-specific executable produced by
 
 On Windows, every build also refreshes the canonical production preview at `dist/MarchCraft-Production-Preview/MarchCraft.exe`.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` to capture the welcome workspace instead, add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`, and `--ground-debug`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`, and `--ground-debug`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
 
 ## Controls
 
