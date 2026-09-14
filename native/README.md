@@ -19,8 +19,8 @@ Apply action before project data changes.
 ## What is included
 
 - Native 2D drill editor and synchronized stylized 3D preview
-- Meter-based, right-handed/Y-up 3D world with the performance surface at `Y=0`, grounded skinned human performers, straight-leg drill animation, and a Blender-ready root/socket contract
-- Versioned semantic asset catalog with five body-rig profiles, modular uniforms, instrument/equipment attachments, and graceful placeholder assets
+- Meter-based, right-handed/Y-up 3D world with the performance surface at `Y=0` and lightweight colored directional performer markers
+- Versioned semantic asset catalog for instruments/equipment, props, and venues; equipment assignments remain available for clearance analysis
 - Configurable rehearsal field, high-school stadium, bowl, school-gym, and indoor-arena environments with daylight, overcast, sunset, night, and indoor lighting
 - Static/movable prop domain model with built-in box, panel, platform, and podium assets
 - Drill Clinic collision review accounts for performer equipment footprints and oriented static or moving props, with field highlighting and previewable reroutes or destination shifts
@@ -50,16 +50,16 @@ Install Qt 6.6 or newer with the Qt Quick, Qt Quick 3D, Qt Multimedia, and Qt Sh
 From a Qt developer shell:
 
 ```powershell
-cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-ctest --test-dir build --output-on-failure
+cmake -S . -B build-worktree-mingw -G "MinGW Makefiles" -DCMAKE_BUILD_TYPE=Release -DMARCHCRAFT_SYNC_PRODUCTION_PREVIEW=OFF
+cmake --build build-worktree-mingw
+ctest --test-dir build-worktree-mingw --output-on-failure
 ```
 
-Run `build/marchcraft.exe` (or the configuration-specific executable produced by the selected generator).
+Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executable produced by the selected generator).
 
-On Windows, every build also refreshes the canonical production preview at `dist/MarchCraft-Production-Preview/MarchCraft.exe`.
+Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`, and `--ground-debug`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
 
 ## Controls
 
@@ -80,3 +80,28 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 ## Licensing note
 
 OpenMarch was consulted only as a public behavioral reference. MarchCraft is a clean-room implementation. A final project license should be selected before public distribution.
+
+## Application architecture and deferred human rendering
+
+`DrillProject` remains the QML model and transaction coordinator. Its persistence,
+formation, Clinic, transition, and music adapters have separate implementation units.
+`ProjectStorage` owns SQLite I/O, `ProjectAlgorithms` provides stateless geometry and
+assignment functions, and `TransitionPath` supplies reusable arc-length tables.
+Path tables are invalidated by project edits and live geometry changes; playhead
+updates notify only position and facing roles. Background imports are revision-checked,
+and formation workers do not instantiate multimedia resources.
+
+The welcome workspace, command bars, roster, inspector, timeline, and settings dialogs
+are separate QML components with explicit dependencies supplied by the application shell.
+Performer dialog submissions retain name/notes and undo as one action.
+
+The human renderer, gait runtime, and bundled human GLBs are intentionally retired.
+Old body, uniform, skin, and height fields are retained for project compatibility but
+have no rendering controls. Source models, attribution, and authoring scripts remain
+as inactive references for a future implementation; they are not part of the build.
+The marker preview retains field positions, authored facing, visibility, selection,
+venues, props, cameras, and synchronized playback.
+
+Run `marchcraft_tests samplePerformance -o timings.txt,txt` for repeatable sample-show
+load/save, set-switching, edit, formation-preview, and position-evaluation timings.
+These diagnostics are measurements, not hardware-independent performance thresholds.

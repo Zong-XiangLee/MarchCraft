@@ -58,14 +58,6 @@ Item {
                                  : drillProject.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
         }
 
-        HumanGeometry {
-            id: sharedHumanGeometry
-            detailLevel: drillProject.graphicsProfile === "presentation" ? 0
-                       : drillProject.graphicsProfile === "performance" ? 2
-                       : drillProject.graphicsProfile === "automatic"
-                         ? (drillProject.performerCount > 150 ? 2 : 0) : 1
-        }
-
         Node {
             id: cameraOrigin
             eulerRotation: root.cameraBaseRotation
@@ -366,50 +358,14 @@ Item {
                 required property real facing
                 required property color performerColor
                 required property bool isSelected
-                required property string instrument
-                required property string bodyRigId
-                required property string uniformId
-                required property string skinPaletteId
-                required property string instrumentAssetId
-                required property string equipmentAssetId
-                required property real performerHeightMeters
-                required property real setDistance
-                required property real travelHeading
-                required property real travelStepsPerCount
-                required property string locomotionMode
-                required property real gaitPhase
-                required property string travelPathType
-                required property bool closingTransition
-                readonly property real animationFacing:
-                    travelPathType === "follow" && locomotionMode !== "idle"
-                        ? travelHeading : facing
-                position: Qt.vector3d(fieldX - 80, 0,
-                                      drillProject.fieldDepthSteps / 2 - fieldY)
-                eulerRotation.y: -animationFacing
-
-                HumanPerformer3D {
-                    geometrySource: sharedHumanGeometry
+                required property bool performerVisible
+                visible: performerVisible
+                position: Qt.vector3d(fieldX - 80, 0, drillProject.fieldDepthSteps / 2 - fieldY)
+                eulerRotation.y: -facing
+                PerformerMarker3D {
                     metersPerStep: drillProject.metersPerStep
-                    heightMeters: performerNode.performerHeightMeters
-                    uniformColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
-                    bodyRigId: performerNode.bodyRigId
-                    skinPaletteId: performerNode.skinPaletteId
-                    instrumentAssetId: performerNode.instrumentAssetId
-                    equipmentAssetId: performerNode.equipmentAssetId
+                    markerColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
                     selected: performerNode.isSelected
-                    marching: performerNode.locomotionMode !== "idle" && drillProject.playbackActive
-                    gaitPhase: performerNode.gaitPhase
-                    facingDegrees: performerNode.animationFacing
-                    travelHeading: performerNode.travelHeading
-                    transitionProgress: drillProject.playhead
-                    countsInMove: drillProject.currentSetCounts
-                    travelStepsPerCount: performerNode.travelStepsPerCount
-                    locomotionMode: performerNode.locomotionMode
-                    closingTransition: performerNode.closingTransition
-                    debugOverlay: drillProject.debug3D
-                    castBodyShadow: drillProject.graphicsProfile === "presentation" ||
-                                    (drillProject.graphicsProfile !== "performance" &&
-                                     drillProject.performerCount <= 150)
                 }
             }
         }
@@ -513,7 +469,6 @@ Item {
             Component.onCompleted: currentIndex = indexOfValue(drillProject.graphicsProfile)
             onActivated: drillProject.graphicsProfile = currentValue
         }
-        CheckBox { text: "Ground debug"; checked: drillProject.debug3D; onToggled: drillProject.debug3D = checked }
         Label {
             visible: !assetCatalog.valid
             text: "Asset catalog error"

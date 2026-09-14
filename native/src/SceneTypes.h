@@ -183,14 +183,4 @@ struct PropInstance {
     }
 };
 
-struct AnimationState {
-    QString locomotion{QStringLiteral("idle")};
-    QString pose{QStringLiteral("horn_down")};
-    bool closesAtDestination = false;
-    double normalizedTime = 0.0;
-    double speedMetersPerSecond = 0.0;
-    double travelDirectionDegrees = 0.0;
-    double travelStepsPerCount = 0.0;
-};
-
 } // namespace MarchCraft

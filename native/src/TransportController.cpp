@@ -26,6 +26,12 @@ TransportController::TransportController(DrillProject *project, QObject *parent)
         }
         emit loopChanged();
     });
+    connect(project, &QAbstractItemModel::modelAboutToBeReset, this, [this] {
+        m_timer.stop(); m_synth->pause(); m_player->stop();
+        m_state = QStringLiteral("stopped"); m_tick = 0;
+        m_openingHoldActive = false; m_openingHoldElapsedMs = 0.0; m_clock.invalidate();
+        emit stateChanged(); emit positionChanged();
+    });
     refreshMusic();
 }
 
@@ -73,7 +79,7 @@ void TransportController::syncSource()
 {
     if (!playing()) return;
     m_synth->pause(); m_player->pause();
-    if (m_project->m_playbackSource==QStringLiteral("midi") && m_synth->available()) { m_synth->seekTick(m_tick); m_synth->play(); }
+    if (m_project->m_playbackSource==QStringLiteral("midi") && m_synth->available() && !m_project->m_music.playbackEvents.isEmpty()) { m_synth->seekTick(m_tick); m_synth->play(); }
     else if (m_project->m_playbackSource==QStringLiteral("rehearsal") && !m_project->m_audioSource.isEmpty()) {
         m_player->setPosition(qRound64(m_project->audioMsForMusicTick(m_tick))); m_player->play();
     } else { m_baseMusicMs=musicMsAt(m_tick); m_clock.restart(); }
@@ -147,7 +153,7 @@ void TransportController::updatePosition()
         if(elapsed<m_project->openingDurationMs()){emit positionChanged();return;}
         m_openingHoldActive=false;m_openingHoldElapsedMs=0.0;startAt(0);return;
     }
-    if(m_project->m_playbackSource==QStringLiteral("midi")&&m_synth->available()) tick=tickAtMusicMs(m_synth->positionMs());
+    if(m_project->m_playbackSource==QStringLiteral("midi")&&m_synth->available()&&!m_project->m_music.playbackEvents.isEmpty()) tick=tickAtMusicMs(m_synth->positionMs());
     else if(m_project->m_playbackSource==QStringLiteral("rehearsal")&&!m_project->m_audioSource.isEmpty()) tick=m_project->musicTickForAudioMs(m_player->position());
     else tick=tickAtMusicMs(m_baseMusicMs+m_clock.elapsed());
     const qint64 loopA=loopStartTick(),loopB=loopEndTick();

@@ -4,6 +4,8 @@
 #include "SceneTypes.h"
 #include "TransportController.h"
 #include "WorkspaceController.h"
+#include "ProjectStorage.h"
+#include "TransitionPath.h"
 
 #include <QFile>
 #include <QJsonDocument>
@@ -59,6 +61,167 @@ class DrillProjectTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void transportAdvancesWithoutMidiAndStopsOnProjectReset()
+    {
+        DrillProject project; project.loadDemo();
+        TransportController transport(&project);
+        QVERIFY(!project.musicLoaded());
+        transport.playCurrentTransition();
+        QTRY_VERIFY_WITH_TIMEOUT(transport.currentTick() > 0 && project.playhead() > 0.001, 3000);
+        project.newProject();
+        QVERIFY(!transport.playing());
+        QCOMPARE(transport.currentTick(), qint64(0));
+        QTest::qWait(50);
+        QCOMPARE(project.performerCount(), 0);
+    }
+
+    void undoReturnsToSavedCleanState()
+    {
+        QTemporaryDir directory;
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        QVERIFY(project.saveProject(directory.filePath(QStringLiteral("clean.marchcraft"))));
+        project.selectAll(); project.nudgeSelected(1, 0);
+        QVERIFY(project.dirty());
+        project.undo(); QVERIFY(!project.dirty());
+        project.redo(); QVERIFY(project.dirty());
+    }
+
+    void legacyAppearanceSurvivesEditingAndSaving()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("appearance.marchcraft"));
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.setPerformerAppearance(0, QStringLiteral("performer.body.tall"),
+            QStringLiteral("uniform.custom"), QStringLiteral("skin.deep"), QStringLiteral("instrument.tuba"), 1.91);
+        QVERIFY(project.saveProject(path));
+        QJsonObject before; QString error;
+        QVERIFY(MarchCraft::ProjectStorage::readSqliteProject(path, &before, &error));
+        DrillProject restored; QVERIFY(restored.loadProject(path));
+        restored.savePerformerDetails(0, QStringLiteral("A"), QStringLiteral("Edited"), QStringLiteral("Trumpet"),
+            QStringLiteral("Brass"), QStringLiteral("Preserve appearance"), QStringLiteral("instrument.tuba"));
+        restored.undo(); restored.redo();
+        QVERIFY(restored.saveProject(path));
+        QJsonObject after;
+        QVERIFY(MarchCraft::ProjectStorage::readSqliteProject(path, &after, &error));
+        QCOMPARE(after.value(QStringLiteral("performers")).toArray().first().toObject().value(QStringLiteral("appearance")),
+                 before.value(QStringLiteral("performers")).toArray().first().toObject().value(QStringLiteral("appearance")));
+    }
+
+    void malformedMidiIsRejectedAtTrackBoundary()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("bad.mid"));
+        QByteArray midi("MThd", 4); append32(midi, 6); append16(midi, 1); append16(midi, 2); append16(midi, 480);
+        midi += QByteArrayLiteral("MTrk"); append32(midi, 1); midi.append(char(0x80));
+        midi += QByteArrayLiteral("MTrk"); append32(midi, 4); midi += QByteArray::fromHex("00ff2f00");
+        QFile file(path); QVERIFY(file.open(QIODevice::WriteOnly)); file.write(midi); file.close();
+        const auto result = MarchCraft::parseMidiFile(path);
+        QVERIFY(!result.ok);
+        QCOMPARE(result.error, QStringLiteral("Invalid MIDI delta time"));
+    }
+
+    void transitionTablesHonorDelayAndDegenerateSegments()
+    {
+        MarchCraft::Placement destination;
+        destination.position = {8, 0}; destination.pathType = QStringLiteral("delayed");
+        MarchCraft::TransitionPath delayed({}, destination);
+        QCOMPARE(delayed.position(0.25), QPointF(0, 0));
+        QCOMPARE(delayed.position(0.625), QPointF(4, 0));
+        QCOMPARE(delayed.distance(), 8.0);
+        destination.pathType = QStringLiteral("follow"); destination.pathPoints = {{0, 0}, {4, 0}, {4, 0}};
+        MarchCraft::TransitionPath follow({}, destination);
+        QCOMPARE(follow.position(0.5), QPointF(4, 0));
+        QCOMPARE(follow.position(1), QPointF(8, 0));
+    }
+
+    void asynchronousResultsDoNotCrossProjectBoundaries()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("import.mid"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        file.write(midiFixture()); file.close();
+        DrillProject project;
+        project.importMidiAsync(path);
+        project.newProject();
+        QTRY_VERIFY_WITH_TIMEOUT(!project.midiImporting(), 5000);
+        QCoreApplication::processEvents();
+        QVERIFY(!project.musicLoaded());
+        project.batchAddPerformers(QStringLiteral("P"), 24, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll();
+        project.requestFormationPreview(QStringLiteral("line"), {}, QStringLiteral("shortestTotal"));
+        project.newProject();
+        QTest::qWait(300);
+        QVERIFY(!project.formationPreviewActive());
+        QVERIFY(!project.formationPreviewBusy());
+        QCOMPARE(project.performerCount(), 0);
+    }
+
+    void performerDialogIsOneUndoableEdit()
+    {
+        DrillProject project;
+        project.savePerformerDetails(-1, QStringLiteral("A"), QStringLiteral("Alex"),
+            QStringLiteral("Trumpet"), QStringLiteral("Brass"), QStringLiteral("Notes"), QStringLiteral("instrument.trumpet"));
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("name")).toString(), QStringLiteral("Alex"));
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("notes")).toString(), QStringLiteral("Notes"));
+        project.undo(); QCOMPARE(project.performerCount(), 0);
+        project.redo(); QCOMPARE(project.performerCount(), 1);
+    }
+
+    void dismissedClinicMetadataIsSafe()
+    {
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 10, 20);
+        project.selectAll(); project.addSet(QStringLiteral("Long move"), 8);
+        project.nudgeSelected(60, 0);
+        const QString id = QStringLiteral("1:stride");
+        project.dismissIssue(id);
+        const auto issues = project.analyzeTransition();
+        for (const auto &issue : issues) QVERIFY(issue.toMap().value(QStringLiteral("id")).toString() != id);
+    }
+
+    void playbackOnlyNotifiesMotionRoles()
+    {
+        DrillProject project; project.loadDemo();
+        QSignalSpy changed(&project, &QAbstractItemModel::dataChanged);
+        project.setPlayhead(0.25);
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(qvariant_cast<QList<int>>(changed.first().at(2)), QList<int>({DrillProject::XRole, DrillProject::YRole, DrillProject::FacingRole}));
+    }
+
+    void samplePerformance()
+    {
+        QTemporaryDir directory;
+        DrillProject project;
+        QElapsedTimer timer;
+        timer.start();
+        QVERIFY(project.importCoordinateJson(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath(QStringLiteral("../../data/coordinates.json"))));
+        const auto loadMs = timer.restart();
+        QVERIFY(project.saveProject(directory.filePath(QStringLiteral("sample.marchcraft"))));
+        const auto saveMs = timer.restart();
+        for (int i = 0; i < project.setCount(); ++i) project.setCurrentSetIndex(i);
+        const auto switchMs = timer.restart();
+        project.selectAll();
+        project.nudgeSelected(0.25, 0);
+        const auto editMs = timer.restart();
+        project.previewFormation(QStringLiteral("line"), {}, QStringLiteral("balanced"));
+        const auto formationMs = timer.restart();
+        project.cancelFormationPreview();
+        project.setPlaybackActive(true);
+        for (int frame = 0; frame < 120; ++frame) {
+            project.setPlayhead(frame / 119.0);
+            for (int row = 0; row < project.performerCount(); ++row) {
+                project.data(project.index(row), DrillProject::XRole);
+                project.data(project.index(row), DrillProject::YRole);
+                project.data(project.index(row), DrillProject::FacingRole);
+            }
+        }
+        qInfo("Sample timings ms: load=%lld save=%lld sets=%lld edit=%lld formation=%lld playback120=%lld",
+              loadMs, saveMs, switchMs, editMs, formationMs, timer.elapsed());
+    }
+
     void cleanStartupAndExplicitDemo()
     {
         DrillProject project;
@@ -117,15 +280,14 @@ private slots:
         QCOMPARE(MarchCraft::FieldTransform::drillToWorld(sideOne, depth).y(), 0.0f);
     }
 
-    void builtInAssetCatalogHonorsGroundAndRigContract()
+    void builtInAssetCatalogHonorsGroundContract()
     {
         AssetCatalog catalog;
         QVERIFY2(catalog.valid(), qPrintable(catalog.validationErrors().join(QStringLiteral("\n"))));
-        QVERIFY(catalog.bodyRigs().size() >= 5);
         QVERIFY(catalog.instruments().size() >= 4);
         QVERIFY(catalog.props().size() >= 4);
         QVERIFY(catalog.venues().size() >= 5);
-        QCOMPARE(catalog.fallbackId(QStringLiteral("performer")), QStringLiteral("performer.body.standard"));
+        QVERIFY(!catalog.contains(QStringLiteral("performer.body.standard")));
         QCOMPARE(catalog.asset(QStringLiteral("missing.asset")).value(QStringLiteral("id")).toString(),
                  QStringLiteral("venue.rehearsal"));
     }
@@ -255,133 +417,6 @@ private slots:
         QCOMPARE(project.data(project.index(0, 0), DrillProject::SetDistanceRole).toDouble(), 0.0);
         project.redo();
         QCOMPARE(project.data(project.index(0, 0), DrillProject::SetDistanceRole).toDouble(), 5.0);
-    }
-
-    void performerMotionRolesFollowTravelAndFacing()
-    {
-        auto motionFor = [](double dx, double dy, double facing = 0.0,
-                            const QString &pathType = QStringLiteral("direct"), double playhead = 0.5) {
-            DrillProject project;
-            project.newProject();
-            project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
-                                 QStringLiteral("Brass"), 40.0, 40.0);
-            project.selectPerformer(0, false);
-            project.faceSelected(facing);
-            project.addSet(QStringLiteral("Set 2"), 8);
-            project.nudgeSelected(dx, dy);
-            project.faceSelected(facing);
-            project.setSelectedTransitionPath(pathType, {});
-            project.setPlaybackActive(true);
-            project.setPlayhead(playhead);
-            QVariantMap result;
-            const QModelIndex index = project.index(0, 0);
-            result.insert(QStringLiteral("mode"), project.data(index, DrillProject::LocomotionModeRole));
-            result.insert(QStringLiteral("heading"), project.data(index, DrillProject::TravelHeadingRole));
-            result.insert(QStringLiteral("stride"), project.data(index, DrillProject::TravelStepsPerCountRole));
-            result.insert(QStringLiteral("phase"), project.data(index, DrillProject::GaitPhaseRole));
-            result.insert(QStringLiteral("pathType"), project.data(index, DrillProject::TravelPathTypeRole));
-            result.insert(QStringLiteral("closes"), project.data(index, DrillProject::ClosingTransitionRole));
-            return result;
-        };
-
-        const auto forward = motionFor(0.0, 8.0);
-        QCOMPARE(forward.value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
-        QVERIFY(qAbs(forward.value(QStringLiteral("heading")).toDouble()) < 0.01);
-        QVERIFY(qAbs(forward.value(QStringLiteral("stride")).toDouble() - 1.0) < 0.01);
-
-        QCOMPARE(motionFor(8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.right"));
-        QCOMPARE(motionFor(-8.0, 0.0).value(QStringLiteral("mode")).toString(), QStringLiteral("slide.left"));
-        QCOMPARE(motionFor(0.0, -8.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
-        QCOMPARE(motionFor(8.0, -4.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
-        QCOMPARE(motionFor(-8.0, -4.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.backward"));
-        QCOMPARE(motionFor(8.0, 2.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
-        QCOMPARE(motionFor(8.0, 0.0, 90.0).value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
-
-        const auto halfCycle = motionFor(0.0, 8.0, 0.0, QStringLiteral("direct"), 0.125);
-        QVERIFY(qAbs(halfCycle.value(QStringLiteral("phase")).toDouble() - 0.5) < 0.001);
-        QCOMPARE(motionFor(0.0, 8.0, 0.0, QStringLiteral("delayed"), 0.10)
-                     .value(QStringLiteral("mode")).toString(), QStringLiteral("idle"));
-        QCOMPARE(motionFor(0.0, 8.0, 0.0, QStringLiteral("delayed"), 0.50)
-                     .value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
-
-        const auto follow = motionFor(0.0, 8.0, 90.0, QStringLiteral("follow"));
-        QCOMPARE(follow.value(QStringLiteral("pathType")).toString(), QStringLiteral("follow"));
-        QCOMPARE(follow.value(QStringLiteral("mode")).toString(), QStringLiteral("march.forward"));
-        QVERIFY(follow.value(QStringLiteral("closes")).toBool());
-    }
-
-    void closingTransitionOnlyAtPhraseEndOrHold()
-    {
-        DrillProject project;
-        project.newProject();
-        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
-                             QStringLiteral("Brass"), 40.0, 40.0);
-        project.selectPerformer(0, false);
-        project.addSet(QStringLiteral("Set 2"), 8);
-        project.nudgeSelected(0.0, 8.0);
-        project.addSet(QStringLiteral("Set 3"), 8);
-        project.nudgeSelected(0.0, 8.0);
-        project.setPlaybackActive(true);
-
-        project.setCurrentSetIndex(1);
-        QVERIFY(!project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
-        project.setCurrentSetIndex(2);
-        QVERIFY(project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
-
-        project.setPlaybackActive(false);
-        project.setCurrentSetIndex(2);
-        project.nudgeSelected(0.0, -8.0);
-        project.setPlaybackActive(true);
-        project.setCurrentSetIndex(1);
-        QVERIFY(project.data(project.index(0, 0), DrillProject::ClosingTransitionRole).toBool());
-    }
-
-    void countedHoldIsIdleAndFacingChangeIsPlanted()
-    {
-        DrillProject project;
-        project.newProject();
-        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
-                             QStringLiteral("Brass"), 40.0, 40.0);
-        project.selectPerformer(0, false);
-        project.addSet(QStringLiteral("Hold"), 8);
-        project.setPlaybackActive(true);
-        project.setPlayhead(0.5);
-        QCOMPARE(project.data(project.index(0, 0), DrillProject::LocomotionModeRole).toString(),
-                 QStringLiteral("idle"));
-        project.setPlaybackActive(false);
-        project.faceSelected(90.0);
-        project.setPlaybackActive(true);
-        QCOMPARE(project.data(project.index(0, 0), DrillProject::LocomotionModeRole).toString(),
-                 QStringLiteral("direction_change"));
-    }
-
-    void followCornerSmoothsHeadingWithoutCollapsingStride()
-    {
-        DrillProject project;
-        project.newProject();
-        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"),
-                             QStringLiteral("Brass"), 40.0, 40.0);
-        project.selectPerformer(0, false);
-        project.addSet(QStringLiteral("Set 2"), 8);
-        project.nudgeSelected(8.0, 8.0);
-        project.setSelectedTransitionPath(QStringLiteral("follow"), {QPointF(48.0, 40.0)});
-        project.setPlaybackActive(true);
-
-        auto stateAt = [&project](double playhead) {
-            project.setPlayhead(playhead);
-            const QModelIndex index = project.index(0, 0);
-            return qMakePair(project.data(index, DrillProject::TravelHeadingRole).toDouble(),
-                             project.data(index, DrillProject::TravelStepsPerCountRole).toDouble());
-        };
-
-        const auto before = stateAt(0.48);
-        const auto corner = stateAt(0.50);
-        const auto after = stateAt(0.52);
-        QVERIFY(before.first > corner.first);
-        QVERIFY(corner.first > after.first);
-        QVERIFY(corner.first > 30.0 && corner.first < 60.0);
-        QVERIFY(qAbs(before.second - corner.second) < 0.01);
-        QVERIFY(qAbs(after.second - corner.second) < 0.01);
     }
 
     void audienceCoordinateSemantics()
@@ -880,7 +915,9 @@ private slots:
             const QString type = value.toMap().value(QStringLiteral("type")).toString();
             foundCollision |= type == QStringLiteral("collision"); foundCrossing |= type == QStringLiteral("crossing");
         }
-        QVERIFY(foundCollision); QVERIFY(foundCrossing);
+        QVERIFY(foundCollision);
+        // Geometric crossings alone are intentional choreography; timed collisions are reported.
+        QVERIFY(!foundCrossing);
         project.setCapabilityProfile(QStringLiteral("beginner")); QCOMPARE(project.maximumStepsPerCount(), 1.0);
         const QString path = temporary.filePath(QStringLiteral("clinic.marchcraft")); QVERIFY(project.saveProject(path));
         DrillProject restored; QVERIFY(restored.loadProject(path)); QCOMPARE(restored.capabilityProfile(), QStringLiteral("beginner"));

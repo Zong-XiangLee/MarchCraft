@@ -17,6 +17,12 @@ ApplicationWindow {
            : "MarchCraft"
     color: MarchCraftTheme.canvas
 
+    function showQaSurface(surface) {
+        if (surface === "preferences") settingsDialog.open()
+        else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
+        else if (surface === "music") timelinePanel.exposedTimelineTabs.currentIndex = 1
+    }
+
     property int activePerformer: -1
     property bool threeD: false
     property bool playing: transport.playing
@@ -42,7 +48,7 @@ ApplicationWindow {
     function returnHome() {
         homeMode = "dashboard"
         workspaceState.workspaceActive = false
-        Qt.callLater(function() { (resumeButton.visible ? resumeButton : newProjectHomeButton).forceActiveFocus() })
+        Qt.callLater(function() { (homePage.exposedResumeButton.visible ? homePage.exposedResumeButton : homePage.exposedNewProjectHomeButton).forceActiveFocus() })
     }
 
     function createProject(name, fieldPreset, lightingPreset) {
@@ -112,7 +118,7 @@ ApplicationWindow {
         workspaceController.refreshRecentProjects()
         if (!workspaceState.workspaceActive && !qaMode && workspaceController.startupSoundEnabled)
             Qt.callLater(function() { workspaceController.playStartupSound() })
-        if (!workspaceState.workspaceActive) homeIntro.restart()
+        if (!workspaceState.workspaceActive) homePage.exposedHomeIntro.restart()
     }
 
     onClosing: function(close) {
@@ -130,11 +136,11 @@ ApplicationWindow {
     }
     onQaSetDragPreviewChanged: if (qaSetDragPreview) {
         Qt.callLater(function() {
-            setStrip.dragFrom = 0
-            setStrip.dropSlot = Math.min(3, drillProject.setCount)
-            setStrip.dragViewportX = Math.min(setStrip.width - 56, setStrip.cardPitch * 2.5)
+            timelinePanel.exposedSetStrip.dragFrom = 0
+            timelinePanel.exposedSetStrip.dropSlot = Math.min(3, drillProject.setCount)
+            timelinePanel.exposedSetStrip.dragViewportX = Math.min(timelinePanel.exposedSetStrip.width - 56, timelinePanel.exposedSetStrip.cardPitch * 2.5)
             const first = drillProject.setInfo(0)
-            setStrip.draggedLabel = first.number + " · " + first.name
+            timelinePanel.exposedSetStrip.draggedLabel = first.number + " · " + first.name
         })
     }
     property bool freehandDrawing: false
@@ -240,82 +246,21 @@ ApplicationWindow {
         }
     }
 
-    header: ToolBar {
-        visible: workspaceState.workspaceActive
-        height: visible ? 94 : 0
-        background: Rectangle { color: MarchCraftTheme.surface; border.color: MarchCraftTheme.divider }
-        ColumnLayout {
-            anchors.fill: parent
-            spacing: 0
-            RowLayout {
-                Layout.fillWidth: true; Layout.preferredHeight: 52
-                Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 8
-                AppButton {
-                    id: editorHomeButton
-                    flat: true
-                    implicitWidth: 126
-                    contentItem: RowLayout {
-                        spacing: 8
-                        Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 26; sourceSize.height: 26; width: 26; height: 26; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
-                        Label { text: "MarchCraft"; color: MarchCraftTheme.textPrimary; font.bold: true }
-                    }
-                    ToolTip.text: "Return Home"
-                    ToolTip.visible: hovered
-                    onClicked: window.returnHome()
-                }
-                Rectangle { width: 1; height: 24; color: MarchCraftTheme.divider; Layout.leftMargin: 2; Layout.rightMargin: 4 }
-                ColumnLayout {
-                    spacing: 0; Layout.maximumWidth: 280
-                    Label { text: drillProject.showName; color: MarchCraftTheme.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: drillProject.dirty ? "Unsaved changes" : "All changes saved"; color: drillProject.dirty ? MarchCraftTheme.warning : MarchCraftTheme.textMuted; font.pixelSize: 10 }
-                }
-                AppToolButton {
-                    ToolTip.text: "Undo"; ToolTip.visible: hovered; enabled: drillProject.canUndo
-                    contentItem: AppIcon { name: "undo"; iconColor: parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled }
-                    onClicked: drillProject.undo()
-                }
-                AppToolButton {
-                    ToolTip.text: "Redo"; ToolTip.visible: hovered; enabled: drillProject.canRedo
-                    contentItem: AppIcon { name: "redo"; iconColor: parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled }
-                    onClicked: drillProject.redo()
-                }
-                Item { Layout.fillWidth: true }
-                AppButton { text: "+ Performer"; onClicked: { performerDialog.editing = false; performerDialog.open() } }
-                AppButton { text: "+ Batch"; onClicked: batchDialog.open() }
-                AppToolButton { text: "2D"; checkable: true; checked: !window.threeD; onClicked: window.threeD = false }
-                AppToolButton { text: "3D"; checkable: true; checked: window.threeD; onClicked: window.threeD = true }
-                AppToolButton {
-                    ToolTip.text: "More editor actions"; ToolTip.visible: hovered
-                    contentItem: AppIcon { name: "more" }
-                    onClicked: editorActionsPopup.open()
-                }
-            }
-            Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider }
-            RowLayout {
-                Layout.fillWidth: true; Layout.preferredHeight: 41
-                Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 6
-                Label { text: drillProject.selectedCount > 0 ? drillProject.selectedCount + " selected" : "Select performers to edit formations"; color: drillProject.selectedCount > 0 ? MarchCraftTheme.textSecondary : MarchCraftTheme.textMuted; font.pixelSize: 11; Layout.rightMargin: 6 }
-                AppButton {
-                    id: shapesButton
-                    text: window.shapeDrawing.length ? "Shape · " + window.shapeDrawing : "Shapes"
-                    enabled: drillProject.selectedCount > 0
-                    highlighted: window.shapeDrawing.length > 0
-                    onClicked: shapePalette.open()
-                }
-                AppButton { text: window.freehandDrawing ? "Drawing…" : "Freehand"; enabled: drillProject.selectedCount > 0; highlighted: window.freehandDrawing; onClicked: freehandDialog.open() }
-                AppToolButton { text: "Snap"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Snap selection to one-step grid"; ToolTip.visible: hovered; onClicked: drillProject.snapSelected(1) }
-                AppToolButton { text: "Mirror"; enabled: drillProject.selectedCount > 0; ToolTip.text: "Mirror selection side-to-side"; ToolTip.visible: hovered; onClicked: drillProject.mirrorSelected(true) }
-                Item { Layout.fillWidth: true }
-                AppToolButton { text: "Paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
-                AppToolButton { text: "Guides"; checkable: true; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides = checked }
-                AppToolButton { text: "Grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
-            }
-        }
+    header: EditorCommandBars {
+        id: commandBars
+        batchDialogContext: batchDialog
+        drillProjectContext: drillProject
+        editorActionsPopupContext: editorActionsPopup
+        freehandDialogContext: freehandDialog
+        performerDialogContext: performerDialog
+        shapePaletteContext: shapePalette
+        windowContext: window
+        workspaceStateContext: workspaceState
     }
 
     Popup {
         id: shapePalette
-        x: Math.min(window.width - width - 16, shapesButton.mapToItem(window.contentItem, 0, 0).x)
+        x: Math.min(window.width - width - 16, commandBars.shapeButton.mapToItem(window.contentItem, 0, 0).x)
         y: 92; width: 360; height: 250; padding: 14; modal: false; focus: true
         enter: Transition {
             NumberAnimation { property: "opacity"; from: 0; to: 1; duration: MarchCraftTheme.motionMedium }
@@ -364,8 +309,8 @@ ApplicationWindow {
 
     Popup {
         id: timelineActionsPopup
-        x: Math.min(window.width - width - 16, timelineActionsButton.mapToItem(window.contentItem, 0, 0).x)
-        y: Math.min(window.height - height - 16, timelineActionsButton.mapToItem(window.contentItem, 0, timelineActionsButton.height).y)
+        x: Math.min(window.width - width - 16, timelinePanel.exposedTimelineActionsButton.mapToItem(window.contentItem, 0, 0).x)
+        y: Math.min(window.height - height - 16, timelinePanel.exposedTimelineActionsButton.mapToItem(window.contentItem, 0, timelinePanel.exposedTimelineActionsButton.height).y)
         width: 220; padding: 8; focus: true
         enter: Transition { NumberAnimation { property: "opacity"; from: 0; to: 1; duration: MarchCraftTheme.motionMedium } }
         exit: Transition { NumberAnimation { property: "opacity"; to: 0; duration: MarchCraftTheme.motionFast } }
@@ -381,199 +326,13 @@ ApplicationWindow {
         }
     }
 
-    Rectangle {
+    WelcomeWorkspace {
         id: homePage
-        anchors.fill: parent
-        enabled: !workspaceState.workspaceActive
-        visible: opacity > 0.01
-        opacity: workspaceState.workspaceActive ? 0 : 1
-        color: MarchCraftTheme.canvas
-        transform: Translate {
-            y: workspaceState.workspaceActive ? -8 : 0
-            Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
-        }
-        Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
-
-        Rectangle {
-            width: 640
-            height: 640
-            radius: 320
-            anchors.right: parent.right
-            anchors.top: parent.top
-            anchors.rightMargin: -260
-            anchors.topMargin: -310
-            color: "#111a29"
-            opacity: 0.72
-        }
-
-        ColumnLayout {
-            anchors.centerIn: parent
-            width: Math.min(1240, parent.width - 64)
-            spacing: 22
-
-            RowLayout {
-                id: homeLogo
-                Layout.fillWidth: true
-                opacity: qaMode ? 1 : 0
-                scale: qaMode ? 1 : 0.96
-                spacing: 14
-                Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 52; sourceSize.height: 52; width: 52; height: 52; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
-                ColumnLayout {
-                    spacing: 0
-                    Label { text: "MarchCraft"; font.family: MarchCraftTheme.fontFamily; font.bold: true; font.pixelSize: 25; color: MarchCraftTheme.textPrimary }
-                    Label { text: "Professional drill design workspace"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 12; color: MarchCraftTheme.textSecondary }
-                }
-                Item { Layout.fillWidth: true }
-                AppToolButton {
-                    text: workspaceController.startupSoundEnabled ? "Sound on" : "Sound off"
-                    ToolTip.text: "Play a quiet sound when MarchCraft starts"
-                    ToolTip.visible: hovered
-                    onClicked: workspaceController.startupSoundEnabled = !workspaceController.startupSoundEnabled
-                }
-            }
-
-            GridLayout {
-                id: homeContent
-                Layout.fillWidth: true
-                visible: window.homeMode === "dashboard"
-                enabled: window.homeMode === "dashboard"
-                columns: 2
-                columnSpacing: 24
-                rowSpacing: 18
-                opacity: window.homeMode === "dashboard" ? (qaMode ? 1 : homeContent.baseOpacity) : 0
-                property real baseOpacity: 0
-                transform: Translate {
-                    id: homeContentTranslate
-                    y: window.homeMode === "dashboard" ? 0 : -8
-                    Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic } }
-                }
-                Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic } }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 420
-                    radius: MarchCraftTheme.radiusLarge
-                    color: MarchCraftTheme.surface
-                    border.color: MarchCraftTheme.divider
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        spacing: 14
-                        Label { text: "Start"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
-                        Label { text: "Create a show, open a project, or explore the included sample."; Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary }
-                        AppButton { id: newProjectHomeButton; text: "New project"; highlighted: true; Layout.fillWidth: true; onClicked: window.startNewProject() }
-                        AppButton { text: "Open project…"; Layout.fillWidth: true; onClicked: window.requestOpenProject() }
-                        AppButton {
-                            id: resumeButton
-                            visible: workspaceState.hasCurrentProject
-                            text: "Resume " + drillProject.showName
-                            Layout.fillWidth: true
-                            onClicked: workspaceState.workspaceActive = true
-                        }
-                        Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
-                        Rectangle {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            radius: MarchCraftTheme.radiusSmall
-                            color: sampleHover.hovered ? MarchCraftTheme.surfaceHover : MarchCraftTheme.surfaceRaised
-                            border.color: sampleHover.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
-                            HoverHandler { id: sampleHover }
-                            TapHandler { onTapped: window.requestSampleProject() }
-                            ColumnLayout {
-                                anchors.fill: parent; anchors.margins: 16; spacing: 5
-                                Label { text: "BUNDLED SAMPLE"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1.2 }
-                                Label { text: "Rancho Bernardo 2025"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 16 }
-                                Label { text: "204 performers · 97 sets · Opens as an editable copy"; color: MarchCraftTheme.textSecondary; font.pixelSize: 11 }
-                            }
-                        }
-                    }
-                }
-
-                Rectangle {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 420
-                    radius: MarchCraftTheme.radiusLarge
-                    color: MarchCraftTheme.surface
-                    border.color: MarchCraftTheme.divider
-                    ColumnLayout {
-                        anchors.fill: parent
-                        anchors.margins: 24
-                        spacing: 10
-                        RowLayout {
-                            Layout.fillWidth: true
-                            Label { text: "Recent projects"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
-                            Item { Layout.fillWidth: true }
-                            Label { text: workspaceController.recentProjects.length + " / 8"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
-                        }
-                        Label {
-                            visible: workspaceController.recentProjects.length === 0
-                            text: "Projects you open or save will appear here."
-                            color: MarchCraftTheme.textSecondary
-                            Layout.fillWidth: true
-                            Layout.topMargin: 18
-                        }
-                        ListView {
-                            Layout.fillWidth: true
-                            Layout.fillHeight: true
-                            clip: true
-                            spacing: 6
-                            model: workspaceController.recentProjects
-                            delegate: Rectangle {
-                                id: recentRow
-                                required property var modelData
-                                width: ListView.view.width
-                                height: 54
-                                radius: MarchCraftTheme.radiusSmall
-                                color: recentHover.hovered ? MarchCraftTheme.surfaceHover : "transparent"
-                                border.color: recentHover.hovered ? MarchCraftTheme.divider : "transparent"
-                                HoverHandler { id: recentHover }
-                                TapHandler { onTapped: workspaceState.request("openPath", recentRow.modelData.path, drillProject.dirty) }
-                                RowLayout {
-                                    anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 6; spacing: 10
-                                    Rectangle { width: 28; height: 28; radius: 6; color: "#243653"; Label { anchors.centerIn: parent; text: "M"; color: MarchCraftTheme.accentHover; font.bold: true } }
-                                    ColumnLayout {
-                                        Layout.fillWidth: true; spacing: 1
-                                        Label { text: recentRow.modelData.name; color: MarchCraftTheme.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
-                                        Label { text: recentRow.modelData.folder; color: MarchCraftTheme.textMuted; font.pixelSize: 10; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                                    }
-                                    AppToolButton {
-                                        text: "×"; ToolTip.text: "Remove from recent projects"; ToolTip.visible: hovered
-                                        onClicked: workspaceController.removeRecentProject(recentRow.modelData.path)
-                                    }
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            ProjectSetupPage {
-                id: inlineProjectSetup
-                Layout.fillWidth: true
-                Layout.preferredHeight: 420
-                visible: window.homeMode === "new"
-                enabled: window.homeMode === "new"
-                opacity: window.homeMode === "new" ? 1 : 0
-                scale: window.homeMode === "new" ? 1 : 0.985
-                onCancelled: { window.homeMode = "dashboard"; Qt.callLater(function() { newProjectHomeButton.forceActiveFocus() }) }
-                onCreateRequested: function(name, fieldPreset, lightingPreset) { window.createProject(name, fieldPreset, lightingPreset) }
-                Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
-                Behavior on scale { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
-            }
-        }
-
-        SequentialAnimation {
-            id: homeIntro
-            ParallelAnimation {
-                NumberAnimation { target: homeLogo; property: "opacity"; to: 1; duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic }
-                NumberAnimation { target: homeLogo; property: "scale"; to: 1; duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic }
-            }
-            PauseAnimation { duration: 60 }
-            ParallelAnimation {
-                NumberAnimation { target: homeContent; property: "baseOpacity"; to: 1; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
-                NumberAnimation { target: homeContentTranslate; property: "y"; to: 0; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
-            }
-        }
+        drillProjectContext: drillProject
+        qaModeContext: qaMode
+        windowContext: window
+        workspaceControllerContext: workspaceController
+        workspaceStateContext: workspaceState
     }
 
     SplitView {
@@ -600,100 +359,15 @@ ApplicationWindow {
             } }
         }
 
-        Frame {
-            id: rosterPanel
-            visible: !workspaceSettings.rosterCollapsed
-            SplitView.preferredWidth: 220
-            SplitView.minimumWidth: 180
-            SplitView.maximumWidth: 460
-            padding: 0
-            background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
-            ColumnLayout {
-                anchors.fill: parent
-                spacing: 0
-                RowLayout {
-                    Layout.fillWidth: true
-                    Layout.margins: 10
-                    Label { text: "ROSTER"; font.bold: true; color: "#a5afbc" }
-                    Item { Layout.fillWidth: true }
-                    Label { text: drillProject.performerCount; color: "#778392" }
-                    AppToolButton { text: "‹"; ToolTip.text: "Collapse roster"; ToolTip.visible: hovered; onClicked: workspaceSettings.rosterCollapsed = true }
-                }
-                TextField {
-                    id: rosterSearch
-                    Layout.fillWidth: true
-                    Layout.margins: 8
-                    placeholderText: "Search labels or instruments"
-                    leftPadding: 10
-                }
-                ListView {
-                    id: roster
-                    property int selectionAnchor: -1
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    clip: true
-                    model: drillProject
-                    currentIndex: window.activePerformer
-                    ScrollBar.vertical: ScrollBar {}
-                    delegate: ItemDelegate {
-                        id: rosterDelegate
-                        required property int index
-                        required property string label
-                        required property string performerName
-                        required property string instrument
-                        required property string section
-                        required property color performerColor
-                        required property bool isSelected
-                        required property bool hasWarning
-                        required property bool performerVisible
-                        required property bool performerLocked
-                        required property real totalDistance
-                        width: ListView.view.width
-                        height: visible ? 58 : 0
-                        visible: rosterSearch.text.length === 0 ||
-                                 (label + " " + performerName + " " + instrument + " " + section).toLowerCase().includes(rosterSearch.text.toLowerCase())
-                        highlighted: isSelected
-                        contentItem: RowLayout {
-                            spacing: 8
-                            Rectangle { width: 8; height: 34; radius: 4; color: rosterDelegate.performerColor }
-                            ColumnLayout {
-                                spacing: 0; Layout.fillWidth: true
-                                Label { text: rosterDelegate.label; font.bold: true }
-                                Label { text: rosterDelegate.instrument; color: "#a5afbc"; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
-                            }
-                            Label { visible: rosterDelegate.hasWarning; text: "⚠"; color: "#e07178" }
-                            Label { visible: rosterDelegate.performerLocked; text: "🔒" }
-                            Label { visible: !rosterDelegate.performerVisible; text: "◌"; color: "#a5afbc" }
-                            Label { text: rosterDelegate.totalDistance.toFixed(1); color: "#a5afbc"; font.pixelSize: 11 }
-                        }
-                        MouseArea {
-                            anchors.fill: parent
-                            acceptedButtons: Qt.LeftButton | Qt.RightButton
-                            onClicked: function(mouse) {
-                                if (mouse.button === Qt.RightButton) {
-                                    const group = drillProject.performerGroupInfo(index)
-                                    if (Object.keys(group).length > 0) drillProject.selectGroupForPerformer(index)
-                                    else if (!rosterDelegate.isSelected) drillProject.selectPerformerMode(index, 0)
-                                    window.activePerformer = index; inspector.refresh()
-                                    const p = mapToItem(window.contentItem, mouse.x, mouse.y)
-                                    fieldContextMenu.popup(p.x, p.y); return
-                                }
-                                const ctrl = (mouse.modifiers & Qt.ControlModifier) !== 0
-                                const shift = (mouse.modifiers & Qt.ShiftModifier) !== 0
-                                if (shift && roster.selectionAnchor >= 0)
-                                    drillProject.selectPerformerRange(roster.selectionAnchor, index, ctrl)
-                                else {
-                                    drillProject.selectPerformerMode(index, ctrl ? 1 : 0)
-                                    roster.selectionAnchor = index
-                                }
-                                window.activePerformer = index
-                                inspector.refresh()
-                            }
-                        }
-                    }
-                }
-            }
-        }
+    RosterPanel {
+        id: rosterPanel
+        drillProjectContext: drillProject
+        fieldContextMenuContext: fieldContextMenu
+        inspectorContext: inspectorPanel.exposedInspector
+        performerDialogContext: performerDialog
+        windowContext: window
+        workspaceSettingsContext: workspaceSettings
+    }
 
         SplitView {
             id: verticalSplit
@@ -721,10 +395,10 @@ ApplicationWindow {
                     shapeDrawMode: window.shapeDrawing
                     showPaths: drillProject.showTransitionPaths
                     showShapeGuides: drillProject.showShapeGuides
-                    onPerformerActivated: function(row) { window.activePerformer = row; inspector.refresh() }
+                    onPerformerActivated: function(row) { window.activePerformer = row; inspectorPanel.exposedInspector.refresh() }
                     onContextMenuRequested: function(screenX, screenY, performerRow) {
                         window.activePerformer = performerRow
-                        if (performerRow >= 0) inspector.refresh()
+                        if (performerRow >= 0) inspectorPanel.exposedInspector.refresh()
                         fieldContextMenu.popup(screenX, screenY)
                     }
                     onFreehandCompleted: function(points) {
@@ -771,498 +445,37 @@ ApplicationWindow {
                 ThreeDView { id: threeDView }
             }
 
-            Frame {
-                id: timelinePanel
-                visible: !workspaceSettings.timelineCollapsed
-                SplitView.preferredHeight: workspaceSettings.timelineMaximized ? Math.max(150, verticalSplit.height - 240) : 260
-                SplitView.minimumHeight: 150
-                SplitView.maximumHeight: Math.max(150, verticalSplit.height - 240)
-                padding: 8
-                background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
-                ColumnLayout {
-                    anchors.fill: parent
-                    RowLayout {
-                        Layout.fillWidth: true
-                        AppToolButton { text: "|◀"; ToolTip.text: "First set"; ToolTip.visible: hovered; onClicked: transport.firstSet() }
-                        AppToolButton { text: "◀"; ToolTip.text: "Previous set"; ToolTip.visible: hovered; onClicked: transport.previousSet() }
-                        AppToolButton { text: transport.playing ? "❚❚" : "▶"; font.pixelSize: 17; ToolTip.text: "Play or pause"; ToolTip.visible: hovered; onClicked: transport.playPause() }
-                        AppToolButton { text: "■"; ToolTip.text: "Stop"; ToolTip.visible: hovered; onClicked: transport.stop() }
-                        AppToolButton { text: "▶|"; ToolTip.text: "Next set"; ToolTip.visible: hovered; onClicked: transport.nextSet() }
-                        AppButton { text: "Play selection"; visible: verticalSplit.width > 720; enabled: drillProject.setCount > 1; onClicked: transport.playFromSelection() }
-                        AppToolButton { text: "↻"; checkable: true; checked: drillProject.loopEnabled; enabled: drillProject.selectedSetStartIndex !== drillProject.selectedSetEndIndex; ToolTip.text: "Loop selected range"; ToolTip.visible: hovered; onClicked: transport.toggleLoop() }
-                        Label { text: drillProject.currentSetName; visible: verticalSplit.width > 860; font.bold: true }
-                        Slider {
-                            property bool resumeAfterSeek: false
-                            Layout.fillWidth: true
-                            from: 0; to: 1; value: transport.normalizedPosition
-                            onPressedChanged: {
-                                if (pressed) {
-                                    resumeAfterSeek = transport.playing
-                                    if (resumeAfterSeek) transport.pause()
-                                } else if (resumeAfterSeek) transport.playPause()
-                            }
-                            onMoved: transport.seekNormalized(value)
-                        }
-                        Label { text: Math.floor(transport.currentMs / 60000) + ":" + String(Math.floor((transport.currentMs % 60000) / 1000)).padStart(2,"0"); color: "#a5afbc" }
-                        ComboBox {
-                            visible: verticalSplit.width > 790
-                            model: ["MIDI Synth", "Rehearsal Audio", "Mute"]
-                            Layout.preferredWidth: 140
-                            currentIndex: drillProject.playbackSource === "rehearsal" ? 1 : drillProject.playbackSource === "mute" ? 2 : 0
-                            onActivated: drillProject.playbackSource = currentIndex === 1 ? "rehearsal" : currentIndex === 2 ? "mute" : "midi"
-                        }
-                        AppToolButton { text: "▁"; ToolTip.text: "Collapse timeline"; ToolTip.visible: hovered; onClicked: workspaceSettings.timelineCollapsed = true }
-                        AppToolButton { text: workspaceSettings.timelineMaximized ? "▣" : "□"; ToolTip.text: workspaceSettings.timelineMaximized ? "Restore timeline" : "Maximize timeline"; ToolTip.visible: hovered; onClicked: workspaceSettings.timelineMaximized = !workspaceSettings.timelineMaximized }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: "FORMATION VERSION"; visible: verticalSplit.width > 760; color: "#a5afbc"; font.bold: true }
-                        ComboBox {
-                            id: variantSelector
-                            Layout.preferredWidth: verticalSplit.width > 760 ? 210 : 170
-                            model: drillProject.currentVariantCount
-                            currentIndex: Math.max(0, drillProject.currentVariantIndex)
-                            displayText: {
-                                const v = drillProject.variantInfo(currentIndex)
-                                return v.label ? "Variant " + v.label + " · " + v.name : "No variant"
-                            }
-                            delegate: ItemDelegate {
-                                required property int index
-                                width: variantSelector.width
-                                property var variant: drillProject.variantInfo(index)
-                                text: "Variant " + variant.label + " · " + variant.name +
-                                      (variant.caption ? " — " + variant.caption : "")
-                            }
-                            onActivated: drillProject.activateVariant(currentIndex)
-                        }
-                        AppButton { text: "+ Variant"; visible: verticalSplit.width > 1050; onClicked: variantDialog.open() }
-                        AppButton {
-                            visible: verticalSplit.width > 1050
-                            text: drillProject.currentVariantCount > 1 ? "Archive variant" : "Archive set"
-                            enabled: drillProject.setCount > 1 || drillProject.currentVariantCount > 1
-                            onClicked: drillProject.archiveCurrentVariant()
-                        }
-                        AppButton { text: "+ Set"; visible: verticalSplit.width > 1050; onClicked: { setDialog.editing = false; setDialog.open() } }
-                        AppButton { text: "Edit set"; visible: verticalSplit.width > 1050; enabled: drillProject.setCount > 0; onClicked: { setDialog.editing = true; setDialog.open() } }
-                        AppButton { text: "+ Batch"; visible: verticalSplit.width > 1050; onClicked: batchSetDialog.open() }
-                        AppButton { id: timelineActionsButton; text: "Set actions…"; visible: verticalSplit.width <= 1050; onClicked: timelineActionsPopup.open() }
-                        Item { Layout.fillWidth: true }
-                        AppButton {
-                            visible: verticalSplit.width > 1050
-                            text: "Archive (" + (drillProject.archivedSetCount + drillProject.currentArchivedVariantCount) + ")"
-                            onClicked: archiveDialog.open()
-                        }
-                    }
-                    TabBar {
-                        id: timelineTabs
-                        Layout.fillWidth: true
-                        Component.onCompleted: if (drillProject.musicLoaded) currentIndex = 1
-                        TabButton { text: "SETS" }
-                        TabButton { text: "MUSIC" }
-                    }
-                    StackLayout {
-                        Layout.fillWidth: true
-                        Layout.fillHeight: true
-                        currentIndex: timelineTabs.currentIndex
-                        Item {
-                    id: setPane
-                    ListView {
-                        id: setStrip
-                        property int dragFrom: -1
-                        property int dropSlot: -1
-                        property real dragViewportX: 0
-                        property string draggedLabel: ""
-                        readonly property real cardPitch: 118
-                        function updateDrop(viewX) {
-                            dragViewportX = Math.max(0, Math.min(width, viewX))
-                            dropSlot = Math.max(0, Math.min(drillProject.setCount, Math.round((contentX + dragViewportX) / cardPitch)))
-                        }
-                        function targetIndex() {
-                            if (dragFrom < 0 || dropSlot < 0) return dragFrom
-                            let target = dropSlot
-                            if (target > dragFrom) target--
-                            return Math.max(0, Math.min(drillProject.setCount - 1, target))
-                        }
-                        anchors.fill: parent
-                        orientation: ListView.Horizontal; spacing: 6; clip: true
-                        model: drillProject.setCount
-                        ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AlwaysOn }
-                        WheelHandler { onWheel: function(event) { setStrip.contentX=Math.max(0,Math.min(setStrip.contentWidth-setStrip.width,setStrip.contentX-event.angleDelta.y)); event.accepted=true } }
-                        Connections { target: drillProject; function onCurrentSetChanged(){ setStrip.positionViewAtIndex(drillProject.currentSetIndex,ListView.Contain) } }
-                        delegate: AppButton {
-                                    id: setCard
-                                    required property int index
-                                    property var info: drillProject.setInfo(index)
-                                    Connections { target: drillProject; function onSetsChanged() { setCard.info = drillProject.setInfo(setCard.index) } }
-                                    width: 112; height: 78
-                                    property real previewShift: setStrip.dragFrom < 0 || index === setStrip.dragFrom ? 0
-                                        : setStrip.dropSlot > setStrip.dragFrom + 1 && index > setStrip.dragFrom && index < setStrip.dropSlot ? -setStrip.cardPitch
-                                        : setStrip.dropSlot <= setStrip.dragFrom && index >= setStrip.dropSlot && index < setStrip.dragFrom ? setStrip.cardPitch : 0
-                                    transform: Translate { x: setCard.previewShift }
-                                    Behavior on previewShift { NumberAnimation { duration: 110; easing.type: Easing.OutCubic } }
-                                    opacity: setStrip.dragFrom === index ? 0.25 : 1
-                                    checkable: true
-                                    checked: index >= Math.min(drillProject.selectedSetStartIndex, drillProject.selectedSetEndIndex)
-                                          && index <= Math.max(drillProject.selectedSetStartIndex, drillProject.selectedSetEndIndex)
-                                    text: (info.subset ? "SUBSET · " : "") + info.number +
-                                          (info.variantCount > 1 ? " [" + info.variantLabel + "]" : "") + " · " + info.name +
-                                          (info.caption ? "\n" + info.caption : "") +
-                                          "\n" + info.measure + " · " + (info.opening ? (info.openingBehavior === "hold" ? info.counts + " ct HOLD" : "MOVE NOW") : info.counts + " ct")
-                                    onClicked: {
-                                        drillProject.selectSetRange(index, (Qt.application.keyboardModifiers & Qt.ShiftModifier) !== 0)
-                                    }
-                                    onDoubleClicked: {
-                                        drillProject.currentSetIndex = index
-                                        setDialog.editing = true
-                                        setDialog.open()
-                                    }
-                                    MouseArea {
-                                        anchors.fill: parent; acceptedButtons: Qt.RightButton; propagateComposedEvents: true
-                                        onClicked: function(mouse) { setContextMenu.setIndex=index; drillProject.currentSetIndex=index; const p=mapToItem(window.contentItem,mouse.x,mouse.y); setContextMenu.popup(p.x,p.y) }
-                                    }
-                                    DragHandler {
-                                        id: setDrag
-                                        enabled: !window.playing; target: null; xAxis.enabled: true; yAxis.enabled: false
-                                        onCentroidChanged: if(active) { const p=parent.mapToItem(setStrip,centroid.position.x,centroid.position.y); setStrip.updateDrop(p.x) }
-                                        onActiveChanged: {
-                                            if(active) {
-                                                setStrip.dragFrom=index; setStrip.dropSlot=index; setStrip.draggedLabel=info.number + " · " + info.name
-                                                const p=parent.mapToItem(setStrip,centroid.position.x,centroid.position.y); setStrip.updateDrop(p.x)
-                                            } else if(setStrip.dragFrom >= 0) {
-                                                const from=setStrip.dragFrom, target=setStrip.targetIndex()
-                                                setStrip.dragFrom=-1; setStrip.dropSlot=-1; setStrip.draggedLabel=""
-                                                if(target!==from){drillProject.moveSet(from,target);if(drillProject.setLabelsNeedRenumbering())renumberDialog.open()}
-                                            }
-                                        }
-                                    }
-                                    Timer { interval: 40; repeat: true; running: setDrag.active; onTriggered: { if(setStrip.dragViewportX<36)setStrip.contentX=Math.max(0,setStrip.contentX-18); else if(setStrip.dragViewportX>setStrip.width-36)setStrip.contentX=Math.min(Math.max(0,setStrip.contentWidth-setStrip.width),setStrip.contentX+18); setStrip.updateDrop(setStrip.dragViewportX) } }
-                                }
-                        }
-                        Rectangle {
-                            visible: setStrip.dragFrom >= 0 && setStrip.dropSlot >= 0
-                            z: 20; width: 4; radius: 2; color: "#ffffff"
-                            height: setPane.height - 22; y: 4
-                            x: setStrip.dropSlot * setStrip.cardPitch - setStrip.contentX - width / 2
-                            border.color: "#99ffffff"
-                        }
-                        Rectangle {
-                            visible: setStrip.dragFrom >= 0; z: 19
-                            width: 112; height: 78; radius: 4
-                            x: Math.max(0,Math.min(setPane.width-width,setStrip.dragViewportX-width/2)); y: 4
-                            color: "#dd33444f"; border.color: "#ffffff"; border.width: 2
-                            Label { anchors.centerIn: parent; width: parent.width-10; text: setStrip.draggedLabel; horizontalAlignment: Text.AlignHCenter; wrapMode: Text.Wrap; font.bold: true }
-                        }
-                        Label {
-                            visible: setStrip.dragFrom >= 0; z: 21; anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
-                            text: "Drop at position " + (setStrip.targetIndex() + 1)
-                            color: "#ffffff"; font.bold: true; padding: 4
-                            background: Rectangle { color: "#cc111827"; radius: 4 }
-                        }
-                        }
-                        MusicPanel {
-                            onRequestMidiImport: midiDialog.open()
-                            onRequestMusicXmlImport: musicXmlDialog.open()
-                        }
-                    }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Label { text: drillProject.audioSource ? "♫ " + drillProject.audioSource.split(/[\\/]/).pop() : "No audio attached"; color: "#a5afbc"; elide: Text.ElideMiddle; Layout.fillWidth: true }
-                        AppButton { text: "Audio…"; flat: true; onClicked: audioDialog.open() }
-                        AppButton { text: "Timing…"; flat: true; onClicked: timingDialog.open() }
-                        AppButton { text: "MusicXML…"; flat: true; onClicked: musicXmlDialog.open() }
-                    }
-                }
-            }
+    SetTimeline {
+        id: timelinePanel
+        archiveDialogContext: archiveDialog
+        audioDialogContext: audioDialog
+        batchSetDialogContext: batchSetDialog
+        drillProjectContext: drillProject
+        midiDialogContext: midiDialog
+        musicXmlDialogContext: musicXmlDialog
+        renumberDialogContext: renumberDialog
+        setContextMenuContext: setContextMenu
+        setDialogContext: setDialog
+        timelineActionsPopupContext: timelineActionsPopup
+        timingDialogContext: timingDialog
+        transportContext: transport
+        variantDialogContext: variantDialog
+        verticalSplitContext: verticalSplit
+        windowContext: window
+        workspaceSettingsContext: workspaceSettings
+    }
         }
 
-        Frame {
-            id: inspectorPanel
-            visible: !workspaceSettings.inspectorCollapsed
-            SplitView.preferredWidth: 270
-            SplitView.minimumWidth: 220
-            SplitView.maximumWidth: 480
-            padding: 0
-            background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
-            ScrollView {
-                anchors.fill: parent
-                contentWidth: availableWidth
-                ColumnLayout {
-                    id: inspector
-                    width: parent.width
-                    spacing: 10
-                    property var person: ({})
-                    // Start with actionable items. The author can still broaden
-                    // this to every severity when they want a diagnostic sweep.
-                    property string clinicSeverityFilter: "critical"
-                    property string clinicTypeFilter: "all"
-                    property bool nextSetSuggestionsExpanded: false
-                    property var nextSetCandidates: []
-                    function refresh() { person = drillProject.performerInfo(window.activePerformer) }
-                    function refreshNextSetCandidates() { nextSetCandidates = drillProject.suggestNextSet() }
-                    Connections {
-                        target: drillProject
-                        function onCurrentSetChanged() {
-                            inspector.refresh()
-                            if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
-                        }
-                        function onSelectionChanged() {
-                            inspector.refresh()
-                            if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
-                        }
-                    }
-
-                    RowLayout { Layout.fillWidth: true; Layout.margins: 8
-                        Label { text: "CONTEXT INSPECTOR"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
-                        AppToolButton { text: "›"; ToolTip.text: "Collapse inspector"; ToolTip.visible: hovered; onClicked: workspaceSettings.inspectorCollapsed = true }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        visible: drillProject.selectedCount === 1
-                        Label { text: inspector.person.label || "No performer selected"; font.pixelSize: 22; font.bold: true }
-                        Label { text: inspector.person.instrument || "Select a performer on the field"; color: "#a5afbc" }
-                        Label { text: inspector.person.coordinate || ""; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#b8c8bf"; font.pixelSize: 11 }
-                        GridLayout {
-                            columns: 2; Layout.fillWidth: true
-                            Label { text: "Incoming"; color: "#a5afbc" }
-                            Label { text: drillProject.formatDistance(inspector.person.incomingDistance || 0); Layout.alignment: Qt.AlignRight }
-                            Label { text: "Steps / count"; color: "#a5afbc" }
-                            Label { text: Number(inspector.person.stepsPerCount || 0).toFixed(2); Layout.alignment: Qt.AlignRight; color: inspector.person.warning === "critical" ? "#e07178" : inspector.person.warning === "caution" ? "#d6a75d" : "#f2f5f7" }
-                            Label { text: "Outgoing"; color: "#a5afbc" }
-                            Label { text: drillProject.formatDistance(inspector.person.outgoingDistance || 0); Layout.alignment: Qt.AlignRight }
-                            Label { text: "Direction change"; color: "#a5afbc" }
-                            Label { text: Number(inspector.person.directionChange || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
-                            Label { text: "Incoming path"; color: "#a5afbc" }
-                            Label { text: inspector.person.pathType || "direct"; Layout.alignment: Qt.AlignRight }
-                            Label { text: "Facing at this set"; color: "#a5afbc" }
-                            Label { text: Number(inspector.person.facing || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            AppButton { text: "Front"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(0); inspector.refresh() } }
-                            AppButton { text: "Back"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(180); inspector.refresh() } }
-                            AppButton { text: "S1"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(270); inspector.refresh() } }
-                            AppButton { text: "S2"; Layout.fillWidth: true; onClicked: { drillProject.faceSelected(90); inspector.refresh() } }
-                        }
-                        Label { text: "Facing is saved independently for each set."; color: "#778392"; font.pixelSize: 10 }
-                        AppButton { text: "Edit performer…"; enabled: window.activePerformer >= 0; Layout.fillWidth: true; onClicked: { performerDialog.editing = true; performerDialog.open() } }
-                        AppButton {
-                            text: "Uniform color…"
-                            enabled: window.activePerformer >= 0
-                            Layout.fillWidth: true
-                            onClicked: {
-                                uniformColorDialog.selectedColor = inspector.person.color || "#38bdf8"
-                                uniformColorDialog.open()
-                            }
-                        }
-                    }
-                    ColumnLayout {
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        visible: drillProject.selectedCount === 0
-                        Label { text: drillProject.currentSetName; font.pixelSize: 20; font.bold: true }
-                        Label { text: drillProject.currentSetIndex > 0 ? drillProject.currentSetCounts + " counts / " + drillProject.effectiveTempoText(drillProject.currentSetIndex) : "Opening formation"; color: "#a5afbc" }
-                        Label { text: drillProject.clinicIssueCount ? drillProject.clinicIssueCount + " Clinic issue(s) in view" : "Active transition passes the current profile"; color: drillProject.clinicIssueCount ? "#d6a75d" : "#5ead83"; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                        AppButton { text: "Scan whole show"; Layout.fillWidth: true; onClicked: drillProject.scanShow() }
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-                    Label { text: "SELECTION"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12; visible: false }
-                    GridLayout {
-                        visible: false; columns: 3; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        AppButton { text: "←"; onClicked: drillProject.nudgeSelected(-0.25, 0) }
-                        AppButton { text: "↑"; onClicked: drillProject.nudgeSelected(0, -0.25) }
-                        AppButton { text: "→"; onClicked: drillProject.nudgeSelected(0.25, 0) }
-                        AppButton { text: "Mirror X"; onClicked: drillProject.mirrorSelected(true) }
-                        AppButton { text: "↓"; onClicked: drillProject.nudgeSelected(0, 0.25) }
-                        AppButton { text: "Snap"; onClicked: drillProject.snapSelected(1) }
-                    }
-                    AppButton { text: "Auto-label selection"; visible: false; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: drillProject.autoLabel("P") }
-                    AppButton { text: "Bulk edit selection…"; visible: drillProject.selectedCount > 0; enabled: visible; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: bulkEditDialog.open() }
-                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProject.selectedCount > 1
-                        Label { text: "Facing at this set"; color: "#a5afbc"; Layout.fillWidth: true }
-                        AppButton { text: "Front"; onClicked: drillProject.faceSelected(0) }
-                        AppButton { text: "Back"; onClicked: drillProject.faceSelected(180) }
-                        AppButton { text: "S1"; onClicked: drillProject.faceSelected(270) }
-                        AppButton { text: "S2"; onClicked: drillProject.faceSelected(90) }
-                    }
-                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProject.selectedCount > 1
-                        Label { text: drillProject.selectedCount + " performers"; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true }
-                        AppButton { text: "Optimize..."; onClicked: formationDialog.open() }
-                    }
-                    Label { text: "FORMATION METRICS"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12; visible: drillProject.selectedCount > 1 }
-                    GridLayout {
-                        columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        visible: drillProject.selectedCount > 1
-                        property var metrics: drillProject.selectionMetrics
-                        Label { text: "Formation"; color: "#a5afbc" }
-                        Label { text: parent.metrics.shapeType ? parent.metrics.shapeType + " / " + parent.metrics.count : parent.metrics.count + " performers"; font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Average spacing"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(parent.metrics.averageSpacing || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Minimum spacing"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(parent.metrics.minimumSpacing || 0); color: (parent.metrics.collisionCount || 0) > 0 ? drillProject.markerWarningColor : "#e5eee9"; font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Average move"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(parent.metrics.averageMove || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Size"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(parent.metrics.width || 0) + " x " + drillProject.formatDistance(parent.metrics.height || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
-                    }
-                    Label { text: "TRANSITION PATH"; visible: drillProject.selectedCount > 0; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12 }
-                    RowLayout {
-                        visible: drillProject.selectedCount > 0
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        AppButton { text: "Direct"; enabled: drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0; onClicked: drillProject.setSelectedTransitionPath("direct") }
-                        AppButton { text: "Curve"; enabled: drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0; onClicked: drillProject.setSelectedTransitionPath("curved") }
-                        AppButton { text: "Delayed"; enabled: drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0; onClicked: drillProject.setSelectedTransitionPath("delayed") }
-                    }
-                    RowLayout {
-                        visible: drillProject.selectedCount > 0
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        Label { text: drillProject.currentShapeCount + " persistent shape(s)"; color: "#a5afbc"; Layout.fillWidth: true }
-                        AppButton { text: "Bake last"; enabled: drillProject.currentShapeCount > 0; onClicked: drillProject.removeShape(drillProject.currentShapeCount - 1, true) }
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-                    Label { text: "SHOW ANALYTICS"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12 }
-                    GridLayout {
-                        columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; rowSpacing: 10
-                        Label { text: "Average / performer"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(drillProject.averageDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Ensemble total"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(drillProject.totalDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Longest move"; color: "#a5afbc" }
-                        Label { text: drillProject.formatDistance(drillProject.longestDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                        Label { text: "Current warnings"; color: "#a5afbc" }
-                        Label { text: drillProject.warningCount; color: drillProject.warningCount ? "#e07178" : "#5ead83"; font.bold: true; Layout.alignment: Qt.AlignRight }
-                    }
-                    Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        Label { text: "DRILL CLINIC"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
-                        Label { text: "COPILOT"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 10 }
-                    }
-                    Label {
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        text: "Only real rehearsal risks are shown first. Dismiss a false alarm or preview a fix before changing the drill."
-                        color: "#a9bbb1"; font.pixelSize: 11; wrapMode: Text.Wrap
-                    }
-                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        ComboBox { Layout.fillWidth: true; currentIndex: 0; model: ["critical","caution","all","info"]; onActivated: inspector.clinicSeverityFilter = currentText }
-                        ComboBox { Layout.fillWidth: true; model: ["all","stride","collision","equipmentCollision","propCollision","crossing","direction","spacing","boundary","complexPath"]; onActivated: inspector.clinicTypeFilter = currentText }
-                    }
-                    Label {
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        visible: drillProject.clinicIssueCount === 0
-                        text: drillProject.currentSetIndex > 0 ? "No active issues at this capability profile." : "Choose a destination set to analyze its incoming transition."
-                        color: "#5ead83"
-                        wrapMode: Text.Wrap
-                    }
-                    Repeater {
-                        model: drillProject.clinicIssues.filter(function(issue) {
-                            return (inspector.clinicSeverityFilter === "all" || issue.severity === inspector.clinicSeverityFilter)
-                                && (inspector.clinicTypeFilter === "all" || issue.type === inspector.clinicTypeFilter)
-                        })
-                        delegate: Frame {
-                            required property var modelData
-                            property string selectedSuggestionId: modelData.actions && modelData.actions.length ? modelData.actions[0].id : ""
-                            Layout.fillWidth: true; Layout.leftMargin: 10; Layout.rightMargin: 10
-                                background: Rectangle { color: modelData.severity === "critical" ? "#291821" : modelData.severity === "caution" ? "#292218" : "#15242b"; border.color: modelData.severity === "critical" ? "#e07178" : modelData.severity === "caution" ? "#d6a75d" : "#38bdf8"; radius: 10 }
-                            ColumnLayout {
-                                anchors.fill: parent
-                                RowLayout { Layout.fillWidth: true
-                                    Label { text: modelData.severity.toUpperCase(); color: modelData.severity === "critical" ? "#e07178" : "#d6a75d"; font.bold: true; font.pixelSize: 10 }
-                                    Label { text: "SET " + modelData.setLabel; color: "#a5afbc"; font.pixelSize: 10; Layout.fillWidth: true }
-                                    AppToolButton { text: "?"; ToolTip.text: "This is a suggestion, not a required change."; ToolTip.visible: hovered }
-                                }
-                                Label { text: modelData.title; font.bold: true; font.pixelSize: 15; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                                Label { text: modelData.count > 0 ? "First appears around count " + Number(modelData.count).toFixed(1) : "Review the highlighted transition"; color: "#a5afbc"; font.pixelSize: 10 }
-                                Label { text: modelData.detail; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#d3dfd8"; font.pixelSize: 11 }
-                                Label { text: modelData.performers ? "Affected: " + modelData.performers : ""; visible: text.length > 0; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#f1f5f9"; font.pixelSize: 10 }
-                                Label { text: modelData.limit > 0 ? "Measured " + Number(modelData.measured).toFixed(2) + " / limit " + Number(modelData.limit).toFixed(2) : "Measured " + Number(modelData.measured).toFixed(2); color: "#a5afbc"; font.pixelSize: 10 }
-                                ComboBox { id: clinicAction; visible: modelData.actions && modelData.actions.length > 0; Layout.fillWidth: true; model: modelData.actions || []; textRole: "label"; onActivated: selectedSuggestionId = modelData.actions[currentIndex].id }
-                                RowLayout { Layout.fillWidth: true
-                                    AppButton { text: "Inspect"; onClicked: drillProject.selectClinicIssue(modelData.id) }
-                                    AppButton { text: "Preview fix"; highlighted: true; enabled: selectedSuggestionId.length > 0; onClicked: drillProject.previewSuggestion(selectedSuggestionId) }
-                                    AppButton { text: "Apply"; enabled: selectedSuggestionId.length > 0; onClicked: drillProject.acceptSuggestion(selectedSuggestionId) }
-                                    AppToolButton { text: "x"; ToolTip.text: "Dismiss until this transition changes"; ToolTip.visible: hovered; onClicked: drillProject.dismissIssue(modelData.id) }
-                                }
-                            }
-                        }
-                    }
-                    RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        AppButton { text: "Scan show"; Layout.fillWidth: true; onClicked: drillProject.scanShow() }
-                        AppButton {
-                            text: inspector.nextSetSuggestionsExpanded ? "Hide next-set ideas" : "Suggest next set"
-                            enabled: drillProject.selectedCount > 1
-                            Layout.fillWidth: true
-                            onClicked: {
-                                inspector.nextSetSuggestionsExpanded = !inspector.nextSetSuggestionsExpanded
-                                if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
-                            }
-                        }
-                    }
-                    ColumnLayout {
-                        visible: inspector.nextSetSuggestionsExpanded
-                        Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                        spacing: 6
-                        RowLayout { Layout.fillWidth: true
-                            Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
-                            Label { text: "GENERATIVE DRAFTS"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 9 }
-                        }
-                        Label {
-                            text: "Pick a direction, preview it on the field, then keep or discard it. Nothing is committed until you apply it."
-                            wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#a9bbb1"; font.pixelSize: 11
-                        }
-                        Repeater {
-                            model: inspector.nextSetCandidates
-                            delegate: Frame {
-                                required property var modelData
-                                Layout.fillWidth: true; padding: 10
-                                background: Rectangle {
-                                    color: modelData.intent === "impact" ? "#21182b" : modelData.intent === "direction" ? "#122431" : "#111b20"
-                                    border.color: modelData.intent === "impact" ? "#8b5cf6" : modelData.intent === "direction" ? "#38bdf8" : "#2c3d46"
-                                    radius: 12
-                                }
-                                RowLayout {
-                                    anchors.fill: parent; spacing: 8
-                                    Rectangle {
-                                        Layout.preferredWidth: 58; Layout.preferredHeight: 58; radius: 10
-                                        color: "#0b1216"; border.color: "#263b44"
-                                        Canvas {
-                                            anchors.fill: parent; anchors.margins: 8
-                                            onPaint: {
-                                                var c = getContext("2d"); c.clearRect(0,0,width,height); c.strokeStyle = modelData.intent === "impact" ? "#c084fc" : modelData.intent === "direction" ? "#67e8f9" : "#5ead83"; c.fillStyle = c.strokeStyle; c.lineWidth = 2.5;
-                                                var cx = width/2, cy = height/2;
-                                                if (modelData.type === "line") { c.beginPath(); c.moveTo(5,cy); c.lineTo(width-5,cy); c.stroke(); }
-                                                else if (modelData.type === "arc") { c.beginPath(); c.arc(cx,cy+5,Math.min(width,height)/2-5,Math.PI*1.1,Math.PI*1.9); c.stroke(); }
-                                                else if (modelData.type === "circle" || modelData.type === "ellipse") { c.beginPath(); c.ellipse(cx,cy,modelData.type === "ellipse" ? width/2-3 : height/2-5,height/2-5,0,0,Math.PI*2); c.stroke(); }
-                                                else if (modelData.type === "spiral") { c.beginPath(); for (var i=0;i<22;i++){var a=i*.65, r=2+i*.7; var x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r; if(i===0)c.moveTo(x,y);else c.lineTo(x,y);} c.stroke(); }
-                                                else { var n=modelData.type === "triangle" ? 3 : modelData.type === "diamond" ? 4 : modelData.type === "star" ? 5 : 6; c.beginPath(); for (var j=0;j<n;j++){var angle=-Math.PI/2+j*Math.PI*2/n, rr=Math.min(width,height)/2-4, px=cx+Math.cos(angle)*rr, py=cy+Math.sin(angle)*rr; if(j===0)c.moveTo(px,py);else c.lineTo(px,py);} c.closePath(); c.stroke(); }
-                                            }
-                                        }
-                                    }
-                                    ColumnLayout {
-                                        Layout.fillWidth: true; spacing: 2
-                                        RowLayout { Layout.fillWidth: true
-                                            Label { text: modelData.label; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
-                                            Rectangle { implicitWidth: tagLabel.implicitWidth + 12; implicitHeight: 18; radius: 9; color: "#24343a"; Label { id: tagLabel; anchors.centerIn: parent; text: modelData.tag; color: "#a9bbb1"; font.pixelSize: 8; font.bold: true } }
-                                        }
-                                        Label { text: modelData.detail; color: "#a5afbc"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                                        Label { text: "Fit " + Number(modelData.score).toFixed(1) + "  ·  " + modelData.intent; color: "#778392"; font.pixelSize: 10 }
-                                    }
-                                    AppButton {
-                                        text: drillProject.formationPreviewBusy ? "Optimizing..." : "Preview"
-                                        enabled: !drillProject.formationPreviewBusy
-                                        onClicked: drillProject.requestFormationPreview(modelData.type, modelData.options, "rehearsalSafe")
-                                    }
-                                }
-                            }
-                        }
-                        RowLayout {
-                            Layout.fillWidth: true
-                            AppButton { text: "Cancel preview"; enabled: drillProject.formationPreviewActive; onClicked: drillProject.cancelFormationPreview() }
-                            Item { Layout.fillWidth: true }
-                            AppButton { text: "Apply preview"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: drillProject.commitFormationPreview() }
-                        }
-                    }
-                    Item { Layout.preferredHeight: 12 }
-                }
-            }
-        }
+    InspectorPanel {
+        id: inspectorPanel
+        bulkEditDialogContext: bulkEditDialog
+        drillProjectContext: drillProject
+        formationDialogContext: formationDialog
+        performerDialogContext: performerDialog
+        uniformColorDialogContext: uniformColorDialog
+        windowContext: window
+        workspaceSettingsContext: workspaceSettings
+    }
     }
 
     footer: ToolBar {
@@ -1334,7 +547,7 @@ ApplicationWindow {
         height: 42
         text: "›"
         font.pixelSize: 17
-        ToolTip.text: "Show roster (Ctrl+Shift+R)"
+        ToolTip.text: "Show rosterPanel.exposedRoster (Ctrl+Shift+R)"
         ToolTip.visible: hovered
         onClicked: workspaceSettings.rosterCollapsed = false
         background: Rectangle {
@@ -1411,262 +624,26 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    ProjectSettingsDialog {
         id: projectSetupDialog
-        property bool creationMode: false
-        title: creationMode ? "Create a new project" : "Project setup"
-        modal: true; anchors.centerIn: Overlay.overlay; width: 500; height: 330
-        standardButtons: Dialog.NoButton
-        onOpened: {
-            projectNameField.text = creationMode ? "Untitled Show" : drillProject.showName
-            projectFieldPreset.currentIndex = projectFieldPreset.indexOfValue(creationMode ? "hs" : drillProject.fieldPreset)
-            projectLightingPreset.currentIndex = projectLightingPreset.indexOfValue(creationMode ? "lighting.daylight" : drillProject.lightingPreset)
-        }
-        contentItem: GridLayout {
-            columns: 2
-            columnSpacing: 14
-            rowSpacing: 10
-            Label {
-                text: "Set up the rehearsal environment before you start staging."
-                color: "#a5afbc"; wrapMode: Text.Wrap
-                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.bottomMargin: 4
-            }
-            Label { text: "Project name" }
-            TextField { id: projectNameField; Layout.fillWidth: true; text: drillProject.showName; placeholderText: "Untitled show" }
-            Label { text: "Field" }
-            ComboBox {
-                id: projectFieldPreset
-                Layout.fillWidth: true; textRole: "text"; valueRole: "value"
-                model: [{text:"High School",value:"hs"},{text:"College",value:"college"},{text:"Professional",value:"nfl"},{text:"Indoor",value:"indoor"}]
-                Component.onCompleted: currentIndex = indexOfValue(drillProject.fieldPreset)
-            }
-            Label { text: "Time of day" }
-            ComboBox {
-                id: projectLightingPreset
-                Layout.fillWidth: true; textRole: "text"; valueRole: "value"
-                model: [{text:"Daylight",value:"lighting.daylight"},{text:"Overcast",value:"lighting.overcast"},{text:"Sunset",value:"lighting.sunset"},{text:"Night game",value:"lighting.night"},{text:"Indoor",value:"lighting.indoor"}]
-                Component.onCompleted: currentIndex = indexOfValue(drillProject.lightingPreset)
-            }
-            Label {
-                text: "Markers, grids, overlays, and 3D quality remain available in Editor preferences."
-                color: "#778392"; wrapMode: Text.Wrap
-                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 4
-            }
-            RowLayout {
-                Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 6
-                Item { Layout.fillWidth: true }
-                AppButton { text: "Cancel"; onClicked: { if (projectSetupDialog.creationMode) workspaceState.cancel(); projectSetupDialog.close() } }
-                AppButton {
-                    text: projectSetupDialog.creationMode ? "Create project" : "Save changes"
-                    highlighted: true
-                    onClicked: {
-                        if (projectSetupDialog.creationMode) drillProject.newProject()
-                        drillProject.showName = projectNameField.text.trim().length ? projectNameField.text.trim() : "Untitled Show"
-                        drillProject.fieldPreset = projectFieldPreset.currentValue
-                        drillProject.lightingPreset = projectLightingPreset.currentValue
-                        if (projectSetupDialog.creationMode) workspaceState.enteredProject()
-                        projectSetupDialog.close()
-                    }
-                }
-            }
-        }
+        drillProjectContext: drillProject
+        workspaceStateContext: workspaceState
     }
 
-    Dialog {
+    EditorPreferences {
         id: settingsDialog
-        title: "Configure MarchCraft"
-        modal: true; anchors.centerIn: Overlay.overlay; width: 680; height: Math.min(window.height - 64, 700)
-        standardButtons: Dialog.Close
-        onOpened: placementMode.currentIndex = placementMode.indexOfValue(drillProject.shapePlacementMode)
-        contentItem: ColumnLayout {
-            TabBar { id: configureTabs; Layout.fillWidth: true; TabButton { text: "General" } TabButton { text: "Performers" } TabButton { text: "Field & Grid" } TabButton { text: "Overlays" } TabButton { text: "Formations" } TabButton { text: "Quick Actions" } TabButton { text: "Drill Clinic" } }
-            StackLayout {
-                Layout.fillWidth: true; Layout.fillHeight: true; currentIndex: configureTabs.currentIndex
-                clip: true
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Layout.fillHeight: true
-                    spacing: 12
-                    Label { text: "Workspace"; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
-                    CheckBox {
-                        text: "Play the MarchCraft startup sound"
-                        checked: workspaceController.startupSoundEnabled
-                        onToggled: workspaceController.startupSoundEnabled = checked
-                    }
-                    Label {
-                        text: "The short launch sound plays once when the welcome screen first opens. Automated QA runs stay silent."
-                        color: MarchCraftTheme.textSecondary
-                        wrapMode: Text.Wrap
-                        Layout.fillWidth: true
-                    }
-                    Item { Layout.fillHeight: true }
-                }
-                GridLayout {
-                    columns: 2
-                    Label { text: "Marker shape" }
-                    ComboBox {
-                        Layout.fillWidth: true; textRole: "text"; valueRole: "value"
-                        model: [{text:"Dot (compact)",value:"dot"},{text:"Circle",value:"circle"},{text:"Square",value:"square"},{text:"Diamond",value:"diamond"}]
-                        Component.onCompleted: currentIndex=Math.max(0,indexOfValue(drillProject.markerGeometry))
-                        onActivated: drillProject.markerGeometry=currentValue
-                    }
-                    Label { text: "Fill" }
-                    TextField { Layout.fillWidth: true; text: drillProject.markerFillColor; placeholderText: "section, black, or #RRGGBB"; onEditingFinished: drillProject.markerFillColor=text }
-                    Label { text: "Size" }
-                    Slider { Layout.fillWidth: true; from: 8; to: 28; stepSize: 1; value: drillProject.performerMarkerSize; onMoved: drillProject.performerMarkerSize=Math.round(value) }
-                    Label { text: "Outline color" }
-                    TextField { Layout.fillWidth: true; text: drillProject.markerOutlineColor; onEditingFinished: drillProject.markerOutlineColor=text }
-                    Label { text: "Outline width" }
-                    SpinBox { from: 0; to: 5; value: drillProject.markerOutlineWidth; onValueModified: drillProject.markerOutlineWidth=value }
-                    Label { text: "Labels" }
-                    ComboBox { Layout.fillWidth: true; model: ["off","selected","adaptive","always"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProject.markerLabelMode)); onActivated: drillProject.markerLabelMode=currentText }
-                    Label { text: "Label color" }
-                    TextField { Layout.fillWidth: true; text: drillProject.markerLabelColor; onEditingFinished: drillProject.markerLabelColor=text }
-                    Label { text: "Label font size" }
-                    RowLayout {
-                        Layout.fillWidth: true
-                        Slider { id: labelSizeSlider; Layout.fillWidth: true; from: 7; to: 32; stepSize: 1; value: drillProject.markerLabelFontSize; onMoved: drillProject.markerLabelFontSize = Math.round(value) }
-                        Label { text: Math.round(labelSizeSlider.value) + " px"; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignRight; color: "#a5afbc" }
-                    }
-                    Label { text: "Warning color" }
-                    TextField { Layout.fillWidth: true; text: drillProject.markerWarningColor; onEditingFinished: drillProject.markerWarningColor=text }
-                    CheckBox { text: "Show facing indicator"; checked: drillProject.markerFacingVisible; onToggled: drillProject.markerFacingVisible=checked }
-                    TextField { Layout.fillWidth: true; text: drillProject.markerFacingColor; onEditingFinished: drillProject.markerFacingColor=text }
-                }
-                GridLayout {
-                    columns: 2
-                    Label { text: "Field preset" }
-                    ComboBox { Layout.fillWidth: true; model: ["hs","college","nfl","indoor"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProject.fieldPreset)); onActivated: drillProject.fieldPreset=currentText }
-                    CheckBox { text: "Show field grid"; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid=checked }
-                    Item {}
-                    Label { text: "Grid interval" }
-                    ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProject.fieldGridInterval.toString())); onActivated: drillProject.fieldGridInterval=Number(currentText) }
-                    Label { text: "Grid color" }
-                    TextField { Layout.fillWidth: true; text: drillProject.fieldGridColor; onEditingFinished: drillProject.fieldGridColor=text }
-                    Label { text: "Grid opacity" }
-                    Slider { Layout.fillWidth: true; from: .02; to: .8; value: drillProject.fieldGridOpacity; onMoved: drillProject.fieldGridOpacity=value }
-                    Label { text: "Measurement display" }
-                    ComboBox { Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Marching steps",value:"steps"},{text:"Yards",value:"yards"}]; Component.onCompleted: currentIndex=Math.max(0,indexOfValue(drillProject.measurementUnit)); onActivated: drillProject.measurementUnit=currentValue }
-                    CheckBox { text: "Enable snapping"; checked: fieldView.snapEnabled; onToggled: fieldView.snapEnabled=checked }
-                    ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; Component.onCompleted: currentIndex=2; onActivated: fieldView.gridSize=Number(currentText) }
-                }
-                ColumnLayout {
-                    CheckBox { text: "Show transition paths"; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths=checked }
-                    CheckBox { text: "Show shape guides"; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides=checked }
-                    Item { Layout.fillHeight: true }
-                }
-                ColumnLayout {
-                    Label { text: "Formation placement"; font.bold: true }
-                    ComboBox { id: placementMode; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Selection centered",value:"selection"},{text:"Nearest open space",value:"openSpace"},{text:"Field centered",value:"fieldCenter"}]; onActivated: drillProject.shapePlacementMode=currentValue }
-                    Label { text: "Default spacing: four marching steps"; color: "#a5afbc" }
-                    Item { Layout.fillHeight: true }
-                }
-                ColumnLayout {
-                    Label { text: "Shape quick actions"; font.bold: true; font.pixelSize: 16 }
-                    Label { text: "Check a shape to show its icon beside the Shapes button in the field toolbar."; color: "#a5afbc"; wrapMode: Text.Wrap; Layout.fillWidth: true }
-                    Repeater {
-                        model: [{text: "Line", kind: "line"}, {text: "Circle", kind: "circle"},
-                                {text: "Arc", kind: "arc"}, {text: "Ellipse", kind: "ellipse"},
-                                {text: "Rectangle", kind: "rectangle"}, {text: "Triangle", kind: "triangle"},
-                                {text: "Diamond", kind: "diamond"}, {text: "Regular polygon", kind: "polygon"},
-                                {text: "Star", kind: "star"}, {text: "Spiral", kind: "spiral"},
-                                {text: "Block grid", kind: "block"}]
-                        delegate: CheckBox {
-                            required property var modelData
-                            text: modelData.text
-                            checked: window.quickShapes.indexOf(modelData.kind) >= 0
-                            onClicked: window.toggleQuickShape(modelData.kind)
-                        }
-                    }
-                    Label { text: "Tip: use Ctrl+, to reopen project setup quickly."; color: "#778392"; font.pixelSize: 11; Layout.topMargin: 8 }
-                    Item { Layout.fillHeight: true }
-                }
-                GridLayout {
-                    columns: 2
-                    Label { text: "Capability profile" }
-                    ComboBox { id: clinicProfile; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Beginner",value:"beginner"},{text:"Intermediate",value:"intermediate"},{text:"Advanced",value:"advanced"},{text:"Custom",value:"custom"}]; Component.onCompleted: currentIndex=Math.max(0,indexOfValue(drillProject.capabilityProfile)); onActivated: drillProject.capabilityProfile=currentValue }
-                    Label { text: "Maximum steps / count" }
-                    SpinBox { from: 25; to: 400; stepSize: 5; value: Math.round(drillProject.maximumStepsPerCount*100); editable: true; textFromValue: function(v){return (v/100).toFixed(2)}; valueFromText: function(t){return Math.round(Number(t)*100)}; onValueModified: drillProject.maximumStepsPerCount=value/100 }
-                    Label { text: "Collision clearance (steps)" }
-                    SpinBox { from: 25; to: 800; stepSize: 5; value: Math.round(drillProject.collisionClearance*100); editable: true; textFromValue: function(v){return (v/100).toFixed(2)}; valueFromText: function(t){return Math.round(Number(t)*100)}; onValueModified: drillProject.collisionClearance=value/100 }
-                    Label { text: "Direction-change warning" }
-                    SpinBox { from: 15; to: 180; stepSize: 5; value: Math.round(drillProject.directionChangeDegrees); editable: true; onValueModified: drillProject.directionChangeDegrees=value }
-                    Label { text: "Caution threshold" }
-                    Label { text: "85% of the configured limit"; color: "#a5afbc" }
-                    Item { Layout.columnSpan: 2; Layout.fillHeight: true }
-                }
-            }
-        }
+        drillProjectContext: drillProject
+        fieldViewContext: fieldView
+        windowContext: window
+        workspaceControllerContext: workspaceController
     }
 
-    Dialog {
+    PerformerDialog {
         id: performerDialog
-        property bool editing: false
-        title: editing ? "Edit performer" : "Add performer"
-        modal: true
-        anchors.centerIn: Overlay.overlay
-        width: 420
-        onOpened: {
-            const p = editing ? drillProject.performerInfo(window.activePerformer) : ({})
-            performerLabel.text = p.label || ""
-            performerName.text = p.name || ""
-            performerInstrument.currentIndex = Math.max(0, performerInstrument.find(p.instrument || "Trumpet"))
-            performerSection.text = p.section || "Winds"
-            performerNotes.text = p.notes || ""
-            performerBody.currentIndex = Math.max(0, performerBody.indexOfValue(p.bodyRigId || "performer.body.standard"))
-            performerSkin.currentIndex = Math.max(0, performerSkin.indexOfValue(p.skinPaletteId || "skin.medium"))
-            performerAsset.currentIndex = Math.max(0, performerAsset.indexOfValue(p.instrumentAssetId || "instrument.generic"))
-            performerHeight.value = Math.round((p.heightMeters || 1.75) * 100)
-        }
-        contentItem: ColumnLayout {
-            Label { text: "Label" }
-            TextField { id: performerLabel; Layout.fillWidth: true; placeholderText: "T01" }
-            Label { text: "Name" }
-            TextField { id: performerName; Layout.fillWidth: true; placeholderText: "Optional student name" }
-            Label { text: "Instrument / role" }
-            ComboBox {
-                id: performerInstrument; Layout.fillWidth: true; editable: true
-                model: ["Trumpet", "Mellophone", "Trombone", "Baritone", "Tuba", "Flute", "Clarinet", "Alto Sax", "Tenor Sax", "Percussion", "Guard", "Drum Major", "Prop", "Unassigned"]
-            }
-            Label { text: "Section" }
-            TextField { id: performerSection; Layout.fillWidth: true; placeholderText: "Brass" }
-            Label { text: "3D body rig" }
-            ComboBox { id: performerBody; Layout.fillWidth: true; model: assetCatalog.bodyRigs; textRole: "label"; valueRole: "id" }
-            Label { text: "3D instrument / equipment" }
-            ComboBox { id: performerAsset; Layout.fillWidth: true; model: assetCatalog.instruments; textRole: "label"; valueRole: "id" }
-            RowLayout {
-                Layout.fillWidth: true
-                ColumnLayout {
-                    Label { text: "Skin palette" }
-                    ComboBox { id: performerSkin; model: [{text:"Light",value:"skin.light"},{text:"Medium",value:"skin.medium"},{text:"Deep",value:"skin.deep"}]; textRole: "text"; valueRole: "value" }
-                }
-                ColumnLayout {
-                    Layout.fillWidth: true
-                    Label { text: "Height (cm)" }
-                    SpinBox { id: performerHeight; from: 110; to: 225; value: 175; editable: true; Layout.fillWidth: true }
-                }
-            }
-            Label { text: "Notes" }
-            TextArea { id: performerNotes; Layout.fillWidth: true; Layout.preferredHeight: 64 }
-            AppButton {
-                text: performerDialog.editing ? "Save changes" : "Add to field"
-                highlighted: true; Layout.alignment: Qt.AlignRight
-                onClicked: {
-                    let targetRow = window.activePerformer
-                    if (performerDialog.editing) {
-                        drillProject.updatePerformer(window.activePerformer, performerLabel.text, performerName.text,
-                                                     performerInstrument.editText, performerSection.text, performerNotes.text)
-                    } else {
-                        drillProject.addPerformer(performerLabel.text, performerInstrument.editText, performerSection.text)
-                        targetRow = drillProject.performerCount - 1
-                    }
-                    drillProject.setPerformerAppearance(targetRow, performerBody.currentValue,
-                                                        "uniform.marchcraft.default", performerSkin.currentValue,
-                                                        performerAsset.currentValue, performerHeight.value / 100)
-                    performerDialog.close(); inspector.refresh()
-                }
-            }
-        }
+        assetCatalogContext: assetCatalog
+        drillProjectContext: drillProject
+        inspectorContext: inspectorPanel.exposedInspector
+        windowContext: window
     }
 
     Dialog {
@@ -1969,17 +946,17 @@ ApplicationWindow {
         onRejected: window.savePurpose = "normal"
     }
     FileDialog { id: importCoordinateDialog; title: "Import coordinate data"; nameFilters: ["Coordinate JSON (*.json)"]; onAccepted: drillProject.importCoordinateJson(selectedFile) }
-    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelineTabs.currentIndex = 1; drillProject.importMidiAsync(selectedFile) } }
-    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelineTabs.currentIndex = 1; drillProject.importMusicXml(selectedFile) } }
+    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.exposedTimelineTabs.currentIndex = 1; drillProject.importMidiAsync(selectedFile) } }
+    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.exposedTimelineTabs.currentIndex = 1; drillProject.importMusicXml(selectedFile) } }
     FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: drillProject.attachAudio(selectedFile) }
     FileDialog { id: csvDialog; title: "Export analytics"; fileMode: FileDialog.SaveFile; nameFilters: ["CSV (*.csv)"]; defaultSuffix: "csv"; onAccepted: drillProject.exportCsv(selectedFile) }
     FileDialog { id: pdfDialog; title: "Export coordinate sheets"; fileMode: FileDialog.SaveFile; nameFilters: ["PDF (*.pdf)"]; defaultSuffix: "pdf"; onAccepted: drillProject.exportCoordinatePdf(selectedFile) }
     ColorDialog {
         id: uniformColorDialog
-        title: "Choose uniform color"
+        title: "Choose marker color"
         onAccepted: {
             drillProject.setPerformerColor(window.activePerformer, selectedColor.toString())
-            inspector.refresh()
+            inspectorPanel.exposedInspector.refresh()
         }
     }
 
@@ -1989,7 +966,7 @@ ApplicationWindow {
     Shortcut { sequence: "Down"; onActivated: drillProject.nudgeSelected(0, 0.25) }
     Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; onActivated: transport.playPause() }
     Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: projectSetupDialog.open() }
-    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterSearch.forceActiveFocus(); rosterSearch.selectAll() } }
+    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterPanel.exposedRosterSearch.forceActiveFocus(); rosterPanel.exposedRosterSearch.selectAll() } }
     Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
     Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
     Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrillTypes.h"
+#include "TransitionPath.h"
 #include "MusicDocument.h"
 
 #include <QAbstractListModel>
@@ -68,7 +69,6 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QString turfColor READ turfColor WRITE setTurfColor NOTIFY sceneChanged)
     Q_PROPERTY(QString scoreboardText READ scoreboardText WRITE setScoreboardText NOTIFY sceneChanged)
     Q_PROPERTY(double crowdDensity READ crowdDensity WRITE setCrowdDensity NOTIFY sceneChanged)
-    Q_PROPERTY(bool debug3D READ debug3D WRITE setDebug3D NOTIFY sceneChanged)
     Q_PROPERTY(QVariantList props READ props NOTIFY propsChanged)
     Q_PROPERTY(QString currentSetName READ currentSetName NOTIFY currentSetChanged)
     Q_PROPERTY(int currentSetCounts READ currentSetCounts NOTIFY currentSetChanged)
@@ -125,6 +125,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
 
 public:
+    Q_INVOKABLE void savePerformerDetails(int row, const QString &label, const QString &name,
+                                         const QString &instrument, const QString &section,
+                                         const QString &notes, const QString &equipmentId);
     enum Role {
         IdRole = Qt::UserRole + 1,
         LabelRole,
@@ -141,22 +144,12 @@ public:
         FacingRole,
         SelectedRole,
         SetDistanceRole,
-        TravelHeadingRole,
-        TravelStepsPerCountRole,
-        LocomotionModeRole,
-        GaitPhaseRole,
-        TravelPathTypeRole,
-        ClosingTransitionRole,
         TotalDistanceRole,
         WarningRole,
         VisibleRole,
         LockedRole,
-        BodyRigRole,
-        UniformRole,
-        SkinPaletteRole,
         InstrumentAssetRole,
         EquipmentAssetRole,
-        PerformerHeightRole,
         PerformerRoleRole
     };
 
@@ -227,7 +220,6 @@ public:
     QString turfColor() const { return m_venue.turfColor.name(); } void setTurfColor(const QString &value);
     QString scoreboardText() const { return m_venue.scoreboardText; } void setScoreboardText(const QString &value);
     double crowdDensity() const { return m_venue.crowdDensity; } void setCrowdDensity(double value);
-    bool debug3D() const { return m_venue.debugOverlay; } void setDebug3D(bool value);
     QVariantList props() const;
     void setShowTransitionPaths(bool value);
     QString currentSetName() const;
@@ -490,6 +482,7 @@ signals:
     void clinicChanged();
 
 private:
+    DrillProject(bool backgroundWorker, QObject *parent);
     friend class ProjectStateCommand;
     friend class TransportController;
     QJsonObject toJson() const;
@@ -503,8 +496,8 @@ private:
     MarchCraft::Placement placementAt(int performerIndex, int setIndex) const;
     QPointF interpolatedPosition(int performerIndex) const;
     double interpolatedFacing(int performerIndex) const;
-    MarchCraft::AnimationState animationStateAt(int performerIndex) const;
-    const MarchCraft::AnimationState &cachedAnimationStateAt(int performerIndex) const;
+    const MarchCraft::TransitionPath &transitionPath(int performerIndex, int destinationSet) const;
+    mutable QHash<quint64, MarchCraft::TransitionPath> m_transitionPaths;
     QPointF pathPosition(int performerIndex, int destinationSet, double progress) const;
     double pathDistance(int performerIndex, int destinationSet) const;
     double transitionDistance(int performerIndex, int destinationSet) const;
@@ -527,7 +520,6 @@ private:
     QVariantMap assignmentMetrics(const QVector<int> &performerRows,
                                   const QVector<QPointF> &targets,
                                   const QVector<int> &assignment) const;
-    QVector<int> minimumCostAssignment(const QVector<QVector<double>> &costs) const;
     void invalidateClinic();
     QString issueLabelList(const QVector<int> &rows, int limit = 6) const;
 
@@ -566,9 +558,6 @@ private:
     QVector<MarchCraft::Performer> m_performers;
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;
-    mutable QVector<MarchCraft::AnimationState> m_animationStateCache;
-    mutable QVector<quint64> m_animationStateCacheRevisions;
-    quint64 m_animationStateRevision = 1;
     QVector<MarchCraft::MeterRegion> m_meterRegions{{}};
     QVector<MarchCraft::TempoRegion> m_tempoRegions{{}};
     MarchCraft::MusicDocument m_music;
@@ -581,6 +570,8 @@ private:
     double m_audioOffsetMs = 0.0;
     QVector<double> m_waveformPeaks;
     QAudioDecoder *m_audioDecoder = nullptr;
+    quint64 m_projectRevision = 0;
+    quint64 m_midiImportRevision = 0;
     QFutureWatcher<MarchCraft::MidiImportResult> *m_midiWatcher = nullptr;
     QUndoStack m_undo;
     QTimer m_autosaveTimer;

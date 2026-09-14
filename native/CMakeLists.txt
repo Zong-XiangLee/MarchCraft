@@ -22,6 +22,14 @@ qt_policy(SET QTP0004 NEW)
 qt_add_executable(marchcraft
     src/main.cpp
     src/DrillProject.cpp
+    src/ProjectAlgorithms.cpp
+    src/ProjectStorage.cpp
+    src/ProjectPersistence.cpp
+    src/ProjectFormations.cpp
+    src/ProjectClinic.cpp
+    src/ProjectTransitions.cpp
+    src/TransitionPath.cpp
+    src/ProjectMusic.cpp
     src/DrillProject.h
     src/DrillTypes.h
     src/MusicDocument.cpp
@@ -42,10 +50,17 @@ qt_add_qml_module(marchcraft
     VERSION 1.0
     QML_FILES
         qml/Main.qml
+        qml/EditorCommandBars.qml
+        qml/WelcomeWorkspace.qml
+        qml/EditorPreferences.qml
+        qml/PerformerDialog.qml
+        qml/ProjectSettingsDialog.qml
+        qml/RosterPanel.qml
+        qml/InspectorPanel.qml
+        qml/SetTimeline.qml
         qml/FieldView.qml
         qml/ThreeDView.qml
-        qml/HumanPerformer3D.qml
-        qml/HumanGait.js
+        qml/PerformerMarker3D.qml
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
@@ -58,15 +73,9 @@ qt_add_qml_module(marchcraft
         qml/AppIcon.qml
         qml/ShapeIcon.qml
         qml/ProjectSetupPage.qml
-    SOURCES
-        src/HumanGeometry.cpp
-        src/HumanGeometry.h
 )
 
-# qt_add_qml_module generates a type-registration translation unit that includes
-# registered C++ type headers by basename (for example, <HumanGeometry.h>).
-# Expose src/ so that generated file can see the header as well as our own
-# translation units.
+# Headers shared by the application and generated QML registration.
 target_include_directories(marchcraft PRIVATE
     "${CMAKE_CURRENT_SOURCE_DIR}/src"
 )
@@ -88,20 +97,6 @@ set_source_files_properties("${MARCHCRAFT_LOGO_PNG}" PROPERTIES QT_RESOURCE_ALIA
 qt_add_resources(marchcraft "marchcraft_branding"
     PREFIX "/branding"
     FILES "${MARCHCRAFT_LOGO_PNG}")
-
-set(MARCHCRAFT_HUMAN_GLB "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer.glb")
-set(MARCHCRAFT_HUMAN_GLB_LOD1 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod1.glb")
-set(MARCHCRAFT_HUMAN_GLB_LOD2 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod2.glb")
-set_source_files_properties("${MARCHCRAFT_HUMAN_GLB}" PROPERTIES
-    QT_RESOURCE_ALIAS "human_performer.glb")
-set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD1}" PROPERTIES
-    QT_RESOURCE_ALIAS "human_performer_lod1.glb")
-set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD2}" PROPERTIES
-    QT_RESOURCE_ALIAS "human_performer_lod2.glb")
-qt_add_resources(marchcraft "marchcraft_performer"
-    PREFIX "/performer"
-    FILES "${MARCHCRAFT_HUMAN_GLB}" "${MARCHCRAFT_HUMAN_GLB_LOD1}"
-          "${MARCHCRAFT_HUMAN_GLB_LOD2}")
 
 add_custom_command(TARGET marchcraft POST_BUILD
     COMMAND ${CMAKE_COMMAND} -E copy_directory
@@ -182,6 +177,14 @@ if(BUILD_TESTING)
     qt_add_executable(marchcraft_tests
         tests/tst_drillproject.cpp
         src/DrillProject.cpp
+        src/ProjectAlgorithms.cpp
+        src/ProjectStorage.cpp
+        src/ProjectPersistence.cpp
+        src/ProjectFormations.cpp
+        src/ProjectClinic.cpp
+        src/ProjectTransitions.cpp
+        src/TransitionPath.cpp
+        src/ProjectMusic.cpp
         src/DrillProject.h
         src/DrillTypes.h
         src/MusicDocument.cpp
@@ -203,24 +206,24 @@ if(BUILD_TESTING)
         PREFIX "/catalog"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
         FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
-    add_test(NAME marchcraft_tests COMMAND marchcraft_tests)
+    add_test(NAME marchcraft_tests COMMAND marchcraft_tests -o -,txt)
     get_filename_component(MARCHCRAFT_QT_BIN "${Qt6_DIR}/../../../bin" ABSOLUTE)
     get_filename_component(MARCHCRAFT_QT_PREFIX "${MARCHCRAFT_QT_BIN}/.." ABSOLUTE)
     get_filename_component(MARCHCRAFT_COMPILER_BIN "${CMAKE_CXX_COMPILER}" DIRECTORY)
-    add_test(NAME human_gait_qml
+    add_test(NAME ui_qml
         COMMAND "${MARCHCRAFT_QT_BIN}/qmltestrunner.exe"
-                -input "${CMAKE_CURRENT_SOURCE_DIR}/tests/tst_humangait.qml"
+                -input "${CMAKE_CURRENT_SOURCE_DIR}/tests"
                 -import "${CMAKE_CURRENT_SOURCE_DIR}/qml")
     set_tests_properties(marchcraft_tests PROPERTIES
         ENVIRONMENT
             "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
-    set_tests_properties(human_gait_qml PROPERTIES
+    set_tests_properties(ui_qml PROPERTIES
         ENVIRONMENT
             "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
     set_property(TEST marchcraft_tests PROPERTY ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${MARCHCRAFT_QT_BIN}"
         "PATH=path_list_prepend:${MARCHCRAFT_COMPILER_BIN}")
-    set_property(TEST human_gait_qml PROPERTY ENVIRONMENT_MODIFICATION
+    set_property(TEST ui_qml PROPERTY ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${MARCHCRAFT_QT_BIN}"
         "PATH=path_list_prepend:${MARCHCRAFT_COMPILER_BIN}")
 endif()

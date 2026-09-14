@@ -23,11 +23,11 @@ quint32 read32(const QByteArray &data, qsizetype offset)
         | (quint32(quint8(data[offset + 2])) << 8) | quint8(data[offset + 3]);
 }
 
-bool readVlq(const QByteArray &data, qsizetype *offset, quint32 *value)
+bool readVlq(const QByteArray &data, qsizetype *offset, quint32 *value, qsizetype end)
 {
     quint32 result = 0;
     for (int byte = 0; byte < 4; ++byte) {
-        if (*offset >= data.size()) return false;
+        if (*offset >= end) return false;
         const quint8 current = quint8(data[(*offset)++]);
         result = (result << 7) | (current & 0x7f);
         if ((current & 0x80) == 0) { *value = result; return true; }
@@ -241,7 +241,7 @@ MidiImportResult parseMidiFile(const QString &path)
     const QByteArray data = file.readAll();
     if (data.size() < 14 || data.first(4) != QByteArrayLiteral("MThd")) { result.error = QStringLiteral("Invalid MIDI header"); return result; }
     const quint32 headerLength = read32(data, 4);
-    if (headerLength < 6 || 8 + headerLength > quint32(data.size())) { result.error = QStringLiteral("Invalid MIDI header length"); return result; }
+    if (headerLength < 6 || qsizetype(headerLength) > data.size() - 8) { result.error = QStringLiteral("Invalid MIDI header length"); return result; }
     const int format = read16(data, 8), trackCount = read16(data, 10), division = read16(data, 12);
     if (format > 1) { result.error = QStringLiteral("MIDI format 2 is not supported"); return result; }
     if (division & 0x8000) { result.error = QStringLiteral("SMPTE-timed MIDI files are not supported"); return result; }
@@ -251,7 +251,7 @@ MidiImportResult parseMidiFile(const QString &path)
     document.sourceType = QStringLiteral("midi"); document.sourcePath = path; document.sourcePpq = division;
     document.sourceHash = QString::fromLatin1(QCryptographicHash::hash(data, QCryptographicHash::Sha256).toHex());
     QVector<qint64> noteTicks;
-    qsizetype fileOffset = 8 + headerLength;
+    qsizetype fileOffset = 8 + qsizetype(headerLength);
     qint64 maximumTick = 0;
     for (int trackIndex = 0; trackIndex < trackCount; ++trackIndex) {
         if (fileOffset + 8 > data.size() || data.mid(fileOffset, 4) != QByteArrayLiteral("MTrk")) {
@@ -264,9 +264,9 @@ MidiImportResult parseMidiFile(const QString &path)
         qsizetype offset = trackStart; qint64 tick = 0; quint8 running = 0;
         while (offset < trackEnd) {
             quint32 delta = 0;
-            if (!readVlq(data, &offset, &delta)) { result.error = QStringLiteral("Invalid MIDI delta time"); return result; }
+            if (!readVlq(data, &offset, &delta, trackEnd)) { result.error = QStringLiteral("Invalid MIDI delta time"); return result; }
             tick += delta; maximumTick = qMax(maximumTick, tick);
-            if (offset >= trackEnd) break;
+            if (offset >= trackEnd) { result.error = QStringLiteral("Truncated MIDI event"); return result; }
             quint8 status = quint8(data[offset]);
             if (status < 0x80) {
                 if (running == 0) { result.error = QStringLiteral("Invalid MIDI running status"); return result; }
@@ -276,9 +276,9 @@ MidiImportResult parseMidiFile(const QString &path)
                 if (status < 0xf0) running = status;
             }
             if (status == 0xff) {
-                if (offset >= trackEnd) break;
+                if (offset >= trackEnd) { result.error = QStringLiteral("Truncated MIDI event"); return result; }
                 const quint8 type = quint8(data[offset++]); quint32 metaLength = 0;
-                if (!readVlq(data, &offset, &metaLength) || offset + metaLength > trackEnd) { result.error = QStringLiteral("Invalid MIDI meta event"); return result; }
+                if (!readVlq(data, &offset, &metaLength, trackEnd) || offset + metaLength > trackEnd) { result.error = QStringLiteral("Invalid MIDI meta event"); return result; }
                 const QByteArray payload = data.mid(offset, metaLength); offset += metaLength;
                 const qint64 internalTick = scaledTick(tick, division);
                 if (type == 0x03) track.name = midiText(payload);
@@ -299,13 +299,15 @@ MidiImportResult parseMidiFile(const QString &path)
                 if (type == 0x2f) break;
             } else if (status == 0xf0 || status == 0xf7) {
                 quint32 sysexLength = 0;
-                if (!readVlq(data, &offset, &sysexLength) || offset + sysexLength > trackEnd) { result.error = QStringLiteral("Invalid MIDI SysEx event"); return result; }
+                if (!readVlq(data, &offset, &sysexLength, trackEnd) || offset + sysexLength > trackEnd) { result.error = QStringLiteral("Invalid MIDI SysEx event"); return result; }
                 offset += sysexLength;
             } else {
+                if (status >= 0xf0) { result.error = QStringLiteral("Unsupported MIDI status"); return result; }
                 const quint8 kind = status & 0xf0, channel = status & 0x0f;
                 const int bytes = (kind == 0xc0 || kind == 0xd0) ? 1 : 2;
                 if (offset + bytes > trackEnd) { result.error = QStringLiteral("Truncated MIDI channel event"); return result; }
                 const quint8 first = quint8(data[offset]), second = bytes == 2 ? quint8(data[offset + 1]) : 0;
+                if (first >= 0x80 || second >= 0x80) { result.error = QStringLiteral("Invalid MIDI channel data"); return result; }
                 offset += bytes;
                 if (track.channel < 0) track.channel = channel;
                 if (kind == 0xc0) track.program = first;
