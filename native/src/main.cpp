@@ -45,6 +45,7 @@ int main(int argc, char *argv[])
     palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#f2f5f7")));
     palette.setColor(QPalette::Base, QColor(QStringLiteral("#0f151d")));
     palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#18212c")));
+    palette.setColor(QPalette::PlaceholderText, QColor(QStringLiteral("#82909f")));
     palette.setColor(QPalette::Text, QColor(QStringLiteral("#f2f5f7")));
     palette.setColor(QPalette::Button, QColor(QStringLiteral("#18212c")));
     palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#f2f5f7")));
@@ -71,7 +72,7 @@ int main(int argc, char *argv[])
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
         QStringLiteral("--venue"), QStringLiteral("--lighting"),
-        QStringLiteral("--graphics-profile"), QStringLiteral("--ground-debug"),
+        QStringLiteral("--graphics-profile"),
         QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
     };
     bool startInEditor = false;
@@ -92,8 +93,6 @@ int main(int argc, char *argv[])
     const int qualityFlag = arguments.indexOf(QStringLiteral("--graphics-profile"));
     if (qualityFlag >= 0 && qualityFlag + 1 < arguments.size())
         project.setGraphicsProfile(arguments.at(qualityFlag + 1));
-    if (arguments.contains(QStringLiteral("--ground-debug")))
-        project.setDebug3D(true);
     const int midiFlag = arguments.indexOf(QStringLiteral("--midi"));
     if (midiFlag >= 0 && midiFlag + 1 < arguments.size())
         project.importMidi(arguments.at(midiFlag + 1));
@@ -138,6 +137,14 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
+    for (const auto &surface : {QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music")}) {
+        if (arguments.contains(QStringLiteral("--qa-") + surface) && !engine.rootObjects().isEmpty()) {
+            QObject *root = engine.rootObjects().first();
+            QTimer::singleShot(350, &application, [root, surface] {
+                QMetaObject::invokeMethod(root, "showQaSurface", Q_ARG(QVariant, surface));
+            });
+        }
+    }
     const int screenshotFlag = arguments.indexOf(QStringLiteral("--screenshot"));
     const bool screenshotRequested = screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size();
     if (screenshotRequested) {

@@ -44,9 +44,12 @@ Item {
         anchors.fill: parent
         spacing: 5
 
-        RowLayout {
+        Flow {
+            spacing: 6
             Layout.fillWidth: true
             Label {
+                width: Math.min(root.width, implicitWidth)
+                wrapMode: Text.Wrap
                 text: drillProject.midiImporting ? "Reading MIDI…"
                     : drillProject.musicLoaded
                       ? drillProject.musicMeasureCount + " measures · " + drillProject.musicTrackCount
@@ -56,7 +59,6 @@ Item {
                 font.bold: true
             }
             Label { text: transport.audioStatus; color: transport.synthAvailable || drillProject.playbackSource !== "midi" ? "#a5afbc" : "#f3c969" }
-            Item { Layout.fillWidth: true }
             AppButton { text: "MIDI…"; onClicked: root.requestMidiImport() }
             AppButton { text: "MusicXML…"; onClicked: root.requestMusicXmlImport() }
             AppButton { text: "Tracks…"; enabled: drillProject.musicTrackCount > 0; onClicked: trackDialog.open() }

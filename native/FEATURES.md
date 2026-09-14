@@ -23,7 +23,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Music | Native MIDI/MusicXML timing and track import, compact wheel-scrollable measure timeline with set-range highlighting, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
-| 3D | Meter-based Y-up world; grounded skinned human performers with a marching attention stance (closed heels, 90-degree total toe angle, elevated head, neutral stacked torso, and face-height coat-hanger hand set), path-aware heel-first straight-leg forward technique with visible roll-through, stable forefoot backward technique, right-foot tendu close for even phrases, progressively twisted slides, turns, and three LODs; cached per-frame gait state plus automatic large-ensemble LOD/shadow reductions; body-rig, skin, and future equipment socket attributes; configurable rehearsal/stadium/gym/arena environments; lighting and quality presets; props; press-box, overhead, and field cameras; ground-contact diagnostics |
+| 3D | Meter-based Y-up world with grounded colored directional markers, authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. Human models and gait are deferred; old appearance values remain compatible. |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 97 sets |
 
@@ -42,3 +42,15 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Global project controls and contextual formation controls are separated into two calm command layers; formation shapes live in a labeled palette.
 - Shared motion tokens animate navigation, popovers, buttons, and state changes, while honoring the Windows reduced-animation preference.
 - A dedicated application icon and warmer three-note launch cue replace generic executable branding and notification-like sound.
+
+## Application overhaul
+
+- The model delegates domain implementation to focused persistence, music, formation,
+  transition, and Clinic units, supported by stateless geometry and storage interfaces.
+- Shared transition tables avoid rebuilding paths for every rendering/analysis query.
+- Asynchronous MIDI imports and formation previews are discarded after intervening
+  project changes. Generated previews still require Apply.
+- Playback updates only motion roles; performer editing is one undoable operation.
+- Clinic dismissal safely handles issues with attached metadata; timed collisions
+  remain warnings while geometric crossings alone remain intentional choreography.
+- Human source references and authoring tools are retained but inactive.

@@ -16,6 +16,12 @@ MidiSynthEngine::MidiSynthEngine(QObject *parent) : QObject(parent)
     m_format.setChannelCount(2);
     m_format.setSampleFormat(QAudioFormat::Float);
     if (!loadLibrary()) return;
+    QAudioDevice device = QMediaDevices::defaultAudioOutput();
+    if (device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
+    if (!device.isFormatSupported(m_format)) m_format = device.preferredFormat();
+    if (m_format.sampleFormat() != QAudioFormat::Float || m_format.channelCount() != 2) {
+        setStatus(QStringLiteral("Audio device does not support stereo floating-point playback")); return;
+    }
     m_settings = p_newSettings();
     if (!m_settings) { setStatus(QStringLiteral("FluidSynth settings could not be created")); return; }
     p_settingsSetNum(m_settings, "synth.sample-rate", m_format.sampleRate());
@@ -25,12 +31,6 @@ MidiSynthEngine::MidiSynthEngine(QObject *parent) : QObject(parent)
         + QStringLiteral("/soundfonts/GeneralUser-GS.sf2");
     if (!QFileInfo::exists(font) || p_sfLoad(m_synth, font.toUtf8().constData(), 1) < 0) {
         setStatus(QStringLiteral("Bundled GeneralUser GS SoundFont is missing")); return;
-    }
-    QAudioDevice device = QMediaDevices::defaultAudioOutput();
-    if (device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
-    if (!device.isFormatSupported(m_format)) m_format = device.preferredFormat();
-    if (m_format.sampleFormat() != QAudioFormat::Float || m_format.channelCount() != 2) {
-        m_format.setSampleRate(48000); m_format.setChannelCount(2); m_format.setSampleFormat(QAudioFormat::Float);
     }
     m_sink = new QAudioSink(device, m_format, this);
     m_sink->setBufferSize(m_format.bytesForFrames(4096));

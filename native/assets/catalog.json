@@ -1,24 +1,7 @@
 {
   "schemaVersion": 1,
   "coordinateContract": { "units": "meters", "upAxis": "+Y", "forwardAxis": "-Z", "groundPlaneY": 0 },
-  "humanPerformer": {
-    "runtimeAsset": "qrc:/performer/human_performer.glb",
-    "sourceAsset": "Models/lowpolyboy_rigged.blend",
-    "author": "aaravanimates",
-    "sourceUrl": "https://free3d.com/3d-model/rigged-male-human-442626.html",
-    "license": "Creator-Permission",
-    "canonicalHeightMeters": 1.75,
-    "triangleCount": 3878,
-    "lodTriangleCounts": [3878, 3013, 1983],
-    "rigFamily": "marchcraft.canonical.v1"
-  },
   "assets": [
-    { "id": "performer.body.standard", "kind": "bodyRig", "version": 1, "label": "Standard", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.75, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
-    { "id": "performer.body.tall", "kind": "bodyRig", "version": 1, "label": "Tall", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.91, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
-    { "id": "performer.body.short", "kind": "bodyRig", "version": 1, "label": "Short", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.58, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
-    { "id": "performer.body.broad", "kind": "bodyRig", "version": 1, "label": "Broad", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.78, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
-    { "id": "performer.body.youth", "kind": "bodyRig", "version": 1, "label": "Youth", "rigFamily": "marchcraft.canonical.v1", "scaleMeters": 1.47, "footContactMeters": 0, "sockets": ["hand.left", "hand.right", "chest", "shoulder.left", "shoulder.right", "waist", "back", "head", "equipment"], "animations": ["idle", "march.forward", "march.backward", "slide.left", "slide.right", "mark_time", "direction_change", "horn.up", "horn.down"] },
-    { "id": "uniform.marchcraft.default", "kind": "uniform", "version": 1, "label": "MarchCraft Uniform", "scaleMeters": 1, "footContactMeters": 0, "materialSlots": ["primary", "secondary", "accent", "plume", "gloves", "footwear"] },
     { "id": "instrument.generic", "kind": "instrument", "version": 1, "label": "Generic Instrument", "scaleMeters": 1, "footContactMeters": 0, "socket": "equipment" },
     { "id": "instrument.trumpet", "kind": "instrument", "version": 1, "label": "Trumpet", "scaleMeters": 0.48, "footContactMeters": 0, "socket": "hand.right" },
     { "id": "instrument.tuba", "kind": "instrument", "version": 1, "label": "Tuba", "scaleMeters": 1.05, "footContactMeters": 0, "socket": "shoulder.left" },

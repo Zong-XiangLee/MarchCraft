@@ -1,3 +1,8 @@
+> Human performer authoring is inactive. Runtime human GLBs, geometry, and gait code
+> have been removed. The source models and scripts described below are retained only
+> as references for a future rebuild; these instructions describe the retired pipeline.
+> Existing licenses and attribution still apply. The runtime uses primitive markers.
+
 # MarchCraft Blender asset contract
 
 This directory is the source-of-truth location for editable `.blend` files. Runtime code never refers to a Blender filename; projects store semantic IDs from `assets/catalog.json`.
