@@ -12,6 +12,8 @@
 #include <QSaveFile>
 #include <QSizeF>
 #include <QSet>
+#include <QStandardPaths>
+#include <QDir>
 #include <QTextStream>
 #include <QUuid>
 #include <QXmlStreamReader>
@@ -33,6 +35,84 @@ using MarchCraft::Placement;
 
 using namespace MarchCraft::ProjectAlgorithms;
 using namespace MarchCraft::ProjectStorage;
+
+namespace {
+constexpr int HistoryLimit = 20;
+
+QString canonicalPath(const QString &path)
+{
+    QFileInfo info(path);
+    const QString canonical = info.canonicalFilePath();
+    return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
+}
+
+QString recoveryRoot()
+{
+    return QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/recovery");
+}
+
+QString recoveryKey(const QString &projectPath)
+{
+    return QString::fromLatin1(QCryptographicHash::hash(canonicalPath(projectPath).toUtf8(),
+        QCryptographicHash::Sha256).toHex());
+}
+
+QString historyRoot(const QString &projectPath)
+{
+    return projectPath + QStringLiteral("-history");
+}
+
+bool validateProjectDocument(const QJsonObject &root, QString *location, QString *message)
+{
+    if (root.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")) {
+        *location = QStringLiteral("format"); *message = QStringLiteral("Expected a MarchCraft project document"); return false;
+    }
+    const int version = root.value(QStringLiteral("version")).toInt(-1);
+    if (version < 1 || version > 10) {
+        *location = QStringLiteral("version"); *message = QStringLiteral("Unsupported project format version %1").arg(version); return false;
+    }
+    for (const QString &key : {QStringLiteral("performers"), QStringLiteral("sets")}) {
+        if (!root.value(key).isArray()) { *location = key; *message = QStringLiteral("Expected an array"); return false; }
+    }
+    if (root.value(QStringLiteral("sets")).toArray().isEmpty()) {
+        *location = QStringLiteral("sets"); *message = QStringLiteral("A project must contain at least one set"); return false;
+    }
+    return true;
+}
+
+bool validateCoordinateDocument(const QJsonObject &root, QString *location, QString *message)
+{
+    const auto performers = root.value(QStringLiteral("performers"));
+    if (!performers.isArray() || performers.toArray().isEmpty()) {
+        *location = QStringLiteral("performers"); *message = QStringLiteral("Expected a non-empty performer array"); return false;
+    }
+    for (int i = 0; i < performers.toArray().size(); ++i) {
+        const auto person = performers.toArray().at(i);
+        if (!person.isObject() || !person.toObject().value(QStringLiteral("sets")).isArray()) {
+            *location = QStringLiteral("performers[%1].sets").arg(i);
+            *message = QStringLiteral("Each performer must contain a sets array"); return false;
+        }
+    }
+    return true;
+}
+
+QVariantMap recoveryInfo(const QString &metadataPath)
+{
+    QFile metadata(metadataPath);
+    if (!metadata.open(QIODevice::ReadOnly)) return {};
+    const auto object = QJsonDocument::fromJson(metadata.readAll()).object();
+    const QString projectPath = object.value(QStringLiteral("projectPath")).toString();
+    const QString snapshotPath = object.value(QStringLiteral("snapshotPath")).toString();
+    if (projectPath.isEmpty() || snapshotPath.isEmpty() || !QFileInfo::exists(snapshotPath)) return {};
+    const QDateTime created = QDateTime::fromString(object.value(QStringLiteral("createdUtc")).toString(), Qt::ISODateWithMs);
+    const QFileInfo project(projectPath);
+    if (project.exists() && created <= project.lastModified().toUTC()) return {};
+    return {{QStringLiteral("projectPath"), projectPath}, {QStringLiteral("snapshotPath"), snapshotPath},
+            {QStringLiteral("metadataPath"), metadataPath}, {QStringLiteral("showName"), object.value(QStringLiteral("showName")).toString()},
+            {QStringLiteral("createdUtc"), created.toLocalTime().toString(Qt::ISODate)}};
+}
+}
 
 QJsonObject DrillProject::toJson() const
 {
@@ -282,23 +362,25 @@ void DrillProject::loadDemo()
 
 bool DrillProject::importCoordinateJson(const QString &urlOrPath)
 {
-    QFile file(localPath(urlOrPath));
+    const QString source = localPath(urlOrPath);
+    QFile file(source);
     if (!file.open(QIODevice::ReadOnly)) {
-        setStatus(QStringLiteral("Could not open coordinate JSON"));
+        setDiagnostic(QStringLiteral("Coordinate import"), source, QStringLiteral("file"), QStringLiteral("Could not open coordinate JSON"));
         return false;
     }
     QJsonParseError error;
     const auto document = QJsonDocument::fromJson(file.readAll(), &error);
     if (error.error != QJsonParseError::NoError || !document.isObject()) {
-        setStatus(QStringLiteral("Invalid coordinate JSON: %1").arg(error.errorString()));
+        setDiagnostic(QStringLiteral("Coordinate import"), source, QStringLiteral("JSON"), error.errorString());
         return false;
     }
     const auto root = document.object();
-    const auto people = root.value(QStringLiteral("performers")).toArray();
-    if (people.isEmpty()) {
-        setStatus(QStringLiteral("Coordinate file contains no performers"));
+    QString location, message;
+    if (!validateCoordinateDocument(root, &location, &message)) {
+        setDiagnostic(QStringLiteral("Coordinate import"), source, location, message);
         return false;
     }
+    const auto people = root.value(QStringLiteral("performers")).toArray();
 
     beginResetModel();
     // Coordinate sheets begin at a zero-count first set. A written hold is a
@@ -397,22 +479,30 @@ bool DrillProject::saveProject(const QString &urlOrPath)
     }
     if (!path.endsWith(QStringLiteral(".marchcraft"), Qt::CaseInsensitive))
         path += QStringLiteral(".marchcraft");
-    if (QFile::exists(path)) {
-        const QString backup = path + QStringLiteral(".backup-")
-            + QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss"));
-        QFile::copy(path, backup);
-    }
     QString databaseError;
     if (!writeSqliteProject(path, toJson(), &databaseError)) {
-        setStatus(QStringLiteral("Could not save project database: %1").arg(databaseError));
+        setDiagnostic(QStringLiteral("Save project"), path, QStringLiteral("storage"), databaseError);
         return false;
     }
+    const QString history = historyRoot(path);
+    QDir().mkpath(history);
+    const QString stamp = QDateTime::currentDateTimeUtc().toString(QStringLiteral("yyyyMMdd-hhmmss-zzz"));
+    const QString snapshot = history + QLatin1Char('/') + stamp + QStringLiteral(".marchcraft");
+    if (!QFile::copy(path, snapshot))
+        setDiagnostic(QStringLiteral("Save history"), path, QStringLiteral("history"), QStringLiteral("Project saved, but its history snapshot could not be created"), QStringLiteral("warning"));
+    const auto snapshots = QDir(history).entryInfoList({QStringLiteral("*.marchcraft")}, QDir::Files, QDir::Time | QDir::Reversed);
+    for (int i = 0; i < snapshots.size() - HistoryLimit; ++i) QFile::remove(snapshots.at(i).absoluteFilePath());
     m_projectPath = path;
+    const QString key = recoveryKey(path);
+    QFile::remove(recoveryRoot() + QLatin1Char('/') + key + QStringLiteral(".marchcraft"));
+    QFile::remove(recoveryRoot() + QLatin1Char('/') + key + QStringLiteral(".json"));
     m_autosaveTimer.stop();
     m_undo.setClean();
     m_dirty = false;
     emit dirtyChanged();
     emit projectChanged();
+    refreshProjectHistory();
+    refreshRecoveryCandidates();
     setStatus(QStringLiteral("Saved %1").arg(QFileInfo(path).fileName()));
     return true;
 }
@@ -422,7 +512,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     const QString path = localPath(urlOrPath);
     QFile file(path);
     if (!file.open(QIODevice::ReadOnly)) {
-        setStatus(QStringLiteral("Could not open project"));
+        setDiagnostic(QStringLiteral("Open project"), path, QStringLiteral("file"), QStringLiteral("Could not open project"));
         return false;
     }
     const QByteArray signature = file.peek(16); file.close();
@@ -432,14 +522,18 @@ bool DrillProject::loadProject(const QString &urlOrPath)
         QJsonParseError parseError;
         const auto document = QJsonDocument::fromJson(file.readAll(), &parseError);
         if (!document.isObject() || parseError.error != QJsonParseError::NoError) {
-            setStatus(QStringLiteral("Invalid project: %1").arg(parseError.errorString())); return false;
+            setDiagnostic(QStringLiteral("Open project"), path, QStringLiteral("JSON"), parseError.errorString()); return false;
         }
         root = document.object();
     } else {
         QString databaseError;
         if (!readSqliteProject(path, &root, &databaseError)) {
-            setStatus(QStringLiteral("Invalid project database: %1").arg(databaseError)); return false;
+            setDiagnostic(QStringLiteral("Open project"), path, QStringLiteral("database"), databaseError); return false;
         }
+    }
+    QString location, message;
+    if (!validateProjectDocument(root, &location, &message)) {
+        setDiagnostic(QStringLiteral("Open project"), path, location, message); return false;
     }
     if (!restoreJson(root, false))
         return false;
@@ -449,8 +543,71 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     m_undo.clear();
     emit dirtyChanged();
     emit projectChanged();
+    refreshProjectHistory();
     setStatus(legacyJson ? QStringLiteral("Imported legacy project; save to create a .marchcraft database")
                          : QStringLiteral("Opened %1").arg(QFileInfo(path).fileName()));
+    return true;
+}
+
+void DrillProject::refreshRecoveryCandidates()
+{
+    QVariantList candidates;
+    QDir directory(recoveryRoot());
+    for (const auto &file : directory.entryInfoList({QStringLiteral("*.json")}, QDir::Files, QDir::Time)) {
+        const auto candidate = recoveryInfo(file.absoluteFilePath());
+        if (!candidate.isEmpty()) candidates.push_back(candidate);
+    }
+    if (candidates != m_recoveryCandidates) { m_recoveryCandidates = candidates; emit recoveryChanged(); }
+}
+
+bool DrillProject::restoreRecovery(int index)
+{
+    if (index < 0 || index >= m_recoveryCandidates.size()) return false;
+    const auto candidate = m_recoveryCandidates.at(index).toMap();
+    QJsonObject root; QString error;
+    if (!readSqliteProject(candidate.value(QStringLiteral("snapshotPath")).toString(), &root, &error)) {
+        setDiagnostic(QStringLiteral("Restore recovery"), candidate.value(QStringLiteral("snapshotPath")).toString(), QStringLiteral("database"), error); return false;
+    }
+    QString location, message;
+    if (!validateProjectDocument(root, &location, &message) || !restoreJson(root, false)) {
+        setDiagnostic(QStringLiteral("Restore recovery"), candidate.value(QStringLiteral("snapshotPath")).toString(), location, message.isEmpty() ? QStringLiteral("Recovery project could not be restored") : message); return false;
+    }
+    m_projectPath = candidate.value(QStringLiteral("projectPath")).toString();
+    m_undo.clear(); m_dirty = true; emit dirtyChanged(); emit projectChanged();
+    setStatus(QStringLiteral("Recovered unsaved work; save to keep it"));
+    return true;
+}
+
+void DrillProject::discardRecovery(int index)
+{
+    if (index < 0 || index >= m_recoveryCandidates.size()) return;
+    const auto candidate = m_recoveryCandidates.at(index).toMap();
+    QFile::remove(candidate.value(QStringLiteral("snapshotPath")).toString());
+    QFile::remove(candidate.value(QStringLiteral("metadataPath")).toString());
+    refreshRecoveryCandidates();
+}
+
+void DrillProject::refreshProjectHistory()
+{
+    QVariantList history;
+    if (!m_projectPath.isEmpty()) {
+        for (const auto &file : QDir(historyRoot(m_projectPath)).entryInfoList({QStringLiteral("*.marchcraft")}, QDir::Files, QDir::Time))
+            history.push_back(QVariantMap{{QStringLiteral("path"), file.absoluteFilePath()}, {QStringLiteral("timestamp"), file.lastModified().toLocalTime().toString(Qt::ISODate)}});
+    }
+    if (history != m_projectHistory) { m_projectHistory = history; emit historyChanged(); }
+}
+
+bool DrillProject::restoreHistoryVersion(int index)
+{
+    if (index < 0 || index >= m_projectHistory.size()) return false;
+    const QString source = m_projectHistory.at(index).toMap().value(QStringLiteral("path")).toString();
+    QJsonObject root; QString error;
+    if (!readSqliteProject(source, &root, &error)) { setDiagnostic(QStringLiteral("Restore version"), source, QStringLiteral("database"), error); return false; }
+    QString location, message;
+    if (!validateProjectDocument(root, &location, &message)) { setDiagnostic(QStringLiteral("Restore version"), source, location, message); return false; }
+    const auto before = toJson();
+    if (!restoreJson(root)) return false;
+    commitSnapshot(before, QStringLiteral("Restore saved version"));
     return true;
 }
 
@@ -604,9 +761,10 @@ bool DrillProject::exportCoordinatePdf(const QString &urlOrPath) const
 
 bool DrillProject::importMusicXml(const QString &urlOrPath)
 {
-    QFile file(localPath(urlOrPath));
+    const QString source = localPath(urlOrPath);
+    QFile file(source);
     if (!file.open(QIODevice::ReadOnly | QIODevice::Text)) {
-        setStatus(QStringLiteral("Could not open MusicXML"));
+        setDiagnostic(QStringLiteral("MusicXML import"), source, QStringLiteral("file"), QStringLiteral("Could not open MusicXML"));
         return false;
     }
     struct ImportedMeasure { QString number; qint64 tick = 0; qint64 duration = 0; };
@@ -677,7 +835,7 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
         }
     }
     if (xml.hasError() || measures.isEmpty()) {
-        setStatus(QStringLiteral("MusicXML did not contain readable measures"));
+        setDiagnostic(QStringLiteral("MusicXML import"), source, QStringLiteral("measures"), QStringLiteral("MusicXML did not contain readable measures"));
         return false;
     }
     if (meters.isEmpty()) meters = {MarchCraft::MeterRegion{}};

@@ -26,7 +26,7 @@ using namespace MarchCraft::ProjectStorage;
 bool DrillProject::importMidi(const QString &urlOrPath)
 {
     const auto result = MarchCraft::parseMidiFile(localPath(urlOrPath));
-    if (!result.ok) { setStatus(result.error); return false; }
+    if (!result.ok) { setDiagnostic(QStringLiteral("MIDI import"), localPath(urlOrPath), QStringLiteral("MIDI"), result.error); return false; }
     applyMusicDocument(result.document, QStringLiteral("Import MIDI"));
     return true;
 }
