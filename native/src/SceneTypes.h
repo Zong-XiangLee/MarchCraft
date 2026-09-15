@@ -70,6 +70,15 @@ struct PerformerAppearance {
     }
 };
 
+struct AnimationState {
+    QString locomotion{QStringLiteral("idle")};
+    bool closesAtDestination = false;
+    double normalizedTime = 0.0;
+    double elapsedCounts = 0.0;
+    double travelDirectionDegrees = 0.0;
+    double travelStepsPerCount = 0.0;
+};
+
 struct VenueConfiguration {
     QString venueId{QStringLiteral("venue.rehearsal")};
     QString lightingId{QStringLiteral("lighting.daylight")};

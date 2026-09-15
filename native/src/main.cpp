@@ -110,6 +110,35 @@ int main(int argc, char *argv[])
         return project.exportCoordinatePdf(arguments.at(qaPdfFlag + 1)) ? 0 : 2;
     }
 
+    const bool qaHuman = arguments.contains(QStringLiteral("--qa-human"));
+    if (qaHuman) {
+        startInEditor = true;
+        project.newProject();
+        const int phaseFlag = arguments.indexOf(QStringLiteral("--qa-human-count"));
+        const int headingFlag = arguments.indexOf(QStringLiteral("--qa-human-heading"));
+        const double heading = headingFlag >= 0 && headingFlag + 1 < arguments.size()
+            ? arguments.at(headingFlag + 1).toDouble() * 3.141592653589793 / 180.0 : 0.0;
+        const double count = phaseFlag >= 0 && phaseFlag + 1 < arguments.size()
+            ? qBound(0.0, arguments.at(phaseFlag + 1).toDouble(), 8.0) : 0.0;
+        const bool hold = arguments.contains(QStringLiteral("--qa-human-mark-time"));
+        const double dx = hold ? 0.0 : std::sin(heading);
+        const double dy = hold ? 0.0 : -std::cos(heading);
+        project.addPerformer(QStringLiteral("Human QA"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 80.0 - dx * count,
+                             project.fieldDepthSteps() / 2.0 - dy * count);
+        if (phaseFlag >= 0 && phaseFlag + 1 < arguments.size()) {
+            project.selectAll();
+            project.addSet(QStringLiteral("March"), 8);
+            project.nudgeSelected(dx * 8, dy * 8);
+            project.addSet(QStringLiteral("Continue"), 8);
+            project.nudgeSelected(dx * 8, dy * 8);
+            project.setCurrentSetIndex(1);
+            project.clearSelection();
+        }
+        if (qualityFlag >= 0 && qualityFlag + 1 < arguments.size())
+            project.setGraphicsProfile(arguments.at(qualityFlag + 1));
+    }
+
     QQmlApplicationEngine engine;
     engine.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
     engine.rootContext()->setContextProperty(QStringLiteral("transport"), &transport);
@@ -130,6 +159,27 @@ int main(int argc, char *argv[])
 
     if (arguments.contains(QStringLiteral("--3d")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("threeD", true);
+    if (qaHuman && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("qa3DView", QStringLiteral("performer"));
+    if (qaHuman && !engine.rootObjects().isEmpty()) {
+        // Apply the sampled count after model/transport initialization has settled.
+        const int phaseFlag = arguments.indexOf(QStringLiteral("--qa-human-count"));
+        if (phaseFlag >= 0 && phaseFlag + 1 < arguments.size()) {
+            const double count = qBound(0.0, arguments.at(phaseFlag + 1).toDouble(), 8.0);
+            QTimer::singleShot(400, &application, [&project, count] {
+                project.setCurrentSetIndex(1);
+                project.setPlaybackActive(true);
+                project.setPlayhead(count / 8.0);
+                qInfo() << "Human QA: count=" << count << "active=" << project.playbackActive()
+                        << "phase=" << project.data(project.index(0), DrillProject::GaitPhaseRole);
+            });
+        }
+        if (auto *view = engine.rootObjects().first()->findChild<QObject *>(QStringLiteral("performerView"))) {
+            view->setProperty("carriagePose", arguments.contains(QStringLiteral("--qa-human-horns-down"))
+                              ? QStringLiteral("horn.down") : QStringLiteral("horn.up"));
+            view->setProperty("markTimeDuringHolds", arguments.contains(QStringLiteral("--qa-human-mark-time")));
+        }
+    }
     const int viewFlag = arguments.indexOf(QStringLiteral("--3d-view"));
     if (viewFlag >= 0 && viewFlag + 1 < arguments.size() && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qa3DView", arguments.at(viewFlag + 1));
@@ -154,6 +204,9 @@ int main(int argc, char *argv[])
                 ? qBound(250, arguments.at(delayFlag + 1).toInt(), 10000) : 1800;
         QTimer::singleShot(screenshotDelay, &application, [&engine, destination] {
             if (!engine.rootObjects().isEmpty()) {
+                // Screenshot fixtures may be dirty; never open an unsaved-work
+                // confirmation for this explicit capture-and-exit command.
+                engine.rootObjects().first()->setProperty("forceClosing", true);
                 if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()))
                     window->grabWindow().save(destination);
             }

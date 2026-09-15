@@ -9,8 +9,17 @@
 #include <cmath>
 
 namespace {
-QVariantList &listForKind(const QString &kind, QVariantList &instruments, QVariantList &props, QVariantList &venues)
+const QSet<QString> RequiredSockets{QStringLiteral("hand.left"), QStringLiteral("hand.right"),
+                                    QStringLiteral("chest"), QStringLiteral("shoulder.left"),
+                                    QStringLiteral("shoulder.right"), QStringLiteral("waist"),
+                                    QStringLiteral("back"), QStringLiteral("head"),
+                                    QStringLiteral("equipment")};
+
+QVariantList &listForKind(const QString &kind, QVariantList &bodyRigs, QVariantList &uniforms,
+                          QVariantList &instruments, QVariantList &props, QVariantList &venues)
 {
+    if (kind == QStringLiteral("bodyRig")) return bodyRigs;
+    if (kind == QStringLiteral("uniform")) return uniforms;
     if (kind == QStringLiteral("instrument")) return instruments;
     if (kind == QStringLiteral("prop")) return props;
     return venues;
@@ -65,13 +74,24 @@ void AssetCatalog::validateAndInsert(const QVariantMap &asset)
         m_errors.push_back(QStringLiteral("%1 is not grounded at Y=0").arg(id));
         return;
     }
-    if (kind != QStringLiteral("instrument") && kind != QStringLiteral("prop")
+    if (kind == QStringLiteral("bodyRig")) {
+        const auto socketList = asset.value(QStringLiteral("sockets")).toStringList();
+        const QSet<QString> sockets(socketList.cbegin(), socketList.cend());
+        const auto missing = RequiredSockets - sockets;
+        if (!missing.isEmpty()) {
+            m_errors.push_back(QStringLiteral("%1 is missing canonical sockets: %2")
+                                   .arg(id, QStringList(missing.cbegin(), missing.cend()).join(QStringLiteral(", "))));
+            return;
+        }
+    }
+    if (kind != QStringLiteral("bodyRig") && kind != QStringLiteral("uniform")
+        && kind != QStringLiteral("instrument") && kind != QStringLiteral("prop")
         && kind != QStringLiteral("venue")) {
         m_errors.push_back(QStringLiteral("%1 has unsupported kind %2").arg(id, kind));
         return;
     }
     m_assets.insert(id, asset);
-    listForKind(kind, m_instruments, m_props, m_venues).push_back(asset);
+    listForKind(kind, m_bodyRigs, m_uniforms, m_instruments, m_props, m_venues).push_back(asset);
 }
 
 QVariantMap AssetCatalog::asset(const QString &id) const
@@ -83,6 +103,9 @@ QVariantMap AssetCatalog::asset(const QString &id) const
 
 QString AssetCatalog::fallbackId(const QString &kind) const
 {
+    if (kind == QStringLiteral("performer") || kind == QStringLiteral("bodyRig"))
+        return QStringLiteral("performer.body.standard");
+    if (kind == QStringLiteral("uniform")) return QStringLiteral("uniform.marchcraft.default");
     if (kind == QStringLiteral("instrument") || kind == QStringLiteral("equipment")) return QStringLiteral("instrument.generic");
     if (kind == QStringLiteral("prop")) return QStringLiteral("prop.box");
     return QStringLiteral("venue.rehearsal");
