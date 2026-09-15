@@ -3,6 +3,10 @@
 #include <QSqlDatabase>
 #include <QSqlError>
 #include <QSqlQuery>
+#include <QScopeGuard>
+#include <QTemporaryFile>
+#include <QFileInfo>
+#include <QDir>
 #include <QSizeF>
 #include <QSet>
 #include <QUuid>
@@ -15,11 +19,16 @@
 #include <numeric>
 #include <utility>
 
+#ifdef Q_OS_WIN
+#include <windows.h>
+#endif
+
 
 #include "ProjectStorage.h"
 
 namespace MarchCraft::ProjectStorage {
-bool writeSqliteProject(const QString &path, const QJsonObject &document, QString *error)
+namespace {
+bool writeDatabase(const QString &path, const QJsonObject &document, QString *error)
 {
     const QString connection = QStringLiteral("marchcraft-write-") + QUuid::createUuid().toString(QUuid::WithoutBraces);
     bool ok = false;
@@ -44,6 +53,62 @@ bool writeSqliteProject(const QString &path, const QJsonObject &document, QStrin
     }
     QSqlDatabase::removeDatabase(connection);
     return ok;
+}
+
+bool replaceAtomically(const QString &stagedPath, const QString &destination, QString *error)
+{
+#ifdef Q_OS_WIN
+    const std::wstring staged = stagedPath.toStdWString();
+    const std::wstring target = destination.toStdWString();
+    const bool exists = QFileInfo::exists(destination);
+    const BOOL replaced = exists
+        ? ReplaceFileW(target.c_str(), staged.c_str(), nullptr, REPLACEFILE_IGNORE_MERGE_ERRORS, nullptr, nullptr)
+        : MoveFileExW(staged.c_str(), target.c_str(), MOVEFILE_REPLACE_EXISTING | MOVEFILE_WRITE_THROUGH);
+    if (replaced) return true;
+    if (error) *error = QStringLiteral("Could not atomically replace project (Windows error %1)").arg(GetLastError());
+    return false;
+#else
+    if (QFileInfo::exists(destination) && !QFile::remove(destination)) {
+        if (error) *error = QStringLiteral("Could not replace existing project");
+        return false;
+    }
+    if (QFile::rename(stagedPath, destination)) return true;
+    if (error) *error = QStringLiteral("Could not move staged project into place");
+    return false;
+#endif
+}
+}
+
+bool writeSqliteProject(const QString &path, const QJsonObject &document, QString *error)
+{
+    const QFileInfo target(path);
+    QDir directory(target.absolutePath());
+    if (!directory.exists() && !directory.mkpath(QStringLiteral("."))) {
+        if (error) *error = QStringLiteral("Could not create project directory");
+        return false;
+    }
+    QString stagedPath;
+    {
+        QTemporaryFile staged(directory.filePath(target.fileName() + QStringLiteral(".staged-XXXXXX")));
+        staged.setAutoRemove(false);
+        if (!staged.open()) {
+            if (error) *error = QStringLiteral("Could not create staged project file");
+            return false;
+        }
+        stagedPath = staged.fileName();
+        staged.close();
+    }
+    auto cleanup = qScopeGuard([&] { QFile::remove(stagedPath); });
+    if (!writeDatabase(stagedPath, document, error)) return false;
+    QJsonObject verified;
+    QString verifyError;
+    if (!readSqliteProject(stagedPath, &verified, &verifyError) || verified != document) {
+        if (error) *error = QStringLiteral("Staged project validation failed: %1").arg(verifyError);
+        return false;
+    }
+    if (!replaceAtomically(stagedPath, path, error)) return false;
+    cleanup.dismiss();
+    return true;
 }
 
 bool readSqliteProject(const QString &path, QJsonObject *document, QString *error)

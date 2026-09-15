@@ -123,6 +123,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(double directionChangeDegrees READ directionChangeDegrees WRITE setDirectionChangeDegrees NOTIFY clinicChanged)
     Q_PROPERTY(bool canUndo READ canUndo NOTIFY historyChanged)
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList recoveryCandidates READ recoveryCandidates NOTIFY recoveryChanged)
+    Q_PROPERTY(QVariantList projectHistory READ projectHistory NOTIFY historyChanged)
+    Q_PROPERTY(QVariantList diagnostics READ diagnostics NOTIFY diagnosticsChanged)
 
 public:
     Q_INVOKABLE void savePerformerDetails(int row, const QString &label, const QString &name,
@@ -287,12 +290,20 @@ public:
     void setDirectionChangeDegrees(double value);
     bool canUndo() const { return m_undo.canUndo(); }
     bool canRedo() const { return m_undo.canRedo(); }
+    QVariantList recoveryCandidates() const { return m_recoveryCandidates; }
+    QVariantList projectHistory() const { return m_projectHistory; }
+    QVariantList diagnostics() const { return m_diagnostics; }
 
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void loadDemo();
     Q_INVOKABLE bool importCoordinateJson(const QString &urlOrPath);
     Q_INVOKABLE bool saveProject(const QString &urlOrPath = {});
     Q_INVOKABLE bool loadProject(const QString &urlOrPath);
+    Q_INVOKABLE void refreshRecoveryCandidates();
+    Q_INVOKABLE bool restoreRecovery(int index);
+    Q_INVOKABLE void discardRecovery(int index);
+    Q_INVOKABLE void refreshProjectHistory();
+    Q_INVOKABLE bool restoreHistoryVersion(int index);
     Q_INVOKABLE bool exportCsv(const QString &urlOrPath) const;
     Q_INVOKABLE bool exportCoordinatePdf(const QString &urlOrPath) const;
     Q_INVOKABLE bool importMusicXml(const QString &urlOrPath);
@@ -468,6 +479,8 @@ signals:
     void selectionChanged();
     void statisticsChanged();
     void historyChanged();
+    void recoveryChanged();
+    void diagnosticsChanged();
     void performerCountChanged();
     void timingChanged();
     void shapesChanged();
@@ -490,6 +503,8 @@ private:
     void commitSnapshot(const QJsonObject &before, const QString &text);
     void markDirty(const QString &message = {});
     void setStatus(const QString &message);
+    void setDiagnostic(const QString &operation, const QString &source, const QString &location,
+                       const QString &message, const QString &severity = QStringLiteral("error"));
     void autosave();
     void emitAllDataChanged();
     QString localPath(const QString &urlOrPath) const;
@@ -548,6 +563,9 @@ private:
     QString m_audioSource;
     QString m_projectPath;
     QString m_statusMessage{QStringLiteral("Ready")};
+    QVariantList m_recoveryCandidates;
+    QVariantList m_projectHistory;
+    QVariantList m_diagnostics;
     double m_bpm = 120.0;
     double m_playhead = 0.0;
     bool m_playbackActive = false;

@@ -104,6 +104,29 @@ Rectangle {
                         Layout.fillWidth: true
                         onClicked: workspaceStateContext.workspaceActive = true
                     }
+                    Rectangle {
+                        visible: drillProjectContext.recoveryCandidates.length > 0
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: recoveryColumn.implicitHeight + 20
+                        radius: MarchCraftTheme.radiusSmall
+                        color: "#2b2419"
+                        border.color: MarchCraftTheme.warning
+                        ColumnLayout {
+                            id: recoveryColumn
+                            anchors.fill: parent; anchors.margins: 10; spacing: 6
+                            Label { text: "RECOVERY AVAILABLE"; color: MarchCraftTheme.warning; font.bold: true; font.pixelSize: 10 }
+                            Repeater {
+                                model: drillProjectContext.recoveryCandidates
+                                delegate: RowLayout {
+                                    required property var modelData
+                                    Layout.fillWidth: true
+                                    Label { text: modelData.showName + " · " + modelData.createdUtc; color: MarchCraftTheme.textPrimary; Layout.fillWidth: true; elide: Text.ElideRight }
+                                    AppToolButton { text: "Restore"; onClicked: { if (drillProjectContext.restoreRecovery(index)) workspaceStateContext.enteredProject() } }
+                                    AppToolButton { text: "Discard"; onClicked: drillProjectContext.discardRecovery(index) }
+                                }
+                            }
+                        }
+                    }
                     Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
                     Rectangle {
                         Layout.fillWidth: true
