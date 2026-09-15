@@ -3,10 +3,11 @@
 
 from __future__ import annotations
 
-import json
+import math
 import pathlib
-import struct
 import sys
+
+from build_human_performer import read_accessor, read_glb
 
 
 REQUIRED_ANIMATIONS = {
@@ -26,24 +27,9 @@ REQUIRED_ANIMATIONS = {
 }
 
 
-def load_document(path: pathlib.Path) -> dict:
-    raw = path.read_bytes()
-    magic, version, length = struct.unpack_from("<III", raw, 0)
-    assert magic == 0x46546C67 and version == 2 and length == len(raw)
-    offset = 12
-    while offset < length:
-        chunk_length, chunk_type = struct.unpack_from("<II", raw, offset)
-        offset += 8
-        chunk = raw[offset : offset + chunk_length]
-        offset += chunk_length
-        if chunk_type == 0x4E4F534A:
-            return json.loads(chunk.rstrip(b" \0"))
-    raise AssertionError("missing JSON chunk")
-
-
 def main() -> None:
     path = pathlib.Path(sys.argv[1])
-    document = load_document(path)
+    document, binary = read_glb(path)
     primitive = document["meshes"][0]["primitives"][0]
     attributes = primitive["attributes"]
     assert {"POSITION", "NORMAL", "COLOR_0", "JOINTS_0", "WEIGHTS_0"} <= set(attributes)
@@ -52,8 +38,21 @@ def main() -> None:
     assert color["count"] == position["count"] and color["type"] == "VEC4"
     assert abs(position["min"][1]) <= 0.002, position["min"]
     assert abs(position["max"][1] - 1.75) <= 0.002, position["max"]
-    assert 1000 <= position["count"] <= 18057
+    assert 0 < position["count"] <= 18057
+    indices = read_accessor(document, binary, primitive["indices"])
+    assert len(indices) % 3 == 0 and 1000 <= len(indices) // 3 <= 12000
+    assert all(0 <= int(row[0]) < position["count"] for row in indices)
     assert len(document["skins"][0]["joints"]) >= 20
+    joint_count = len(document["skins"][0]["joints"])
+    for row in read_accessor(document, binary, attributes["POSITION"]):
+        assert all(math.isfinite(value) for value in row)
+    joint_rows = read_accessor(document, binary, attributes["JOINTS_0"])
+    weight_rows = read_accessor(document, binary, attributes["WEIGHTS_0"])
+    assert len(joint_rows) == len(weight_rows) == position["count"]
+    for joint_row, weight_row in zip(joint_rows, weight_rows):
+        assert all(0 <= joint < joint_count for joint in joint_row)
+        assert all(math.isfinite(weight) and 0 <= weight <= 1 for weight in weight_row)
+        assert abs(sum(weight_row) - 1) < 0.0001
     animation_names = {animation["name"] for animation in document["animations"]}
     assert REQUIRED_ANIMATIONS <= animation_names, REQUIRED_ANIMATIONS - animation_names
     extras = document["asset"]["extras"]

@@ -15,6 +15,7 @@
 using MarchCraft::DrillSet;
 using MarchCraft::Performer;
 using MarchCraft::Placement;
+using MarchCraft::AnimationState;
 
 #include "ProjectAlgorithms.h"
 #include "ProjectStorage.h"
@@ -46,6 +47,94 @@ double DrillProject::interpolatedFacing(int performerIndex) const
     double result = std::fmod(start + delta * m_playhead, 360.0);
     if (result < 0.0) result += 360.0;
     return result;
+}
+
+AnimationState DrillProject::animationStateAt(int performerIndex) const
+{
+    AnimationState state;
+    const int counts = currentSetCounts();
+    if (counts > 0) {
+        state.elapsedCounts = m_playhead * counts;
+        // Preserve left/right alternation and step-off weight across consecutive
+        // sets, including odd count moves. A stationary hold starts a new phrase.
+        for (int set = m_currentSet - 1; set > 0; --set) {
+            if (transitionDistance(performerIndex, set) <= 1e-5) break;
+            state.elapsedCounts += m_sets[set].counts;
+        }
+        state.normalizedTime = std::fmod(state.elapsedCounts / 2.0, 1.0);
+        if (state.normalizedTime < 0.0) state.normalizedTime += 1.0;
+    }
+    if (!m_playbackActive || m_currentSet <= 0 || counts <= 0) return state;
+
+    const Placement destination = placementAt(performerIndex, m_currentSet);
+    const Placement origin = placementAt(performerIndex, m_currentSet - 1);
+    if (m_currentSet + 1 >= m_sets.size()) {
+        state.closesAtDestination = true;
+    } else {
+        state.closesAtDestination = transitionDistance(performerIndex, m_currentSet + 1) <= 1e-5;
+    }
+    const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
+
+    constexpr double speedSampleRadius = 0.001;
+    const double beforeProgress = std::max(0.0, m_playhead - speedSampleRadius);
+    const double afterProgress = std::min(1.0, m_playhead + speedSampleRadius);
+    const QPointF before = pathPosition(performerIndex, m_currentSet, beforeProgress);
+    const QPointF current = pathPosition(performerIndex, m_currentSet, m_playhead);
+    const QPointF after = pathPosition(performerIndex, m_currentSet, afterProgress);
+    const QPointF speedDelta = after - before;
+    const double sampleProgress = afterProgress - beforeProgress;
+    const double sampleDistance = std::hypot(current.x() - before.x(), current.y() - before.y())
+                                + std::hypot(after.x() - current.x(), after.y() - current.y());
+
+    if (sampleProgress <= 0.0 || sampleDistance <= 1e-7) {
+        if (facingDelta > 0.5 && std::hypot(destination.position.x() - origin.position.x(),
+                                            destination.position.y() - origin.position.y()) <= 1e-5)
+            state.locomotion = QStringLiteral("direction_change");
+        return state;
+    }
+
+    state.travelStepsPerCount = sampleDistance / sampleProgress / counts;
+    const double headingSampleRadius = std::min(0.025, std::max(speedSampleRadius, 0.18 / counts));
+    const double headingBeforeProgress = std::max(0.0, m_playhead - headingSampleRadius);
+    const double headingAfterProgress = std::min(1.0, m_playhead + headingSampleRadius);
+    const QPointF headingDelta = pathPosition(performerIndex, m_currentSet, headingAfterProgress)
+                               - pathPosition(performerIndex, m_currentSet, headingBeforeProgress);
+    const QPointF directionDelta = std::hypot(headingDelta.x(), headingDelta.y()) > 1e-7
+            ? headingDelta : speedDelta;
+    // Field Y increases away from the audience: front = -Y, Side 2 = +X.
+    state.travelDirectionDegrees = std::fmod(std::atan2(directionDelta.x(), -directionDelta.y())
+                                             * 180.0 / std::numbers::pi + 360.0, 360.0);
+    if (destination.pathType == QStringLiteral("follow")) {
+        state.locomotion = QStringLiteral("march.forward");
+        return state;
+    }
+
+    const double facing = interpolatedFacing(performerIndex);
+    const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
+    const double absoluteRelative = std::abs(relative);
+    constexpr double slideHalfWidthDegrees = 7.5;
+    if (absoluteRelative < 90.0 - slideHalfWidthDegrees)
+        state.locomotion = QStringLiteral("march.forward");
+    else if (absoluteRelative > 90.0 + slideHalfWidthDegrees)
+        state.locomotion = QStringLiteral("march.backward");
+    else if (relative > 0.0)
+        state.locomotion = QStringLiteral("slide.right");
+    else
+        state.locomotion = QStringLiteral("slide.left");
+    return state;
+}
+
+const AnimationState &DrillProject::cachedAnimationStateAt(int performerIndex) const
+{
+    if (m_animationStateCache.size() != m_performers.size()) {
+        m_animationStateCache.resize(m_performers.size());
+        m_animationStateCacheRevisions.fill(0, m_performers.size());
+    }
+    if (m_animationStateCacheRevisions.at(performerIndex) != m_animationStateRevision) {
+        m_animationStateCache[performerIndex] = animationStateAt(performerIndex);
+        m_animationStateCacheRevisions[performerIndex] = m_animationStateRevision;
+    }
+    return m_animationStateCache.at(performerIndex);
 }
 
 const MarchCraft::TransitionPath &DrillProject::transitionPath(int performerIndex, int destinationSet) const

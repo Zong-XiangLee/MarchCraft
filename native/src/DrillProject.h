@@ -144,12 +144,23 @@ public:
         FacingRole,
         SelectedRole,
         SetDistanceRole,
+        TravelHeadingRole,
+        TravelStepsPerCountRole,
+        LocomotionModeRole,
+        GaitPhaseRole,
+        GaitElapsedCountsRole,
+        TravelPathTypeRole,
+        ClosingTransitionRole,
         TotalDistanceRole,
         WarningRole,
         VisibleRole,
         LockedRole,
+        BodyRigRole,
+        UniformRole,
+        SkinPaletteRole,
         InstrumentAssetRole,
         EquipmentAssetRole,
+        PerformerHeightRole,
         PerformerRoleRole
     };
 
@@ -496,6 +507,8 @@ private:
     MarchCraft::Placement placementAt(int performerIndex, int setIndex) const;
     QPointF interpolatedPosition(int performerIndex) const;
     double interpolatedFacing(int performerIndex) const;
+    MarchCraft::AnimationState animationStateAt(int performerIndex) const;
+    const MarchCraft::AnimationState &cachedAnimationStateAt(int performerIndex) const;
     const MarchCraft::TransitionPath &transitionPath(int performerIndex, int destinationSet) const;
     mutable QHash<quint64, MarchCraft::TransitionPath> m_transitionPaths;
     QPointF pathPosition(int performerIndex, int destinationSet, double progress) const;
@@ -558,6 +571,9 @@ private:
     QVector<MarchCraft::Performer> m_performers;
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;
+    mutable QVector<MarchCraft::AnimationState> m_animationStateCache;
+    mutable QVector<quint64> m_animationStateCacheRevisions;
+    quint64 m_animationStateRevision = 1;
     QVector<MarchCraft::MeterRegion> m_meterRegions{{}};
     QVector<MarchCraft::TempoRegion> m_tempoRegions{{}};
     MarchCraft::MusicDocument m_music;

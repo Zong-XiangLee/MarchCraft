@@ -381,12 +381,23 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case SelectedRole: return performer.selected;
     case SetDistanceRole:
         ensureAnalyticsCache(); return m_cachedSetDistances.value(index.row());
+    case TravelHeadingRole: return cachedAnimationStateAt(index.row()).travelDirectionDegrees;
+    case TravelStepsPerCountRole: return cachedAnimationStateAt(index.row()).travelStepsPerCount;
+    case LocomotionModeRole: return cachedAnimationStateAt(index.row()).locomotion;
+    case GaitPhaseRole: return cachedAnimationStateAt(index.row()).normalizedTime;
+    case GaitElapsedCountsRole: return cachedAnimationStateAt(index.row()).elapsedCounts;
+    case TravelPathTypeRole: return m_currentSet > 0 ? placement.pathType : QStringLiteral("direct");
+    case ClosingTransitionRole: return cachedAnimationStateAt(index.row()).closesAtDestination;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
     case VisibleRole: return performer.visible;
     case LockedRole: return performer.locked;
+    case BodyRigRole: return performer.appearance.bodyRigId;
+    case UniformRole: return performer.appearance.uniformId;
+    case SkinPaletteRole: return performer.appearance.skinPaletteId;
     case InstrumentAssetRole: return performer.appearance.instrumentAssetId;
     case EquipmentAssetRole: return performer.appearance.equipmentAssetId;
+    case PerformerHeightRole: return performer.appearance.heightMeters;
     case PerformerRoleRole: return performer.appearance.roleId;
     default: return {};
     }
@@ -408,8 +419,12 @@ bool DrillProject::setData(const QModelIndex &index, const QVariant &value, int 
     case NotesRole: performer.notes = value.toString(); break;
     case VisibleRole: performer.visible = value.toBool(); break;
     case LockedRole: performer.locked = value.toBool(); break;
+    case BodyRigRole: performer.appearance.bodyRigId = value.toString(); break;
+    case UniformRole: performer.appearance.uniformId = value.toString(); break;
+    case SkinPaletteRole: performer.appearance.skinPaletteId = value.toString(); break;
     case InstrumentAssetRole: performer.appearance.instrumentAssetId = value.toString(); break;
     case EquipmentAssetRole: performer.appearance.equipmentAssetId = value.toString(); break;
+    case PerformerHeightRole: performer.appearance.heightMeters = qBound(1.1, value.toDouble(), 2.25); break;
     case PerformerRoleRole: performer.appearance.roleId = value.toString(); break;
     default: return false;
     }
@@ -445,9 +460,17 @@ QHash<int, QByteArray> DrillProject::roleNames() const
             {ColorRole, "performerColor"}, {NotesRole, "notes"}, {XRole, "fieldX"},
             {YRole, "fieldY"}, {FromXRole, "fromX"}, {FromYRole, "fromY"},
             {FacingRole, "facing"}, {SelectedRole, "isSelected"},
-            {SetDistanceRole, "setDistance"}, {TotalDistanceRole, "totalDistance"},
+            {SetDistanceRole, "setDistance"}, {TravelHeadingRole, "travelHeading"},
+            {TravelStepsPerCountRole, "travelStepsPerCount"},
+            {LocomotionModeRole, "locomotionMode"}, {GaitPhaseRole, "gaitPhase"},
+            {GaitElapsedCountsRole, "gaitElapsedCounts"},
+            {TravelPathTypeRole, "travelPathType"}, {ClosingTransitionRole, "closingTransition"},
+            {TotalDistanceRole, "totalDistance"},
             {WarningRole, "hasWarning"}, {VisibleRole, "performerVisible"},
-            {LockedRole, "performerLocked"}, {InstrumentAssetRole, "instrumentAssetId"}, {EquipmentAssetRole, "equipmentAssetId"},
+            {LockedRole, "performerLocked"}, {BodyRigRole, "bodyRigId"},
+            {UniformRole, "uniformId"}, {SkinPaletteRole, "skinPaletteId"},
+            {InstrumentAssetRole, "instrumentAssetId"}, {EquipmentAssetRole, "equipmentAssetId"},
+            {PerformerHeightRole, "performerHeightMeters"},
             {PerformerRoleRole, "performerRole"}};
 }
 
@@ -601,9 +624,12 @@ void DrillProject::setPlayhead(double value)
     if (qFuzzyCompare(value, m_playhead))
         return;
     m_playhead = value;
+    ++m_animationStateRevision;
     emit playheadChanged();
     if (!m_performers.isEmpty())
-        emit dataChanged(index(0), index(m_performers.size() - 1), {XRole, YRole, FacingRole});
+        emit dataChanged(index(0), index(m_performers.size() - 1),
+                         {XRole, YRole, FacingRole, TravelHeadingRole, TravelStepsPerCountRole,
+                          LocomotionModeRole, GaitPhaseRole, GaitElapsedCountsRole, ClosingTransitionRole});
 }
 
 void DrillProject::setPlaybackActive(bool value)
@@ -918,7 +944,8 @@ void DrillProject::setPerformerAppearance(int row, const QString &bodyRigId,
     if (!skinPaletteId.trimmed().isEmpty()) appearance.skinPaletteId = skinPaletteId.trimmed();
     if (!instrumentAssetId.trimmed().isEmpty()) appearance.instrumentAssetId = instrumentAssetId.trimmed();
     appearance.heightMeters = qBound(1.1, heightMeters, 2.25);
-    emit dataChanged(index(row, 0), index(row, 0), {InstrumentAssetRole});
+    emit dataChanged(index(row, 0), index(row, 0), {BodyRigRole, UniformRole, SkinPaletteRole,
+                                                   InstrumentAssetRole, PerformerHeightRole});
     commitSnapshot(before, QStringLiteral("Change performer appearance"));
 }
 
@@ -1817,6 +1844,11 @@ void DrillProject::autosave()
 void DrillProject::emitAllDataChanged()
 {
     m_transitionPaths.clear();
+    ++m_animationStateRevision;
+    if (m_animationStateRevision == 0) {
+        m_animationStateRevision = 1;
+        m_animationStateCacheRevisions.fill(0);
+    }
     if (!m_performers.isEmpty())
         emit dataChanged(index(0), index(m_performers.size() - 1));
     emit statisticsChanged();

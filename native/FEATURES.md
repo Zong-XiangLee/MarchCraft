@@ -23,7 +23,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Music | Native MIDI/MusicXML timing and track import, compact wheel-scrollable measure timeline with set-range highlighting, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
-| 3D | Meter-based Y-up world with grounded colored directional markers, authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. Human models and gait are deferred; old appearance values remain compatible. |
+| 3D | Meter-based Y-up world with grounded, height-scaled human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 97 sets |
 
@@ -33,7 +33,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Audio can be attached, previewed, offset, and aligned with anchors; automatic beat/phrase inference remains outside the prototype because it is not authoritative for changing-tempo marching arrangements.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
-- GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering, and video export remain production milestones.
+- The bundled human GLBs and procedural gait use the validated semantic catalog. User GLB ingestion, instrument-specific carriage/meshes, modular uniforms, cinematic rendering, and video export remain production milestones.
 - The undo stack is active during a session; cross-session version browsing will be added with the production project archive format.
 # Apple-studio workspace refinement
 
@@ -53,4 +53,4 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Playback updates only motion roles; performer editing is one undoable operation.
 - Clinic dismissal safely handles issues with attached metadata; timed collisions
   remain warnings while geometric crossings alone remain intentional choreography.
-- Human source references and authoring tools are retained but inactive.
+- The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active.

@@ -6,6 +6,8 @@
 class AssetCatalog final : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList bodyRigs READ bodyRigs CONSTANT)
+    Q_PROPERTY(QVariantList uniforms READ uniforms CONSTANT)
     Q_PROPERTY(QVariantList instruments READ instruments CONSTANT)
     Q_PROPERTY(QVariantList props READ props CONSTANT)
     Q_PROPERTY(QVariantList venues READ venues CONSTANT)
@@ -15,6 +17,8 @@ class AssetCatalog final : public QObject
 public:
     explicit AssetCatalog(QObject *parent = nullptr);
 
+    QVariantList bodyRigs() const { return m_bodyRigs; }
+    QVariantList uniforms() const { return m_uniforms; }
     QVariantList instruments() const { return m_instruments; }
     QVariantList props() const { return m_props; }
     QVariantList venues() const { return m_venues; }
@@ -30,6 +34,8 @@ private:
     void validateAndInsert(const QVariantMap &asset);
 
     QHash<QString, QVariantMap> m_assets;
+    QVariantList m_bodyRigs;
+    QVariantList m_uniforms;
     QVariantList m_instruments;
     QVariantList m_props;
     QVariantList m_venues;

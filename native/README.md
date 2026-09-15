@@ -19,7 +19,7 @@ Apply action before project data changes.
 ## What is included
 
 - Native 2D drill editor and synchronized stylized 3D preview
-- Meter-based, right-handed/Y-up 3D world with the performance surface at `Y=0` and lightweight colored directional performer markers
+- Meter-based, right-handed/Y-up 3D world with grounded, height-scaled human performers using count-driven modern corps-style marching technique
 - Versioned semantic asset catalog for instruments/equipment, props, and venues; equipment assignments remain available for clearance analysis
 - Configurable rehearsal field, high-school stadium, bowl, school-gym, and indoor-arena environments with daylight, overcast, sunset, night, and indoor lighting
 - Static/movable prop domain model with built-in box, panel, platform, and podium assets
@@ -81,26 +81,41 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 
 OpenMarch was consulted only as a public behavioral reference. MarchCraft is a clean-room implementation. A final project license should be selected before public distribution.
 
-## Application architecture and deferred human rendering
+## Application architecture and human rendering
 
 `DrillProject` remains the QML model and transaction coordinator. Its persistence,
 formation, Clinic, transition, and music adapters have separate implementation units.
 `ProjectStorage` owns SQLite I/O, `ProjectAlgorithms` provides stateless geometry and
 assignment functions, and `TransitionPath` supplies reusable arc-length tables.
 Path tables are invalidated by project edits and live geometry changes; playhead
-updates notify only position and facing roles. Background imports are revision-checked,
+updates notify only position, facing, and animation roles. Background imports are revision-checked,
 and formation workers do not instantiate multimedia resources.
 
 The welcome workspace, command bars, roster, inspector, timeline, and settings dialogs
 are separate QML components with explicit dependencies supplied by the application shell.
 Performer dialog submissions retain name/notes and undo as one action.
 
-The human renderer, gait runtime, and bundled human GLBs are intentionally retired.
-Old body, uniform, skin, and height fields are retained for project compatibility but
-have no rendering controls. Source models, attribution, and authoring scripts remain
-as inactive references for a future implementation; they are not part of the build.
-The marker preview retains field positions, authored facing, visibility, selection,
-venues, props, cameras, and synchronized playback.
+The 3D preview uses the authorized rigged LowPolyBoy source conditioned to the
+`marchcraft.canonical.v1` skeleton. The runtime gait is count-driven and supports
+forward heel-to-toe technique, backward forefoot technique, slides, diagonal travel,
+planted direction changes, and a controlled close to attention. Body, uniform, skin,
+and height fields remain project-compatible and feed the renderer; semantic assets
+continue to resolve through the catalog rather than source filenames.
+
+The 3D controls offer **Horns up / Horns down** carriage and optional **Mark time on
+holds**. These are session preview choices; stationary sets otherwise remain at
+attention. Instrument meshes and per-set horn choreography are not included.
+Stride is scaled to performer height and limited to the validated 0.70-meter
+canonical reach; moves outside that range retain their authored coordinates and
+the existing Clinic stride warnings. The mesh uses the source character's appearance;
+uniform IDs remain compatible but do not yet select modular clothing.
+
+Human QA uses the actual Qt skin and is available with `--qa-human --screenshot
+output.png`. Add `--qa-human-count 2.5` to sample marching, `--qa-human-heading 90`
+for Side 2 travel, `--qa-human-horns-down`, or `--qa-human-mark-time`. Use
+`--3d-view performer-side` for a close side view. The QA performer stays centered
+in the camera at the requested count. `tst_humanrig.qml` checks actual Qt joint
+positions, carriage, mark time, height scaling, and world-space planted ankles.
 
 Run `marchcraft_tests samplePerformance -o timings.txt,txt` for repeatable sample-show
 load/save, set-switching, edit, formation-preview, and position-evaluation timings.
