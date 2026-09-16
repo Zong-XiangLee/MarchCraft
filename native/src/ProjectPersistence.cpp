@@ -69,7 +69,7 @@ bool validateProjectDocument(const QJsonObject &root, QString *location, QString
         *location = QStringLiteral("format"); *message = QStringLiteral("Expected a MarchCraft project document"); return false;
     }
     const int version = root.value(QStringLiteral("version")).toInt(-1);
-    if (version < 1 || version > 10) {
+    if (version < 1 || version > 11) {
         *location = QStringLiteral("version"); *message = QStringLiteral("Unsupported project format version %1").arg(version); return false;
     }
     for (const QString &key : {QStringLiteral("performers"), QStringLiteral("sets")}) {
@@ -137,7 +137,7 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("endMeasure"), section.endMeasure}});
     }
     return {{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 10},
+            {QStringLiteral("version"), 11},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
@@ -166,7 +166,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 10) {
+        || object.value(QStringLiteral("version")).toInt() > 11) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
@@ -206,6 +206,25 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     }
     for (int i = 0; i < sets.size(); ++i)
         if (sets[i].number.isEmpty()) sets[i].number = QString::number(i + 1);
+    if (object.value(QStringLiteral("version")).toInt() < 11) {
+        auto migrateSets = [](QVector<DrillSet> &sourceSets, int firstIndex) {
+            for (int setIndex = firstIndex; setIndex < sourceSets.size(); ++setIndex) {
+                const int delay = qBound(0, qRound(sourceSets[setIndex].counts * 0.25),
+                                         qMax(0, sourceSets[setIndex].counts - 1));
+                auto migrateVariant = [delay](MarchCraft::SetVariant &variant) {
+                    for (auto placement = variant.placements.begin(); placement != variant.placements.end(); ++placement) {
+                        if (placement->pathType != QStringLiteral("delayed")) continue;
+                        placement->pathType = QStringLiteral("direct");
+                        placement->stepOffCount = delay;
+                    }
+                };
+                for (auto &variant : sourceSets[setIndex].variants) migrateVariant(variant);
+                for (auto &variant : sourceSets[setIndex].archivedVariants) migrateVariant(variant);
+            }
+        };
+        migrateSets(sets, 1);
+        migrateSets(archivedSets, 0);
+    }
     if (sets.isEmpty()) {
         DrillSet first;
         first.activeVariant().name = QStringLiteral("Set 1");
@@ -265,6 +284,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_playhead = 0.0;
     m_playbackActive = false;
     m_transitionPaths.clear();
+    m_groupMotionPreview = {};
     m_analyticsValid = false;
     ensurePlacements();
     endResetModel();

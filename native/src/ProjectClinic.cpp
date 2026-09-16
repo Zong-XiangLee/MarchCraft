@@ -419,7 +419,9 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
     } else if (type == QStringLiteral("delayed")) {
         for (const auto &performer : m_performers) if (affected.contains(performer.id)) {
             auto &placement = m_sets[destination].activeVariant().placements[performer.id];
-            placement.pathType = QStringLiteral("delayed"); placement.pathPoints.clear();
+            placement.pathType = QStringLiteral("direct"); placement.pathPoints.clear();
+            placement.stepOffCount = qBound(0, qRound(m_sets[destination].counts * 0.25),
+                                             qMax(0, m_sets[destination].counts - 1));
         }
     } else if (type == QStringLiteral("follow") || type == QStringLiteral("gate")) {
         int ordinal = 0;

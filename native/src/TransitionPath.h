@@ -9,14 +9,14 @@ class TransitionPath
 {
 public:
     TransitionPath() = default;
-    TransitionPath(QPointF origin, const Placement &destination);
+    TransitionPath(QPointF origin, const Placement &destination, int transitionCounts = 0);
     QPointF position(double progress) const;
     double distance() const { return m_cumulative.isEmpty() ? 0.0 : m_cumulative.last(); }
 
 private:
     QVector<QPointF> m_points;
     QVector<double> m_cumulative;
-    bool m_delayed = false;
+    double m_delayFraction = 0.0;
 };
 
 }

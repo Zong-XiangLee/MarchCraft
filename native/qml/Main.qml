@@ -32,6 +32,20 @@ ApplicationWindow {
     property string savePurpose: "normal"
     property string homeMode: initialHomeMode
     property bool qaShapePalette: false
+    readonly property bool editingText: {
+        const item = window.activeFocusItem
+        return item !== null && item !== undefined
+                && item.cursorPosition !== undefined
+                && (item.text !== undefined || item.displayText !== undefined)
+    }
+
+    AuthoringActions {
+        id: authoringActions
+        drillProjectContext: drillProject
+        transportContext: transport
+        workspaceActive: workspaceState.workspaceActive
+        textEditing: window.editingText
+    }
 
     WorkspaceLogic {
         id: workspaceState
@@ -186,10 +200,10 @@ ApplicationWindow {
             title: "&File"
             Action { text: "Home"; onTriggered: window.returnHome() }
             MenuSeparator {}
-            Action { text: "New project…"; shortcut: StandardKey.New; onTriggered: window.startNewProject() }
-            Action { text: "Open…"; shortcut: StandardKey.Open; onTriggered: window.requestOpenProject() }
-            Action { text: "Save"; shortcut: StandardKey.Save; enabled: workspaceState.hasCurrentProject; onTriggered: window.saveCurrentProject("normal") }
-            Action { text: "Save As…"; shortcut: StandardKey.SaveAs; enabled: workspaceState.hasCurrentProject; onTriggered: { window.savePurpose = "normal"; saveDialog.open() } }
+            Action { text: "New project…"; shortcut: StandardKey.New; enabled: !window.editingText; onTriggered: window.startNewProject() }
+            Action { text: "Open…"; shortcut: StandardKey.Open; enabled: !window.editingText; onTriggered: window.requestOpenProject() }
+            Action { text: "Save"; shortcut: StandardKey.Save; enabled: workspaceState.hasCurrentProject && !window.editingText; onTriggered: window.saveCurrentProject("normal") }
+            Action { text: "Save As…"; shortcut: StandardKey.SaveAs; enabled: workspaceState.hasCurrentProject && !window.editingText; onTriggered: { window.savePurpose = "normal"; saveDialog.open() } }
             Action { text: "Restore version…"; enabled: drillProject.projectHistory.length > 0; onTriggered: { drillProject.refreshProjectHistory(); historyDialog.open() } }
             MenuSeparator {}
             Action { text: "Import coordinate JSON…"; onTriggered: importCoordinateDialog.open() }
@@ -204,18 +218,22 @@ ApplicationWindow {
         }
         Menu {
             title: "&Edit"
-            Action { text: "Undo"; shortcut: StandardKey.Undo; enabled: drillProject.canUndo; onTriggered: drillProject.undo() }
-            Action { text: "Redo"; shortcut: StandardKey.Redo; enabled: drillProject.canRedo; onTriggered: drillProject.redo() }
+            Action { text: "Undo"; shortcut: StandardKey.Undo; enabled: drillProject.canUndo && !window.editingText; onTriggered: drillProject.undo() }
+            Action { text: "Redo"; shortcut: StandardKey.Redo; enabled: drillProject.canRedo && !window.editingText; onTriggered: drillProject.redo() }
             MenuSeparator {}
-            Action { text: "Select all"; shortcut: StandardKey.SelectAll; onTriggered: drillProject.selectAll() }
-            Action { text: "Clear selection"; shortcut: "Escape"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.clearSelection() }
-            Action { text: "Delete selected"; shortcut: StandardKey.Delete; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.removeSelectedPerformers() }
+            Action { text: "Select all"; shortcut: StandardKey.SelectAll; enabled: !window.editingText; onTriggered: drillProject.selectAll() }
+            Action { text: "Clear selection"; shortcut: "Escape"; enabled: drillProject.selectedCount > 0 && !window.editingText; onTriggered: drillProject.clearSelection() }
+            Action { text: "Delete selected"; shortcut: StandardKey.Delete; enabled: drillProject.selectedCount > 0 && !window.editingText; onTriggered: drillProject.removeSelectedPerformers() }
             MenuSeparator {}
             Action { text: "Project setup…"; onTriggered: { projectSetupDialog.creationMode = false; projectSetupDialog.open() } }
             Action { text: "Editor preferences…"; onTriggered: settingsDialog.open() }
         }
         Menu {
             title: "&Formation"
+            MenuItem { action: authoringActions.groupAction }
+            MenuItem { action: authoringActions.ungroupAction }
+            MenuItem { action: authoringActions.duplicateSetAction }
+            MenuSeparator {}
             Action { text: "Formation builder…"; enabled: drillProject.selectedCount > 0; onTriggered: formationDialog.open() }
             Action { text: "Snap to 1-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(1.0) }
             Action { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
@@ -393,6 +411,7 @@ ApplicationWindow {
                 currentIndex: window.threeD ? 1 : 0
                 FieldView {
                     id: fieldView
+                    activePerformer: window.activePerformer
                     drawMode: window.freehandDrawing
                     shapeDrawMode: window.shapeDrawing
                     showPaths: drillProject.showTransitionPaths
@@ -1001,18 +1020,14 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Left"; onActivated: drillProject.nudgeSelected(-0.25, 0) }
-    Shortcut { sequence: "Right"; onActivated: drillProject.nudgeSelected(0.25, 0) }
-    Shortcut { sequence: "Up"; onActivated: drillProject.nudgeSelected(0, -0.25) }
-    Shortcut { sequence: "Down"; onActivated: drillProject.nudgeSelected(0, 0.25) }
-    Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; onActivated: transport.playPause() }
-    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: projectSetupDialog.open() }
-    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterPanel.exposedRosterSearch.forceActiveFocus(); rosterPanel.exposedRosterSearch.selectAll() } }
-    Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
-    Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
-    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+I"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
-    Shortcut { sequence: "+"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
-    Shortcut { sequence: "-"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
+    Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: transport.playPause() }
+    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: projectSetupDialog.open() }
+    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: { rosterPanel.exposedRosterSearch.forceActiveFocus(); rosterPanel.exposedRosterSearch.selectAll() } }
+    Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: window.threeD = false }
+    Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: window.threeD = true }
+    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+I"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
+    Shortcut { sequence: "+"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
+    Shortcut { sequence: "-"; context: Qt.ApplicationShortcut; enabled: !window.editingText; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
 }

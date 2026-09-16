@@ -130,6 +130,7 @@ struct Placement {
     double facing = 0.0;
     QString pathType{QStringLiteral("direct")};
     QVector<QPointF> pathPoints;
+    int stepOffCount = 0;
 
     QJsonObject toJson() const
     {
@@ -139,7 +140,8 @@ struct Placement {
         return {{QStringLiteral("x"), position.x()},
                 {QStringLiteral("y"), position.y()},
                 {QStringLiteral("facing"), facing},
-                {QStringLiteral("pathType"), pathType}, {QStringLiteral("pathPoints"), points}};
+                {QStringLiteral("pathType"), pathType}, {QStringLiteral("pathPoints"), points},
+                {QStringLiteral("stepOffCount"), stepOffCount}};
     }
 
     static Placement fromJson(const QJsonObject &object)
@@ -149,11 +151,62 @@ struct Placement {
         result.position.setY(object.value(QStringLiteral("y")).toDouble(28.0));
         result.facing = object.value(QStringLiteral("facing")).toDouble();
         result.pathType = object.value(QStringLiteral("pathType")).toString(QStringLiteral("direct"));
+        result.stepOffCount = qMax(0, object.value(QStringLiteral("stepOffCount")).toInt());
         for (const auto &value : object.value(QStringLiteral("pathPoints")).toArray()) {
             const auto p = value.toObject();
             result.pathPoints.push_back({p.value(QStringLiteral("x")).toDouble(), p.value(QStringLiteral("y")).toDouble()});
         }
         return result;
+    }
+};
+
+struct GroupTransition {
+    QString groupId;
+    QString type;
+    QString leaderId;
+    QString pivotPerformerId;
+    QPointF pivot{80.0, 42.0};
+    double angleDegrees = 90.0;
+    bool clockwise = true;
+    bool reversed = false;
+    int stepIntervalCounts = 1;
+    QVector<QString> memberOrder;
+    QVector<QPointF> leaderPathPoints;
+
+    QJsonObject toJson() const {
+        QJsonArray points, members;
+        for (const auto &id : memberOrder) members.push_back(id);
+        for (const auto &point : leaderPathPoints)
+            points.push_back(QJsonObject{{QStringLiteral("x"), point.x()}, {QStringLiteral("y"), point.y()}});
+        return {{QStringLiteral("groupId"), groupId}, {QStringLiteral("type"), type},
+                {QStringLiteral("leaderId"), leaderId}, {QStringLiteral("pivotPerformerId"), pivotPerformerId},
+                {QStringLiteral("pivotX"), pivot.x()}, {QStringLiteral("pivotY"), pivot.y()},
+                {QStringLiteral("angleDegrees"), angleDegrees}, {QStringLiteral("clockwise"), clockwise},
+                {QStringLiteral("reversed"), reversed}, {QStringLiteral("stepIntervalCounts"), stepIntervalCounts},
+                {QStringLiteral("memberOrder"), members},
+                {QStringLiteral("leaderPathPoints"), points}};
+    }
+
+    static GroupTransition fromJson(const QJsonObject &object) {
+        GroupTransition motion;
+        motion.groupId = object.value(QStringLiteral("groupId")).toString();
+        motion.type = object.value(QStringLiteral("type")).toString();
+        motion.leaderId = object.value(QStringLiteral("leaderId")).toString();
+        motion.pivotPerformerId = object.value(QStringLiteral("pivotPerformerId")).toString();
+        motion.pivot = {object.value(QStringLiteral("pivotX")).toDouble(80.0),
+                        object.value(QStringLiteral("pivotY")).toDouble(42.0)};
+        motion.angleDegrees = qBound(-360.0, object.value(QStringLiteral("angleDegrees")).toDouble(90.0), 360.0);
+        motion.clockwise = object.value(QStringLiteral("clockwise")).toBool(true);
+        motion.reversed = object.value(QStringLiteral("reversed")).toBool();
+        motion.stepIntervalCounts = qMax(0, object.value(QStringLiteral("stepIntervalCounts")).toInt(1));
+        for (const auto &value : object.value(QStringLiteral("memberOrder")).toArray())
+            motion.memberOrder.push_back(value.toString());
+        for (const auto &value : object.value(QStringLiteral("leaderPathPoints")).toArray()) {
+            const auto point = value.toObject();
+            motion.leaderPathPoints.push_back({point.value(QStringLiteral("x")).toDouble(),
+                                               point.value(QStringLiteral("y")).toDouble()});
+        }
+        return motion;
     }
 };
 
@@ -282,6 +335,7 @@ struct SetVariant {
     QHash<QString, Placement> placements;
     QVector<FormationShape> shapes;
     QVector<PerformerGroup> groups;
+    QVector<GroupTransition> groupTransitions;
 
     QJsonObject toJson() const
     {
@@ -292,12 +346,14 @@ struct SetVariant {
         for (const auto &shape : shapes) shapeArray.push_back(shape.toJson());
         QJsonArray groupArray;
         for (const auto &group : groups) groupArray.push_back(group.toJson());
+        QJsonArray transitionArray;
+        for (const auto &motion : groupTransitions) transitionArray.push_back(motion.toJson());
         return {{QStringLiteral("id"), id},
                 {QStringLiteral("label"), label},
                 {QStringLiteral("name"), name},
                 {QStringLiteral("caption"), caption},
                 {QStringLiteral("placements"), placementObject}, {QStringLiteral("shapes"), shapeArray},
-                {QStringLiteral("groups"), groupArray}};
+                {QStringLiteral("groups"), groupArray}, {QStringLiteral("groupTransitions"), transitionArray}};
     }
 
     static SetVariant fromJson(const QJsonObject &object)
@@ -315,6 +371,10 @@ struct SetVariant {
         for (const auto &value : object.value(QStringLiteral("groups")).toArray()) {
             auto group = PerformerGroup::fromJson(value.toObject());
             if (group.performerIds.size() >= 2) result.groups.push_back(std::move(group));
+        }
+        for (const auto &value : object.value(QStringLiteral("groupTransitions")).toArray()) {
+            auto motion = GroupTransition::fromJson(value.toObject());
+            if (!motion.groupId.isEmpty() && !motion.type.isEmpty()) result.groupTransitions.push_back(std::move(motion));
         }
         return result;
     }
