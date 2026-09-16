@@ -126,6 +126,10 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList recoveryCandidates READ recoveryCandidates NOTIFY recoveryChanged)
     Q_PROPERTY(QVariantList projectHistory READ projectHistory NOTIFY historyChanged)
     Q_PROPERTY(QVariantList diagnostics READ diagnostics NOTIFY diagnosticsChanged)
+    Q_PROPERTY(bool groupMotionPreviewActive READ groupMotionPreviewActive NOTIFY groupMotionPreviewChanged)
+    Q_PROPERTY(QVariantList groupMotionPreviewPoints READ groupMotionPreviewPoints NOTIFY groupMotionPreviewChanged)
+    Q_PROPERTY(QVariantMap groupMotionPreviewInfo READ groupMotionPreviewInfo NOTIFY groupMotionPreviewChanged)
+    Q_PROPERTY(QString groupMotionPreviewWarning READ groupMotionPreviewWarning NOTIFY groupMotionPreviewChanged)
 
 public:
     Q_INVOKABLE void savePerformerDetails(int row, const QString &label, const QString &name,
@@ -293,6 +297,10 @@ public:
     QVariantList recoveryCandidates() const { return m_recoveryCandidates; }
     QVariantList projectHistory() const { return m_projectHistory; }
     QVariantList diagnostics() const { return m_diagnostics; }
+    bool groupMotionPreviewActive() const { return m_groupMotionPreview.active; }
+    QVariantList groupMotionPreviewPoints() const;
+    QVariantMap groupMotionPreviewInfo() const;
+    QString groupMotionPreviewWarning() const { return m_groupMotionPreview.warning; }
 
     Q_INVOKABLE void newProject();
     Q_INVOKABLE void loadDemo();
@@ -446,7 +454,21 @@ public:
     Q_INVOKABLE void snapSelected(double grid);
     Q_INVOKABLE void faceSelected(double degrees);
     Q_INVOKABLE void setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints = {});
+    Q_INVOKABLE QVariantMap transitionPathInfo(int performerRow) const;
     Q_INVOKABLE QVariantList transitionPathSamples(int performerRow, int samples = 24) const;
+    Q_INVOKABLE void beginTransitionHandleEdit(int performerRow);
+    Q_INVOKABLE void previewTransitionHandle(int handleIndex, double x, double y, bool snap = true);
+    Q_INVOKABLE void endTransitionHandleEdit();
+    Q_INVOKABLE void setSelectedStepOffCount(int count);
+    Q_INVOKABLE void staggerSelectedStepOffs(int startCount, int interval, bool reverse = false);
+    Q_INVOKABLE bool previewGroupMotion(const QString &type, int leaderOrPivotRow,
+                                        double pivotX, double pivotY, double angleDegrees,
+                                        bool clockwise = true, bool reversed = false,
+                                        int stepIntervalCounts = 1);
+    Q_INVOKABLE bool applyGroupMotionPreview();
+    Q_INVOKABLE void cancelGroupMotionPreview();
+    Q_INVOKABLE bool updateGroupMotionPreviewPivot(double x, double y);
+    Q_INVOKABLE bool updateGroupMotionPreviewAngle(double angleDegrees);
     Q_INVOKABLE QVariantMap shapeInfo(int index) const;
     Q_INVOKABLE void removeShape(int index, bool bakePlacements = true);
     Q_INVOKABLE void copyShapeToAdjacent(int index, int direction);
@@ -481,6 +503,7 @@ signals:
     void historyChanged();
     void recoveryChanged();
     void diagnosticsChanged();
+    void groupMotionPreviewChanged();
     void performerCountChanged();
     void timingChanged();
     void shapesChanged();
@@ -518,6 +541,7 @@ private:
     double transitionDistance(int performerIndex, int destinationSet) const;
     double performerTotalDistance(int performerIndex) const;
     bool performerHasWarning(int performerIndex) const;
+    void detachPartiallyEditedShapes();
     void ensureAnalyticsCache() const;
     QPointF clampPosition(QPointF point) const;
     void ensurePlacements();
@@ -537,6 +561,8 @@ private:
                                   const QVector<int> &assignment) const;
     void invalidateClinic();
     QString issueLabelList(const QVector<int> &rows, int limit = 6) const;
+    int exactSelectedGroupIndex() const;
+    void invalidateGroupMotionsForSelection();
 
     struct FormationPreviewState {
         bool active = false;
@@ -558,6 +584,13 @@ private:
         int endMeasure = 0;
     };
 
+    struct GroupMotionPreviewState {
+        bool active = false;
+        QString warning;
+        MarchCraft::GroupTransition motion;
+        QHash<QString, MarchCraft::Placement> placements;
+    };
+
     QString m_showName{QStringLiteral("Untitled Show")};
     QString m_fieldPreset{QStringLiteral("hs")};
     QString m_audioSource;
@@ -566,6 +599,9 @@ private:
     QVariantList m_recoveryCandidates;
     QVariantList m_projectHistory;
     QVariantList m_diagnostics;
+    GroupMotionPreviewState m_groupMotionPreview;
+    QJsonObject m_transitionHandleBefore;
+    int m_transitionHandleRow = -1;
     double m_bpm = 120.0;
     double m_playhead = 0.0;
     bool m_playbackActive = false;

@@ -71,6 +71,7 @@ qt_add_qml_module(marchcraft
         qml/AppMenuItem.qml
         qml/WorkspaceLogic.qml
         qml/AppIcon.qml
+        qml/AuthoringActions.qml
         qml/ShapeIcon.qml
         qml/ProjectSetupPage.qml
 )

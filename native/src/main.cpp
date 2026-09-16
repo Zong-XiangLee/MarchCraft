@@ -66,10 +66,13 @@ int main(int argc, char *argv[])
     const bool qaHome = arguments.contains(QStringLiteral("--qa-home"));
     const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
     const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
+    const bool qaPathHandles = arguments.contains(QStringLiteral("--qa-path-handles"));
+    const bool qaGroupMotion = arguments.contains(QStringLiteral("--qa-group-motion"));
     const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
+        QStringLiteral("--qa-path-handles"), QStringLiteral("--qa-group-motion"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
         QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"),
@@ -84,6 +87,16 @@ int main(int argc, char *argv[])
         project.loadDemo();
     if (qaShapes)
         project.selectAll();
+    if (qaPathHandles || qaGroupMotion) {
+        project.newProject();
+        project.batchAddPerformers(QStringLiteral("P"), 5, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll(); project.distributeLine(42, 28, 90, 28); project.groupSelected();
+        project.addSet(QStringLiteral("Set 2"), 16); project.nudgeSelected(18, 20);
+        if (qaPathHandles)
+            project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(66, 20)});
+        else
+            project.previewGroupMotion(QStringLiteral("pivot"), 0, 66, 38, 72, true, false, 2);
+    }
     const int venueFlag = arguments.indexOf(QStringLiteral("--venue"));
     if (venueFlag >= 0 && venueFlag + 1 < arguments.size())
         project.setVenuePreset(arguments.at(venueFlag + 1));
@@ -137,6 +150,8 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
+    if ((qaPathHandles || qaGroupMotion) && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("activePerformer", 0);
     for (const auto &surface : {QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music")}) {
         if (arguments.contains(QStringLiteral("--qa-") + surface) && !engine.rootObjects().isEmpty()) {
             QObject *root = engine.rootObjects().first();
@@ -154,8 +169,10 @@ int main(int argc, char *argv[])
                 ? qBound(250, arguments.at(delayFlag + 1).toInt(), 10000) : 1800;
         QTimer::singleShot(screenshotDelay, &application, [&engine, destination] {
             if (!engine.rootObjects().isEmpty()) {
-                if (auto *window = qobject_cast<QQuickWindow *>(engine.rootObjects().first()))
+                QObject *root = engine.rootObjects().first();
+                if (auto *window = qobject_cast<QQuickWindow *>(root))
                     window->grabWindow().save(destination);
+                root->setProperty("forceClosing", true);
             }
             QCoreApplication::quit();
         });

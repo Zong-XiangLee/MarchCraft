@@ -125,15 +125,100 @@ private slots:
     void transitionTablesHonorDelayAndDegenerateSegments()
     {
         MarchCraft::Placement destination;
-        destination.position = {8, 0}; destination.pathType = QStringLiteral("delayed");
-        MarchCraft::TransitionPath delayed({}, destination);
+        destination.position = {8, 0}; destination.pathType = QStringLiteral("direct");
+        destination.stepOffCount = 2;
+        MarchCraft::TransitionPath delayed({}, destination, 8);
         QCOMPARE(delayed.position(0.25), QPointF(0, 0));
         QCOMPARE(delayed.position(0.625), QPointF(4, 0));
         QCOMPARE(delayed.distance(), 8.0);
         destination.pathType = QStringLiteral("follow"); destination.pathPoints = {{0, 0}, {4, 0}, {4, 0}};
-        MarchCraft::TransitionPath follow({}, destination);
+        destination.stepOffCount = 0;
+        MarchCraft::TransitionPath follow({}, destination, 8);
         QCOMPARE(follow.position(0.5), QPointF(4, 0));
         QCOMPARE(follow.position(1), QPointF(8, 0));
+
+        destination.pathType = QStringLiteral("curved"); destination.pathPoints = {{4, 8}};
+        destination.stepOffCount = 2;
+        MarchCraft::TransitionPath curved({}, destination, 8);
+        QCOMPARE(curved.position(0.25), QPointF(0, 0));
+        QVERIFY(curved.position(0.625).y() > 3.9);
+        QCOMPARE(curved.position(1), QPointF(8, 0));
+    }
+
+    void version10DelayedPathsMigrateToCountBasedStepOffs()
+    {
+        QTemporaryDir directory;
+        const QString initial = directory.filePath(QStringLiteral("initial.marchcraft"));
+        const QString legacy = directory.filePath(QStringLiteral("legacy-v10.marchcraft"));
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.addSet(QStringLiteral("Set 2"), 8);
+        QVERIFY(project.saveProject(initial));
+
+        QJsonObject document; QString error;
+        QVERIFY2(MarchCraft::ProjectStorage::readSqliteProject(initial, &document, &error), qPrintable(error));
+        document.insert(QStringLiteral("version"), 10);
+        const QString performerId = document.value(QStringLiteral("performers")).toArray().first().toObject()
+            .value(QStringLiteral("id")).toString();
+        auto sets = document.value(QStringLiteral("sets")).toArray();
+        auto set = sets[1].toObject(); auto variants = set.value(QStringLiteral("variants")).toArray();
+        auto variant = variants.first().toObject(); auto placements = variant.value(QStringLiteral("placements")).toObject();
+        auto placement = placements.value(performerId).toObject();
+        placement.insert(QStringLiteral("pathType"), QStringLiteral("delayed"));
+        placement.remove(QStringLiteral("stepOffCount")); placements.insert(performerId, placement);
+        variant.insert(QStringLiteral("placements"), placements); variants[0] = variant;
+        set.insert(QStringLiteral("variants"), variants); sets[1] = set; document.insert(QStringLiteral("sets"), sets);
+        QVERIFY2(MarchCraft::ProjectStorage::writeSqliteProject(legacy, document, &error), qPrintable(error));
+
+        DrillProject restored; QVERIFY(restored.loadProject(legacy));
+        QCOMPARE(restored.transitionPathInfo(0).value(QStringLiteral("type")).toString(), QStringLiteral("direct"));
+        QCOMPARE(restored.performerInfo(0).value(QStringLiteral("stepOffCount")).toInt(), 2);
+        restored.setCurrentSetCounts(4);
+        restored.selectAll();
+        restored.setSelectedStepOffCount(99);
+        QCOMPARE(restored.performerInfo(0).value(QStringLiteral("stepOffCount")).toInt(), 3);
+        restored.setCurrentSetCounts(2);
+        QCOMPARE(restored.performerInfo(0).value(QStringLiteral("stepOffCount")).toInt(), 1);
+    }
+
+    void version11PersistsStepOffsAndGroupMotionMetadata()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("v11.marchcraft"));
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("G"), 3, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll(); project.distributeLine(20, 20, 40, 20); project.groupSelected();
+        project.addSet(QStringLiteral("Set 2"), 8);
+        project.nudgeSelected(40, 0);
+        QVERIFY(project.previewGroupMotion(QStringLiteral("follow"), 0, 0, 0, 0, true, false, 2));
+        QVERIFY(project.applyGroupMotionPreview());
+        QVERIFY(project.saveProject(path));
+
+        QJsonObject document; QString error;
+        QVERIFY2(MarchCraft::ProjectStorage::readSqliteProject(path, &document, &error), qPrintable(error));
+        QCOMPARE(document.value(QStringLiteral("version")).toInt(), 11);
+        const auto variants = document.value(QStringLiteral("sets")).toArray()[1].toObject()
+            .value(QStringLiteral("variants")).toArray();
+        const auto variant = variants.first().toObject();
+        const auto motions = variant.value(QStringLiteral("groupTransitions")).toArray();
+        QCOMPARE(motions.size(), 1);
+        QCOMPARE(motions.first().toObject().value(QStringLiteral("type")).toString(), QStringLiteral("follow"));
+        QCOMPARE(motions.first().toObject().value(QStringLiteral("memberOrder")).toArray().size(), 3);
+        const auto placements = variant.value(QStringLiteral("placements")).toObject();
+        QSet<int> delays;
+        for (auto it = placements.begin(); it != placements.end(); ++it)
+            delays.insert(it.value().toObject().value(QStringLiteral("stepOffCount")).toInt());
+        QCOMPARE(delays, QSet<int>({0, 2, 4}));
+
+        DrillProject restored; QVERIFY(restored.loadProject(path));
+        QCOMPARE(restored.performerInfo(1).value(QStringLiteral("pathType")).toString(), QStringLiteral("follow"));
+        restored.selectPerformerMode(1, 1);
+        restored.nudgeSelected(1, 0);
+        QVERIFY(restored.saveProject(path));
+        QVERIFY2(MarchCraft::ProjectStorage::readSqliteProject(path, &document, &error), qPrintable(error));
+        const auto editedVariant = document.value(QStringLiteral("sets")).toArray()[1].toObject()
+            .value(QStringLiteral("variants")).toArray().first().toObject();
+        QCOMPARE(editedVariant.value(QStringLiteral("groupTransitions")).toArray().size(), 0);
     }
 
     void asynchronousResultsDoNotCrossProjectBoundaries()
@@ -571,6 +656,123 @@ private slots:
         const double curved = project.data(project.index(0, 0), DrillProject::SetDistanceRole).toDouble();
         QVERIFY(curved > direct);
         QCOMPARE(project.transitionPathSamples(0, 12).size(), 13);
+    }
+
+    void pathHandleDragSnapsClampsAndCreatesOneUndoEntry()
+    {
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("P"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8); project.nudgeSelected(20, 10);
+        project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(30, 25)});
+        const QPointF original = project.transitionPathInfo(0).value(QStringLiteral("controlPoints")).toList().first().toPointF();
+
+        project.beginTransitionHandleEdit(0);
+        project.previewTransitionHandle(0, 12.4, -999, true);
+        project.previewTransitionHandle(0, 13.6, -999, true);
+        project.endTransitionHandleEdit();
+        QPointF edited = project.transitionPathInfo(0).value(QStringLiteral("controlPoints")).toList().first().toPointF();
+        QCOMPARE(edited, QPointF(14, project.canvasMinY()));
+        project.undo();
+        QCOMPARE(project.transitionPathInfo(0).value(QStringLiteral("controlPoints")).toList().first().toPointF(), original);
+        project.redo();
+        QCOMPARE(project.transitionPathInfo(0).value(QStringLiteral("controlPoints")).toList().first().toPointF(), edited);
+
+        project.beginTransitionHandleEdit(0);
+        project.previewTransitionHandle(0, 12.4, 24.6, false);
+        project.endTransitionHandleEdit();
+        edited = project.transitionPathInfo(0).value(QStringLiteral("controlPoints")).toList().first().toPointF();
+        QVERIFY(closeTo(edited.x(), 12.4));
+        QVERIFY(closeTo(edited.y(), 24.6));
+    }
+
+    void gateAndPivotPreviewApplyCancelAndUndo()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("G"), 3, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll(); project.distributeLine(20, 20, 40, 20); project.groupSelected();
+        project.addSet(QStringLiteral("Set 2"), 8);
+
+        QVERIFY(project.previewGroupMotion(QStringLiteral("gate"), 0, 0, 0, 90, true, false, 1));
+        QVERIFY(project.groupMotionPreviewActive());
+        const auto clockwise = project.groupMotionPreviewPoints();
+        auto pointForRow = [](const QVariantList &points, int row) {
+            for (const auto &value : points) {
+                const auto point = value.toMap();
+                if (point.value(QStringLiteral("row")).toInt() == row)
+                    return QPointF(point.value(QStringLiteral("x")).toDouble(), point.value(QStringLiteral("y")).toDouble());
+            }
+            return QPointF{};
+        };
+        QCOMPARE(pointForRow(clockwise, 0), QPointF(20, 20));
+        QVERIFY(closeTo(QLineF(QPointF(20, 20), pointForRow(clockwise, 1)).length(), 10.0));
+        QVERIFY(pointForRow(clockwise, 1).y() > 20.0);
+        QCOMPARE(project.data(project.index(1, 0), DrillProject::YRole).toDouble(), 20.0); // Preview is non-mutating.
+
+        QVERIFY(project.previewGroupMotion(QStringLiteral("gate"), 0, 0, 0, 90, false, false, 1));
+        QVERIFY(pointForRow(project.groupMotionPreviewPoints(), 1).y() < 20.0);
+        project.cancelGroupMotionPreview();
+        QVERIFY(!project.groupMotionPreviewActive());
+        QCOMPARE(project.data(project.index(1, 0), DrillProject::YRole).toDouble(), 20.0);
+
+        QVERIFY(project.previewGroupMotion(QStringLiteral("pivot"), 0, 30, 30, 180, true, false, 1));
+        QCOMPARE(project.groupMotionPreviewInfo().value(QStringLiteral("pivotX")).toDouble(), 30.0);
+        QVERIFY(project.updateGroupMotionPreviewPivot(35, 30));
+        QCOMPARE(project.groupMotionPreviewInfo().value(QStringLiteral("pivotX")).toDouble(), 35.0);
+        QVERIFY(project.applyGroupMotionPreview());
+        const double appliedX = project.data(project.index(0, 0), DrillProject::XRole).toDouble();
+        QVERIFY(!closeTo(appliedX, 20.0));
+        project.undo();
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 20.0);
+    }
+
+    void followOrderingSpacingDelayAndInsufficientRouteDiagnostics()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("F"), 3, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll(); project.distributeLine(20, 40, 40, 40); project.groupSelected();
+        project.addSet(QStringLiteral("Set 2"), 8); project.nudgeSelected(60, 0);
+        QVERIFY(project.previewGroupMotion(QStringLiteral("follow"), 0, 0, 0, 0, true, false, 2));
+        auto xForRow = [&project](int row) {
+            for (const auto &value : project.groupMotionPreviewPoints()) {
+                const auto point = value.toMap();
+                if (point.value(QStringLiteral("row")).toInt() == row) return point.value(QStringLiteral("x")).toDouble();
+            }
+            return 0.0;
+        };
+        QVERIFY(xForRow(0) > xForRow(1));
+        QVERIFY(xForRow(1) > xForRow(2));
+        QVERIFY(project.applyGroupMotionPreview());
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("stepOffCount")).toInt(), 0);
+        QCOMPARE(project.performerInfo(1).value(QStringLiteral("stepOffCount")).toInt(), 2);
+        QCOMPARE(project.performerInfo(2).value(QStringLiteral("stepOffCount")).toInt(), 4);
+
+        project.undo();
+        project.selectAll();
+        project.nudgeSelected(-60, 0);
+        QVERIFY(project.previewGroupMotion(QStringLiteral("follow"), 0, 0, 0, 0, true, true, 6));
+        QVERIFY(!project.groupMotionPreviewWarning().isEmpty());
+    }
+
+    void arbitrarySelectionScaleRotateAndPartialShapeDetach()
+    {
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("S"), 4, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll(); project.createFormation(QStringLiteral("line"), {{QStringLiteral("centerX"), 50.0},
+            {QStringLiteral("centerY"), 30.0}, {QStringLiteral("width"), 30.0}});
+        project.groupSelected();
+        project.clearSelection(); project.selectPerformerMode(0, 1); project.selectPerformerMode(1, 1);
+        const double beforeDistance = QLineF(
+            QPointF(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), project.data(project.index(0, 0), DrillProject::YRole).toDouble()),
+            QPointF(project.data(project.index(1, 0), DrillProject::XRole).toDouble(), project.data(project.index(1, 0), DrillProject::YRole).toDouble())).length();
+        project.beginScale(); project.previewScale(2.0); project.endScale();
+        const double afterDistance = QLineF(
+            QPointF(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), project.data(project.index(0, 0), DrillProject::YRole).toDouble()),
+            QPointF(project.data(project.index(1, 0), DrillProject::XRole).toDouble(), project.data(project.index(1, 0), DrillProject::YRole).toDouble())).length();
+        QVERIFY(afterDistance > beforeDistance * 1.9);
+        QCOMPARE(project.shapeInfo(0).value(QStringLiteral("memberCount")).toInt(), 2);
+        QCOMPARE(project.performerGroupInfo(0).value(QStringLiteral("size")).toInt(), 4);
+        project.beginRotate(); project.previewRotate(90); project.endRotate();
+        QVERIFY(project.canUndo());
     }
 
     void closedShapesNeverDuplicateEndpoints()

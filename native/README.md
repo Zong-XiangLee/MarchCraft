@@ -28,6 +28,8 @@ Apply action before project data changes.
 - Audience-perspective coordinates: Side 1 is left, Side 2 is right, front is the near/bottom side of the editor, and back is the far/top side
 - Roster, section, label, uniform-color, and instrument assignments
 - Set/subset timeline, variant-local performer groups, single-transition and whole-show playback, paths, formations, snapping, axis locking, and undo/redo
+- Project format 11 adds count-based step-offs and persistent gate, pivot, and follow metadata. Version-10 delayed paths open as direct paths with a 25%-of-transition step-off and save back without losing their timing.
+- Curves have draggable field control points. Exact persistent groups can preview rigid gates, field-pivot rotations, and ordered follow routes before one undoable Apply.
 - Adaptive equal-distance spirals with half-step turns and direction controls, plus optional shape-created groups
 - Persisted colored-symbol, compact-dot, and black-dot marker presets with adjustable sizing
 - Constant-speed arc-length playback with uninterrupted whole-show timing
@@ -61,16 +63,19 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, `--qa-shapes` for the editor shape palette, `--qa-path-handles` for curve controls, or `--qa-group-motion` for a pivot preview. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
 
 ## Controls
 
 - Double-click an empty field location to add a performer.
-- Click a grouped performer to select its group; Ctrl-click targets an individual member.
-- Click or right-click a grouped performer to select its full group. The context menu offers Group, Remove from group, and Ungroup only when their selection requirements are satisfied.
+- Plain-click a grouped performer to select its group. Ctrl-click toggles one performer, and Shift-click adds a group on the field or extends a roster range.
+- Marquee and lasso selections replace the selection unless Shift or Ctrl is held. The context menu offers Group, Remove from group, and Ungroup only when their selection requirements are satisfied.
 - Right-click roster entries for the same group controls, or right-click set cards to copy, insert, archive, and edit sets. Unavailable commands remain visible in a muted disabled state.
-- Drag selected performers; hold Shift to lock vertical movement or Control to lock horizontal movement.
-- Arrow keys move the selection by a quarter-step.
+- Drag selected performers; hold Shift to constrain movement to the dominant axis, or Alt to temporarily bypass grid snapping.
+- Every multi-selection has a uniform corner scale box and rotation handle. Editing only part of a persistent shape detaches those members from the shape guide without removing them from their performer group.
+- Curved paths expose one cyan quadratic handle. Group gate/pivot previews expose a pivot marker and angle handle; follow uses the active performer as leader and can reverse the remaining order.
+- Set a single delayed start or an ordered group stagger in the inspector. Delays are integer counts and are clamped to `0…transition counts - 1`; path geometry remains unchanged.
+- Arrow keys move the selection by a quarter-step; Shift+Arrow moves one step. Space toggles playback, Page Up/Down changes sets, Ctrl+G groups, Ctrl+Shift+G ungroups, and Ctrl+D duplicates the current set. Editing shortcuts are disabled while typing text.
 - Use **Shape** to distribute selected performers on the full formation library; enable **Create as group** when desired.
 - Select an entire persistent shape to reveal corner resize handles and the rotation handle; resizing preserves the shape and performer spacing.
 - Use **Freehand**, choose cleanup and movement behavior, then draw directly on the field. Straight strokes and circles can be recognized automatically; handwriting is smoothed while retaining its form.

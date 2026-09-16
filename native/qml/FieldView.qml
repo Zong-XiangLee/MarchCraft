@@ -10,11 +10,13 @@ Item {
     property bool snapEnabled: true
     property real gridSize: 1.0
     property string hoverCoordinate: ""
-    property bool spaceHeld: false
     property bool drawMode: false
     property string shapeDrawMode: ""
+    property int activePerformer: -1
     property var selectionBounds: drillProject.selectedBounds()
     property int selectedShapeIndex: drillProject.selectedShapeIndex()
+    property var activePathInfo: activePerformer >= 0 ? drillProject.transitionPathInfo(activePerformer) : ({})
+    property var groupMotionInfo: drillProject.groupMotionPreviewInfo
     signal performerActivated(int row)
     signal contextMenuRequested(real screenX, real screenY, int performerRow)
     signal freehandCompleted(var points)
@@ -44,16 +46,6 @@ Item {
             root.shapeDrawingCanceled()
             event.accepted = true
             return
-        }
-        if (event.key === Qt.Key_Space) {
-            root.spaceHeld = true
-            event.accepted = true
-        }
-    }
-    Keys.onReleased: function(event) {
-        if (event.key === Qt.Key_Space) {
-            root.spaceHeld = false
-            event.accepted = true
         }
     }
 
@@ -400,7 +392,7 @@ Item {
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 z: 0
-                enabled: !root.spaceHeld
+                enabled: true
                 property bool selecting: false
                 property bool lasso: false
                 property point startPoint: Qt.point(0, 0)
@@ -474,7 +466,7 @@ Item {
                     if (Math.hypot(dx, dy) < 4) {
                         if (!additive) drillProject.clearSelection()
                     } else if (lasso && lassoPoints.length >= 3) {
-                        drillProject.selectInPolygon(lassoPoints, true)
+                        drillProject.selectInPolygon(lassoPoints, additive)
                     } else {
                         drillProject.selectInRect(root.toFieldX(startPoint.x), root.toFieldY(startPoint.y),
                                                   root.toFieldX(currentPoint.x), root.toFieldY(currentPoint.y),
@@ -603,7 +595,7 @@ Item {
 
             Rectangle {
                 id: selectionBox; z: 5; color: "transparent"; border.color: "#fbbf24"; border.width: 1
-                visible: root.shapeDrawMode.length === 0 && !root.drawMode && root.selectedShapeIndex >= 0 && Object.keys(root.selectionBounds).length > 0
+                visible: root.shapeDrawMode.length === 0 && !root.drawMode && drillProject.selectedCount > 1 && Object.keys(root.selectionBounds).length > 0
                 x: root.toCanvasX(root.selectionBounds.left || 0) - 7
                 y: root.toCanvasY(root.selectionBounds.bottom || 0) - 7
                 width: (root.selectionBounds.right - root.selectionBounds.left) * field.sx + 14
@@ -648,6 +640,93 @@ Item {
                             onPositionChanged: function(mouse) { if(!pressed)return;const p=mapToItem(field,mouse.x,mouse.y);const radius=Math.hypot(root.toFieldX(p.x)-startCenterX,root.toFieldY(p.y)-startCenterY);drillProject.previewScale(radius/startRadius) }
                             onReleased: drillProject.endScale(); onCanceled: drillProject.endScale()
                         }
+                    }
+                }
+            }
+
+            Repeater {
+                id: pathHandleRepeater
+                model: root.activePerformer >= 0 && drillProject.currentSetIndex > 0 && root.activePathInfo.controlPoints
+                    ? root.activePathInfo.controlPoints : []
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
+                    z: 7; width: 18; height: 18; radius: 9
+                    x: root.toCanvasX(modelData.x) - width / 2
+                    y: root.toCanvasY(modelData.y) - height / 2
+                    color: "#17251f"; border.color: "#67e8f9"; border.width: 2
+                    Text { anchors.centerIn: parent; text: index + 1; color: "#d9fffa"; font.pixelSize: 9; font.bold: true }
+                    MouseArea {
+                        anchors.fill: parent; cursorShape: Qt.CrossCursor; preventStealing: true
+                        onPressed: drillProject.beginTransitionHandleEdit(root.activePerformer)
+                        onPositionChanged: function(mouse) {
+                            if (!pressed) return
+                            const p = mapToItem(field, mouse.x, mouse.y)
+                            drillProject.previewTransitionHandle(index, root.toFieldX(p.x), root.toFieldY(p.y),
+                                                                 (mouse.modifiers & Qt.AltModifier) === 0)
+                        }
+                        onReleased: drillProject.endTransitionHandleEdit()
+                        onCanceled: drillProject.endTransitionHandleEdit()
+                    }
+                }
+            }
+
+            Repeater {
+                model: drillProject.groupMotionPreviewActive ? drillProject.groupMotionPreviewPoints : []
+                delegate: Rectangle {
+                    required property var modelData
+                    z: 6; width: 16; height: 16; radius: 8
+                    x: root.toCanvasX(modelData.x) - width / 2
+                    y: root.toCanvasY(modelData.y) - height / 2
+                    color: "#665b8def"; border.color: "#a5b4fc"; border.width: 2
+                }
+            }
+
+            Rectangle {
+                id: groupPivotHandle
+                readonly property bool isPivot: root.groupMotionInfo.type === "pivot"
+                visible: drillProject.groupMotionPreviewActive
+                         && (root.groupMotionInfo.type === "gate" || isPivot)
+                z: 8; width: 22; height: 22; radius: 3
+                x: root.toCanvasX(Number(root.groupMotionInfo.pivotX || 0)) - width / 2
+                y: root.toCanvasY(Number(root.groupMotionInfo.pivotY || 0)) - height / 2
+                color: isPivot ? "#7c3aed" : "#334155"
+                border.color: "#fbbf24"; border.width: 2
+                Text { anchors.centerIn: parent; text: "P"; color: "white"; font.bold: true }
+                MouseArea {
+                    anchors.fill: parent; enabled: groupPivotHandle.isPivot
+                    cursorShape: enabled ? Qt.CrossCursor : Qt.ArrowCursor; preventStealing: true
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const p = mapToItem(field, mouse.x, mouse.y)
+                        drillProject.updateGroupMotionPreviewPivot(root.toFieldX(p.x), root.toFieldY(p.y))
+                    }
+                }
+            }
+
+            Rectangle {
+                id: groupAngleHandle
+                readonly property real signedAngle: (root.groupMotionInfo.clockwise ? 1 : -1)
+                                                    * Number(root.groupMotionInfo.angleDegrees || 0)
+                visible: groupPivotHandle.visible
+                z: 8; width: 18; height: 18; radius: 9
+                x: root.toCanvasX(Number(root.groupMotionInfo.pivotX || 0) + 10 * Math.cos(signedAngle * Math.PI / 180)) - width / 2
+                y: root.toCanvasY(Number(root.groupMotionInfo.pivotY || 0) + 10 * Math.sin(signedAngle * Math.PI / 180)) - height / 2
+                color: "#fbbf24"; border.color: "#07110d"; border.width: 2
+                ToolTip.visible: angleMouse.containsMouse
+                ToolTip.text: "Drag to change rotation angle"
+                MouseArea {
+                    id: angleMouse
+                    anchors.fill: parent; hoverEnabled: true; cursorShape: Qt.CrossCursor; preventStealing: true
+                    onPositionChanged: function(mouse) {
+                        if (!pressed) return
+                        const p = mapToItem(field, mouse.x, mouse.y)
+                        const dx = root.toFieldX(p.x) - Number(root.groupMotionInfo.pivotX || 0)
+                        const dy = root.toFieldY(p.y) - Number(root.groupMotionInfo.pivotY || 0)
+                        let degrees = Math.atan2(dy, dx) * 180 / Math.PI
+                        if (degrees < 0) degrees += 360
+                        if (!root.groupMotionInfo.clockwise) degrees = (360 - degrees) % 360
+                        drillProject.updateGroupMotionPreviewAngle(degrees)
                     }
                 }
             }
@@ -778,10 +857,11 @@ Item {
                         anchors.fill: parent
                         acceptedButtons: Qt.LeftButton | Qt.RightButton
                         hoverEnabled: true
-                        enabled: !root.spaceHeld && !marcher.performerLocked && !root.drawMode && root.shapeDrawMode.length === 0
+                        enabled: !marcher.performerLocked && !root.drawMode && root.shapeDrawMode.length === 0
                         preventStealing: true
                         property point pressField
                         property point startPosition
+                        property bool selectionOnly: false
                         onPressed: {
                             if (mouse.button === Qt.RightButton) {
                                 const group = drillProject.performerGroupInfo(marcher.index)
@@ -794,27 +874,43 @@ Item {
                                 return
                             }
                             drillProject.playbackActive = false
+                            selectionOnly = false
+                            const ctrl = (mouse.modifiers & Qt.ControlModifier) !== 0
+                            const shift = (mouse.modifiers & Qt.ShiftModifier) !== 0
+                            if (ctrl) {
+                                drillProject.selectPerformerMode(marcher.index, 1)
+                                root.performerActivated(marcher.index)
+                                selectionOnly = true
+                                return
+                            }
+                            if (shift && !marcher.isSelected) {
+                                const group = drillProject.performerGroupInfo(marcher.index)
+                                if (Object.keys(group).length > 0) drillProject.selectGroupForPerformer(marcher.index, true)
+                                else drillProject.selectPerformerMode(marcher.index, 2)
+                            }
                             const p = mapToItem(field, mouse.x, mouse.y)
                             pressField = Qt.point(root.toFieldX(p.x), root.toFieldY(p.y))
                             startPosition = Qt.point(marcher.fieldX, marcher.fieldY)
-                            drillProject.beginMove(marcher.index, (mouse.modifiers & Qt.ShiftModifier) !== 0)
+                            drillProject.beginMove(marcher.index, false)
                             root.performerActivated(marcher.index)
                         }
                         onPositionChanged: {
-                            if (!pressed) return
+                            if (!pressed || selectionOnly) return
                             const p = mapToItem(field, mouse.x, mouse.y)
                             let dx = root.toFieldX(p.x) - pressField.x
                             let dy = root.toFieldY(p.y) - pressField.y
-                            if (root.snapEnabled) {
+                            if (root.snapEnabled && (mouse.modifiers & Qt.AltModifier) === 0) {
                                 dx = Math.round((startPosition.x + dx) / root.gridSize) * root.gridSize - startPosition.x
                                 dy = Math.round((startPosition.y + dy) / root.gridSize) * root.gridSize - startPosition.y
                             }
-                            drillProject.previewMove(dx, dy,
-                                                     (mouse.modifiers & Qt.ShiftModifier) !== 0,
-                                                     (mouse.modifiers & Qt.ControlModifier) !== 0)
+                            if (mouse.modifiers & Qt.ShiftModifier) {
+                                if (Math.abs(dx) >= Math.abs(dy)) dy = 0
+                                else dx = 0
+                            }
+                            drillProject.previewMove(dx, dy, false, false)
                         }
-                        onReleased: drillProject.endMove()
-                        onCanceled: drillProject.endMove()
+                        onReleased: if (!selectionOnly) drillProject.endMove()
+                        onCanceled: if (!selectionOnly) drillProject.endMove()
                     }
                 }
             }
@@ -859,7 +955,7 @@ Item {
         // present. No mouse buttons are accepted, so performer clicks and
         // drags continue to reach the controls underneath it.
         anchors.fill: viewport
-        acceptedButtons: root.spaceHeld ? (Qt.LeftButton | Qt.MiddleButton) : Qt.MiddleButton
+        acceptedButtons: Qt.MiddleButton
         z: 10
         property point panStart
         property real startContentX: 0
@@ -882,5 +978,6 @@ Item {
             event.accepted = true
         }
     }
-    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds();root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
+    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds();root.selectedShapeIndex=drillProject.selectedShapeIndex();root.activePathInfo=root.activePerformer>=0?drillProject.transitionPathInfo(root.activePerformer):({})} function onSelectionChanged(){refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} function onCurrentSetChanged(){refreshSelection()} function onGroupMotionPreviewChanged(){root.groupMotionInfo=drillProject.groupMotionPreviewInfo;geometryCanvas.requestPaint()} }
+    onActivePerformerChanged: activePathInfo = activePerformer >= 0 ? drillProject.transitionPathInfo(activePerformer) : ({})
 }

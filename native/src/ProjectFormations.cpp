@@ -721,7 +721,7 @@ void DrillProject::setSelectedTransitionPath(const QString &type, const QVariant
 {
     if (m_currentSet <= 0 || selectedCount() == 0) return;
     static const QSet<QString> supported{QStringLiteral("direct"), QStringLiteral("curved"),
-        QStringLiteral("follow"), QStringLiteral("gate"), QStringLiteral("pivot"), QStringLiteral("delayed")};
+        QStringLiteral("follow"), QStringLiteral("gate"), QStringLiteral("pivot")};
     const QString actual = supported.contains(type) ? type : QStringLiteral("direct");
     QVector<QPointF> points;
     for (const auto &value : controlPoints) {
@@ -729,6 +729,7 @@ void DrillProject::setSelectedTransitionPath(const QString &type, const QVariant
         if (!point.isNull() || value.canConvert<QPointF>()) points.push_back(clampPosition(point));
     }
     const auto before = toJson();
+    invalidateGroupMotionsForSelection();
     for (const auto &person : m_performers) if (person.selected) {
         auto &placement = m_sets[m_currentSet].activeVariant().placements[person.id];
         placement.pathType = actual; placement.pathPoints = points;
@@ -739,6 +740,264 @@ void DrillProject::setSelectedTransitionPath(const QString &type, const QVariant
         }
     }
     emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Edit transition path"));
+}
+
+int DrillProject::exactSelectedGroupIndex() const
+{
+    if (m_currentSet < 0) return -1;
+    QSet<QString> selected;
+    for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
+    if (selected.size() < 2) return -1;
+    const auto &groups = m_sets[m_currentSet].activeVariant().groups;
+    for (int index = 0; index < groups.size(); ++index) {
+        if (groups[index].performerIds.size() != selected.size()) continue;
+        bool exact = true;
+        for (const auto &id : groups[index].performerIds) exact = exact && selected.contains(id);
+        if (exact) return index;
+    }
+    return -1;
+}
+
+void DrillProject::invalidateGroupMotionsForSelection()
+{
+    if (m_currentSet <= 0) return;
+    QSet<QString> selected;
+    for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    QSet<QString> affectedGroups;
+    for (const auto &group : variant.groups)
+        for (const auto &id : group.performerIds) if (selected.contains(id)) { affectedGroups.insert(group.id); break; }
+    variant.groupTransitions.erase(std::remove_if(variant.groupTransitions.begin(), variant.groupTransitions.end(),
+        [&](const auto &motion) { return affectedGroups.contains(motion.groupId); }), variant.groupTransitions.end());
+}
+
+QVariantMap DrillProject::transitionPathInfo(int performerRow) const
+{
+    if (performerRow < 0 || performerRow >= m_performers.size() || m_currentSet <= 0) return {};
+    const auto placement = placementAt(performerRow, m_currentSet);
+    QVariantList points;
+    if (placement.pathType == QStringLiteral("curved")) {
+        if (!placement.pathPoints.isEmpty()) points.push_back(placement.pathPoints.first());
+    } else if (placement.pathType == QStringLiteral("follow")) {
+        const auto &variant = m_sets[m_currentSet].activeVariant();
+        bool sharedLeaderPath = false;
+        for (const auto &motion : variant.groupTransitions) {
+            if (motion.type != QStringLiteral("follow") || motion.leaderId != m_performers[performerRow].id) continue;
+            for (const auto &point : motion.leaderPathPoints) points.push_back(point);
+            sharedLeaderPath = true;
+            break;
+        }
+        if (!sharedLeaderPath)
+            for (const auto &point : placement.pathPoints) points.push_back(point);
+    }
+    return {{QStringLiteral("type"), placement.pathType}, {QStringLiteral("controlPoints"), points},
+            {QStringLiteral("stepOffCount"), placement.stepOffCount},
+            {QStringLiteral("transitionCounts"), m_sets[m_currentSet].counts}};
+}
+
+void DrillProject::beginTransitionHandleEdit(int performerRow)
+{
+    if (performerRow < 0 || performerRow >= m_performers.size() || m_currentSet <= 0) return;
+    m_transitionHandleBefore = toJson();
+    m_transitionHandleRow = performerRow;
+}
+
+void DrillProject::previewTransitionHandle(int handleIndex, double x, double y, bool snap)
+{
+    if (m_transitionHandleRow < 0 || m_transitionHandleBefore.isEmpty() || m_currentSet <= 0) return;
+    QPointF point{x, y};
+    if (snap && m_fieldGridInterval > 0.0)
+        point = {std::round(point.x() / m_fieldGridInterval) * m_fieldGridInterval,
+                 std::round(point.y() / m_fieldGridInterval) * m_fieldGridInterval};
+    point = clampPosition(point);
+    auto &placement = m_sets[m_currentSet].activeVariant().placements[m_performers[m_transitionHandleRow].id];
+    if (handleIndex < 0) return;
+    while (placement.pathPoints.size() <= handleIndex) placement.pathPoints.push_back(point);
+    placement.pathPoints[handleIndex] = point;
+    m_transitionPaths.clear(); m_analyticsValid = false;
+    emitAllDataChanged(); emit statisticsChanged();
+}
+
+void DrillProject::endTransitionHandleEdit()
+{
+    if (m_transitionHandleBefore.isEmpty()) return;
+    invalidateGroupMotionsForSelection();
+    commitSnapshot(m_transitionHandleBefore, QStringLiteral("Edit path handle"));
+    m_transitionHandleBefore = {}; m_transitionHandleRow = -1;
+}
+
+void DrillProject::setSelectedStepOffCount(int count)
+{
+    if (m_currentSet <= 0 || selectedCount() == 0) return;
+    const auto before = toJson();
+    invalidateGroupMotionsForSelection();
+    count = qBound(0, count, qMax(0, m_sets[m_currentSet].counts - 1));
+    for (const auto &performer : m_performers) if (performer.selected)
+        m_sets[m_currentSet].activeVariant().placements[performer.id].stepOffCount = count;
+    emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Set step-off count"));
+}
+
+void DrillProject::staggerSelectedStepOffs(int startCount, int interval, bool reverse)
+{
+    if (m_currentSet <= 0 || selectedCount() == 0) return;
+    QVector<QString> ids;
+    const int groupIndex = exactSelectedGroupIndex();
+    if (groupIndex >= 0) ids = m_sets[m_currentSet].activeVariant().groups[groupIndex].performerIds;
+    else for (const auto &performer : m_performers) if (performer.selected) ids.push_back(performer.id);
+    if (reverse) std::reverse(ids.begin(), ids.end());
+    const auto before = toJson();
+    invalidateGroupMotionsForSelection();
+    const int maximum = qMax(0, m_sets[m_currentSet].counts - 1);
+    for (int index = 0; index < ids.size(); ++index)
+        m_sets[m_currentSet].activeVariant().placements[ids[index]].stepOffCount =
+            qBound(0, startCount + index * qMax(0, interval), maximum);
+    emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Stagger step-offs"));
+}
+
+QVariantList DrillProject::groupMotionPreviewPoints() const
+{
+    QVariantList result;
+    for (auto it = m_groupMotionPreview.placements.cbegin(); it != m_groupMotionPreview.placements.cend(); ++it) {
+        int row = -1;
+        for (int index = 0; index < m_performers.size(); ++index)
+            if (m_performers[index].id == it.key()) { row = index; break; }
+        result.push_back(QVariantMap{{QStringLiteral("performerId"), it.key()}, {QStringLiteral("row"), row},
+            {QStringLiteral("x"), it.value().position.x()}, {QStringLiteral("y"), it.value().position.y()}});
+    }
+    return result;
+}
+
+QVariantMap DrillProject::groupMotionPreviewInfo() const
+{
+    if (!m_groupMotionPreview.active) return {};
+    const auto &motion = m_groupMotionPreview.motion;
+    QVariantList memberOrder;
+    for (const auto &id : motion.memberOrder) memberOrder.push_back(id);
+    return {{QStringLiteral("type"), motion.type}, {QStringLiteral("pivotX"), motion.pivot.x()},
+            {QStringLiteral("pivotY"), motion.pivot.y()}, {QStringLiteral("angleDegrees"), motion.angleDegrees},
+            {QStringLiteral("clockwise"), motion.clockwise}, {QStringLiteral("reversed"), motion.reversed},
+            {QStringLiteral("leaderId"), motion.leaderId},
+            {QStringLiteral("pivotPerformerId"), motion.pivotPerformerId},
+            {QStringLiteral("memberOrder"), memberOrder}};
+}
+
+bool DrillProject::previewGroupMotion(const QString &type, int leaderOrPivotRow,
+                                      double pivotX, double pivotY, double angleDegrees,
+                                      bool clockwise, bool reversed, int stepIntervalCounts)
+{
+    cancelGroupMotionPreview();
+    if (m_currentSet <= 0 || leaderOrPivotRow < 0 || leaderOrPivotRow >= m_performers.size()) return false;
+    const int groupIndex = exactSelectedGroupIndex();
+    if (groupIndex < 0) { setStatus(QStringLiteral("Select one complete persistent group")); return false; }
+    if (type != QStringLiteral("gate") && type != QStringLiteral("pivot") && type != QStringLiteral("follow")) return false;
+    const auto &group = m_sets[m_currentSet].activeVariant().groups[groupIndex];
+    if (!group.performerIds.contains(m_performers[leaderOrPivotRow].id)) return false;
+    auto &preview = m_groupMotionPreview;
+    preview.active = true; preview.motion.groupId = group.id; preview.motion.type = type;
+    preview.motion.clockwise = clockwise; preview.motion.reversed = reversed;
+    preview.motion.angleDegrees = qBound(0.0, std::abs(angleDegrees), 360.0);
+    preview.motion.stepIntervalCounts = qMax(0, stepIntervalCounts);
+    preview.motion.pivot = clampPosition({pivotX, pivotY});
+    const QString chosenId = m_performers[leaderOrPivotRow].id;
+    const int counts = m_sets[m_currentSet].counts;
+    const auto &sourceVariant = m_sets[m_currentSet - 1].activeVariant();
+    preview.motion.memberOrder = group.performerIds;
+    if (type == QStringLiteral("gate") || type == QStringLiteral("pivot")) {
+        preview.motion.pivotPerformerId = chosenId;
+        if (type == QStringLiteral("gate")) preview.motion.pivot = sourceVariant.placements.value(chosenId).position;
+        const double signedAngle = (clockwise ? 1.0 : -1.0) * preview.motion.angleDegrees;
+        for (const auto &id : group.performerIds) {
+            const QPointF source = sourceVariant.placements.value(id).position;
+            Placement placement = m_sets[m_currentSet].activeVariant().placements.value(id);
+            placement.pathType = type; placement.pathPoints.clear(); placement.stepOffCount = 0;
+            for (int sample = 1; sample < 16; ++sample)
+                placement.pathPoints.push_back(clampPosition(rotateAround(source, preview.motion.pivot, signedAngle * sample / 16.0)));
+            placement.position = clampPosition(rotateAround(source, preview.motion.pivot, signedAngle));
+            preview.placements.insert(id, placement);
+        }
+    } else {
+        preview.motion.leaderId = chosenId;
+        QVector<QString> order{chosenId};
+        for (const auto &id : group.performerIds) if (id != chosenId) order.push_back(id);
+        if (reversed && order.size() > 2) std::reverse(order.begin() + 1, order.end());
+        preview.motion.memberOrder = order;
+        const QPointF start = sourceVariant.placements.value(chosenId).position;
+        const QPointF end = m_sets[m_currentSet].activeVariant().placements.value(chosenId).position;
+        QPointF delta = end - start; const double length = qMax(0.01, pointDistance(start, end));
+        const QPointF control = clampPosition((start + end) / 2.0 + QPointF(-delta.y(), delta.x()) * (8.0 / length));
+        preview.motion.leaderPathPoints = {control};
+        QVector<QPointF> route; QVector<double> cumulative{0.0};
+        for (int sample = 0; sample <= 64; ++sample) {
+            const double t = sample / 64.0, u = 1.0 - t;
+            route.push_back(start * (u * u) + control * (2.0 * u * t) + end * (t * t));
+            if (sample > 0) cumulative.push_back(cumulative.last() + pointDistance(route[sample - 1], route[sample]));
+        }
+        double trailing = 0.0;
+        for (int ordinal = 0; ordinal < order.size(); ++ordinal) {
+            if (ordinal > 0) trailing += pointDistance(sourceVariant.placements.value(order[ordinal - 1]).position,
+                                                       sourceVariant.placements.value(order[ordinal]).position);
+            const double targetDistance = qMax(0.0, cumulative.last() - trailing);
+            int target = 0; while (target + 1 < cumulative.size() && cumulative[target + 1] < targetDistance) ++target;
+            const double segment = cumulative.value(target + 1) - cumulative.value(target);
+            const double mix = segment > 0.0 ? (targetDistance - cumulative[target]) / segment : 0.0;
+            QPointF destination = route[target] + (route.value(target + 1, route[target]) - route[target]) * mix;
+            Placement placement = m_sets[m_currentSet].activeVariant().placements.value(order[ordinal]);
+            placement.pathType = QStringLiteral("follow"); placement.pathPoints.clear();
+            for (int sample = 1; sample <= target; sample += 4) placement.pathPoints.push_back(route[sample]);
+            placement.position = clampPosition(destination);
+            placement.stepOffCount = qBound(0, ordinal * preview.motion.stepIntervalCounts, qMax(0, counts - 1));
+            preview.placements.insert(order[ordinal], placement);
+        }
+        if (trailing > cumulative.last()) preview.warning = QStringLiteral("The leader route is shorter than the group spacing; trailing members bunch at the route start.");
+        if ((order.size() - 1) * preview.motion.stepIntervalCounts >= counts)
+            preview.warning = preview.warning.isEmpty() ? QStringLiteral("Some follower delays were clamped to the final available count.") : preview.warning;
+    }
+    emit groupMotionPreviewChanged();
+    return true;
+}
+
+bool DrillProject::applyGroupMotionPreview()
+{
+    if (!m_groupMotionPreview.active || m_currentSet <= 0) return false;
+    const auto before = toJson(); auto &variant = m_sets[m_currentSet].activeVariant();
+    for (auto it = m_groupMotionPreview.placements.cbegin(); it != m_groupMotionPreview.placements.cend(); ++it)
+        variant.placements[it.key()] = it.value();
+    variant.groupTransitions.erase(std::remove_if(variant.groupTransitions.begin(), variant.groupTransitions.end(),
+        [&](const auto &motion) { return motion.groupId == m_groupMotionPreview.motion.groupId; }), variant.groupTransitions.end());
+    variant.groupTransitions.push_back(m_groupMotionPreview.motion);
+    cancelGroupMotionPreview(); emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Apply group motion"));
+    return true;
+}
+
+void DrillProject::cancelGroupMotionPreview()
+{
+    if (!m_groupMotionPreview.active && m_groupMotionPreview.placements.isEmpty()) return;
+    m_groupMotionPreview = {}; emit groupMotionPreviewChanged();
+}
+
+bool DrillProject::updateGroupMotionPreviewPivot(double x, double y)
+{
+    if (!m_groupMotionPreview.active || m_groupMotionPreview.motion.type != QStringLiteral("pivot")) return false;
+    const auto motion = m_groupMotionPreview.motion;
+    int row = -1;
+    for (int index = 0; index < m_performers.size(); ++index)
+        if (m_performers[index].id == motion.pivotPerformerId) { row = index; break; }
+    if (row < 0) return false;
+    return previewGroupMotion(motion.type, row, x, y, motion.angleDegrees,
+                              motion.clockwise, motion.reversed, motion.stepIntervalCounts);
+}
+
+bool DrillProject::updateGroupMotionPreviewAngle(double angleDegrees)
+{
+    if (!m_groupMotionPreview.active) return false;
+    const auto motion = m_groupMotionPreview.motion;
+    int row = -1;
+    const QString chosenId = motion.type == QStringLiteral("follow") ? motion.leaderId : motion.pivotPerformerId;
+    for (int index = 0; index < m_performers.size(); ++index)
+        if (m_performers[index].id == chosenId) { row = index; break; }
+    if (row < 0) return false;
+    return previewGroupMotion(motion.type, row, motion.pivot.x(), motion.pivot.y(), angleDegrees,
+                              motion.clockwise, motion.reversed, motion.stepIntervalCounts);
 }
 
 QVariantList DrillProject::transitionPathSamples(int performerRow, int samples) const
