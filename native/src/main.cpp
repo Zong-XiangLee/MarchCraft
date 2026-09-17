@@ -41,21 +41,21 @@ int main(int argc, char *argv[])
     QQuickStyle::setStyle(QStringLiteral("Fusion"));
 
     QPalette palette;
-    palette.setColor(QPalette::Window, QColor(QStringLiteral("#121821")));
-    palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#f2f5f7")));
-    palette.setColor(QPalette::Base, QColor(QStringLiteral("#0f151d")));
-    palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#18212c")));
-    palette.setColor(QPalette::PlaceholderText, QColor(QStringLiteral("#82909f")));
-    palette.setColor(QPalette::Text, QColor(QStringLiteral("#f2f5f7")));
-    palette.setColor(QPalette::Button, QColor(QStringLiteral("#18212c")));
-    palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#f2f5f7")));
-    palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#5b8def")));
+    palette.setColor(QPalette::Window, QColor(QStringLiteral("#202328")));
+    palette.setColor(QPalette::WindowText, QColor(QStringLiteral("#f1f3f5")));
+    palette.setColor(QPalette::Base, QColor(QStringLiteral("#16181c")));
+    palette.setColor(QPalette::AlternateBase, QColor(QStringLiteral("#292d33")));
+    palette.setColor(QPalette::PlaceholderText, QColor(QStringLiteral("#89929e")));
+    palette.setColor(QPalette::Text, QColor(QStringLiteral("#f1f3f5")));
+    palette.setColor(QPalette::Button, QColor(QStringLiteral("#292d33")));
+    palette.setColor(QPalette::ButtonText, QColor(QStringLiteral("#f1f3f5")));
+    palette.setColor(QPalette::Highlight, QColor(QStringLiteral("#3f78bd")));
     palette.setColor(QPalette::HighlightedText, QColor(QStringLiteral("#ffffff")));
-    palette.setColor(QPalette::Mid, QColor(QStringLiteral("#293443")));
-    palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(QStringLiteral("#66717f")));
-    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(QStringLiteral("#66717f")));
-    palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(QStringLiteral("#66717f")));
-    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(QStringLiteral("#222c38")));
+    palette.setColor(QPalette::Mid, QColor(QStringLiteral("#3a4049")));
+    palette.setColor(QPalette::Disabled, QPalette::WindowText, QColor(QStringLiteral("#68717d")));
+    palette.setColor(QPalette::Disabled, QPalette::Text, QColor(QStringLiteral("#68717d")));
+    palette.setColor(QPalette::Disabled, QPalette::ButtonText, QColor(QStringLiteral("#68717d")));
+    palette.setColor(QPalette::Disabled, QPalette::Highlight, QColor(QStringLiteral("#30343a")));
     application.setPalette(palette);
 
     DrillProject project;

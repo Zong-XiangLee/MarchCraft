@@ -28,18 +28,6 @@ Rectangle {
     }
     Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
 
-    Rectangle {
-        width: 640
-        height: 640
-        radius: 320
-        anchors.right: parent.right
-        anchors.top: parent.top
-        anchors.rightMargin: -260
-        anchors.topMargin: -310
-        color: "#111a29"
-        opacity: 0.72
-    }
-
     ColumnLayout {
         anchors.centerIn: parent
         width: Math.min(1240, parent.width - 64)
@@ -50,12 +38,12 @@ Rectangle {
             Layout.fillWidth: true
             opacity: qaModeContext ? 1 : 0
             scale: qaModeContext ? 1 : 0.96
-            spacing: 14
+            spacing: 12
             Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 52; sourceSize.height: 52; width: 52; height: 52; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
             ColumnLayout {
                 spacing: 0
-                Label { text: "MarchCraft"; font.family: MarchCraftTheme.fontFamily; font.bold: true; font.pixelSize: 25; color: MarchCraftTheme.textPrimary }
-                Label { text: "Professional drill design workspace"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 12; color: MarchCraftTheme.textSecondary }
+                Label { text: "MARCHCRAFT"; font.family: MarchCraftTheme.fontFamily; font.bold: true; font.pixelSize: 22; font.letterSpacing: 1.5; color: MarchCraftTheme.textPrimary }
+                Label { text: "DRILL DESIGN WORKSPACE"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 10; font.bold: true; font.letterSpacing: 1; color: MarchCraftTheme.textMuted }
             }
             Item { Layout.fillWidth: true }
             AppToolButton {
@@ -87,13 +75,13 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 420
                 radius: MarchCraftTheme.radiusLarge
-                color: MarchCraftTheme.surface
+                color: MarchCraftTheme.panel
                 border.color: MarchCraftTheme.divider
                 ColumnLayout {
                     anchors.fill: parent
                     anchors.margins: 24
                     spacing: 14
-                    Label { text: "Start"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
+                    Label { text: "PROJECTS"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary }
                     Label { text: "Create a show, open a project, or explore the included sample."; Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary }
                     AppButton { id: newProjectHomeButton; text: "New project"; highlighted: true; Layout.fillWidth: true; onClicked: windowContext.startNewProject() }
                     AppButton { text: "Open project…"; Layout.fillWidth: true; onClicked: windowContext.requestOpenProject() }
@@ -115,7 +103,7 @@ Rectangle {
                         TapHandler { onTapped: windowContext.requestSampleProject() }
                         ColumnLayout {
                             anchors.fill: parent; anchors.margins: 16; spacing: 5
-                            Label { text: "BUNDLED SAMPLE"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1.2 }
+                            Label { text: "BUNDLED SAMPLE"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 1.2 }
                             Label { text: "Rancho Bernardo 2025"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 16 }
                             Label { text: "204 performers · 97 sets · Opens as an editable copy"; color: MarchCraftTheme.textSecondary; font.pixelSize: 11 }
                         }
@@ -127,7 +115,7 @@ Rectangle {
                 Layout.fillWidth: true
                 Layout.preferredHeight: 420
                 radius: MarchCraftTheme.radiusLarge
-                color: MarchCraftTheme.surface
+                color: MarchCraftTheme.panel
                 border.color: MarchCraftTheme.divider
                 ColumnLayout {
                     anchors.fill: parent
@@ -135,7 +123,7 @@ Rectangle {
                     spacing: 10
                     RowLayout {
                         Layout.fillWidth: true
-                        Label { text: "Recent projects"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
+                        Label { text: "RECENT PROJECTS"; font.family: MarchCraftTheme.fontFamily; font.pixelSize: 11; font.bold: true; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary }
                         Item { Layout.fillWidth: true }
                         Label { text: workspaceControllerContext.recentProjects.length + " / 8"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
                     }
@@ -164,7 +152,7 @@ Rectangle {
                             TapHandler { onTapped: workspaceStateContext.request("openPath", recentRow.modelData.path, drillProjectContext.dirty) }
                             RowLayout {
                                 anchors.fill: parent; anchors.leftMargin: 12; anchors.rightMargin: 6; spacing: 10
-                                Rectangle { width: 28; height: 28; radius: 6; color: "#243653"; Label { anchors.centerIn: parent; text: "M"; color: MarchCraftTheme.accentHover; font.bold: true } }
+                                Rectangle { width: 28; height: 28; radius: MarchCraftTheme.radiusSmall; color: MarchCraftTheme.selection; Label { anchors.centerIn: parent; text: "M"; color: MarchCraftTheme.accentHover; font.bold: true } }
                                 ColumnLayout {
                                     Layout.fillWidth: true; spacing: 1
                                     Label { text: recentRow.modelData.name; color: MarchCraftTheme.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
