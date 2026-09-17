@@ -461,11 +461,14 @@ Item {
                         const rawEnd = Qt.point(root.toFieldX(currentPoint.x), root.toFieldY(currentPoint.y))
                         const end = root.shapeDrawMode === "line"
                             ? root.snapLineEndpoint(start, rawEnd) : rawEnd
-                        if (Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >= 5)
+                        const completed = Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >= 5
+                        if (completed)
                             root.shapeCompleted(root.shapeDrawMode, start, end)
                         selecting = false
                         lassoPoints = []
                         shapePreviewCanvas.requestPaint()
+                        if (completed)
+                            root.shapeDrawingCanceled()
                         return
                     }
                     const dx = currentPoint.x - startPoint.x
