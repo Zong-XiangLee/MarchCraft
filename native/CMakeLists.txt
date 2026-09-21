@@ -66,6 +66,7 @@ qt_add_qml_module(marchcraft
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
+        qml/MovableDialog.qml
         qml/MusicPanel.qml
         qml/MarchCraftTheme.qml
         qml/AppButton.qml
@@ -74,6 +75,7 @@ qt_add_qml_module(marchcraft
         qml/WorkspaceLogic.qml
         qml/AppIcon.qml
         qml/ShapeIcon.qml
+        qml/ShapeDrawLogic.qml
         qml/ProjectSetupPage.qml
     SOURCES
         src/HumanGeometry.cpp
@@ -216,7 +218,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(marchcraft_tests PRIVATE src)
     target_link_libraries(marchcraft_tests PRIVATE
-        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Multimedia Qt6::Xml Qt6::Sql Qt6::Test)
+        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Xml Qt6::Sql Qt6::Test)
     qt_add_resources(marchcraft_tests "marchcraft_test_catalog"
         PREFIX "/catalog"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
@@ -231,10 +233,10 @@ if(BUILD_TESTING)
                 -import "${CMAKE_CURRENT_SOURCE_DIR}/qml")
     set_tests_properties(marchcraft_tests PROPERTIES
         ENVIRONMENT
-            "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
+            "QT_QPA_PLATFORM=minimal;QT_QUICK_CONTROLS_STYLE=Fusion;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
     set_tests_properties(ui_qml PROPERTIES
         ENVIRONMENT
-            "QT_QPA_PLATFORM=minimal;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
+            "QT_QPA_PLATFORM=minimal;QT_QUICK_CONTROLS_STYLE=Fusion;QT_PLUGIN_PATH=${MARCHCRAFT_QT_PREFIX}/plugins;QML2_IMPORT_PATH=${MARCHCRAFT_QT_PREFIX}/qml")
     set_property(TEST marchcraft_tests PROPERTY ENVIRONMENT_MODIFICATION
         "PATH=path_list_prepend:${MARCHCRAFT_QT_BIN}"
         "PATH=path_list_prepend:${MARCHCRAFT_COMPILER_BIN}")

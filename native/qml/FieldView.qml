@@ -18,7 +18,18 @@ Item {
     signal performerActivated(int row)
     signal contextMenuRequested(real screenX, real screenY, int performerRow)
     signal freehandCompleted(var points)
-    signal shapeCompleted(string kind, point start, point end)
+    signal shapeCompleted(string kind, var options)
+
+    ShapeDrawLogic { id: shapeLogic }
+
+    function cancelDrawing() {
+        selectionArea.selecting = false
+        selectionArea.lassoPoints = []
+        shapePreviewCanvas.requestPaint()
+        lassoCanvas.requestPaint()
+    }
+    onShapeDrawModeChanged: cancelDrawing()
+    onDrawModeChanged: cancelDrawing()
     signal shapeDrawingCanceled()
 
     function toCanvasX(fieldX) { return (fieldX - drillProject.canvasMinX) * field.sx }
@@ -40,7 +51,9 @@ Item {
 
     focus: true
     Keys.onPressed: function(event) {
-        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter) && root.shapeDrawMode.length > 0) {
+        if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                && (root.shapeDrawMode.length > 0 || root.drawMode)) {
+            root.cancelDrawing()
             root.shapeDrawingCanceled()
             event.accepted = true
             return
@@ -98,9 +111,9 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#07110d"
-        radius: 10
-        border.color: "#27352f"
+        color: MarchCraftTheme.input
+        radius: 0
+        border.color: MarchCraftTheme.divider
     }
 
     Flickable {
@@ -397,10 +410,12 @@ Item {
 
             MouseArea {
                 id: selectionArea
+                objectName: "shapeDrawingArea"
                 anchors.fill: parent
                 acceptedButtons: Qt.LeftButton | Qt.RightButton
                 z: 0
                 enabled: !root.spaceHeld
+                preventStealing: root.drawMode || root.shapeDrawMode.length > 0
                 property bool selecting: false
                 property bool lasso: false
                 property point startPoint: Qt.point(0, 0)
@@ -432,8 +447,6 @@ Item {
                 onPositionChanged: function(mouse) {
                     if (!selecting) return
                     currentPoint = Qt.point(mouse.x, mouse.y)
-                    if (root.shapeDrawMode === "line")
-                        currentPoint = root.snapLineEndpoint(startPoint, currentPoint)
                     if (lasso) {
                         const next = Qt.point(root.toFieldX(mouse.x), root.toFieldY(mouse.y))
                         const previous = lassoPoints[lassoPoints.length - 1]
@@ -462,7 +475,7 @@ Item {
                         const end = root.shapeDrawMode === "line"
                             ? root.snapLineEndpoint(start, rawEnd) : rawEnd
                         if (Math.hypot(currentPoint.x - startPoint.x, currentPoint.y - startPoint.y) >= 5)
-                            root.shapeCompleted(root.shapeDrawMode, start, end)
+                            root.shapeCompleted(root.shapeDrawMode, shapeLogic.options(root.shapeDrawMode, start, end, drillProject.selectedCount))
                         selecting = false
                         lassoPoints = []
                         shapePreviewCanvas.requestPaint()
@@ -511,75 +524,28 @@ Item {
                     if (!visible) return
                     const x1 = selectionArea.startPoint.x, y1 = selectionArea.startPoint.y
                     const x2 = selectionArea.currentPoint.x, y2 = selectionArea.currentPoint.y
-                    const dx = x2 - x1, dy = y2 - y1
-                    const radius = Math.hypot(dx, dy)
+                    const start = Qt.point(root.toFieldX(x1), root.toFieldY(y1))
+                    const rawEnd = Qt.point(root.toFieldX(x2), root.toFieldY(y2))
+                    const end = root.shapeDrawMode === "line" ? root.snapLineEndpoint(start, rawEnd) : rawEnd
+                    const options = shapeLogic.options(root.shapeDrawMode, start, end, drillProject.selectedCount)
+                    const geometry = drillProject.formationGeometry(root.shapeDrawMode, options)
+                    const path = geometry.path || [], points = geometry.placements || []
                     ctx.strokeStyle = "#fbbf24"
-                    ctx.fillStyle = "#18fbbf24"
+                    ctx.fillStyle = "#fbbf24"
                     ctx.lineWidth = 2.5
                     ctx.setLineDash([7, 4])
                     ctx.beginPath()
-                    if (root.shapeDrawMode === "line") {
-                        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2)
-                    } else if (root.shapeDrawMode === "rectangle") {
-                        ctx.rect(Math.min(x1, x2), Math.min(y1, y2), Math.abs(dx), Math.abs(dy))
-                    } else if (root.shapeDrawMode === "triangle") {
-                        ctx.moveTo((x1 + x2) / 2, Math.min(y1, y2))
-                        ctx.lineTo(Math.min(x1, x2), Math.max(y1, y2))
-                        ctx.lineTo(Math.max(x1, x2), Math.max(y1, y2))
-                        ctx.closePath()
-                    } else if (root.shapeDrawMode === "circle") {
-                        ctx.arc(x1, y1, radius, 0, Math.PI * 2)
-                    } else if (root.shapeDrawMode === "arc") {
-                        const heading = Math.atan2(dy, dx)
-                        ctx.arc(x1, y1, radius, heading - Math.PI / 2, heading + Math.PI / 2)
-                    } else if (root.shapeDrawMode === "ellipse") {
-                        ctx.ellipse((x1 + x2) / 2, (y1 + y2) / 2, Math.abs(dx) / 2, Math.abs(dy) / 2, 0, 0, Math.PI * 2)
-                    } else if (root.shapeDrawMode === "diamond") {
-                        ctx.moveTo((x1 + x2) / 2, Math.min(y1, y2)); ctx.lineTo(Math.max(x1, x2), (y1 + y2) / 2)
-                        ctx.lineTo((x1 + x2) / 2, Math.max(y1, y2)); ctx.lineTo(Math.min(x1, x2), (y1 + y2) / 2); ctx.closePath()
-                    } else if (root.shapeDrawMode === "polygon" || root.shapeDrawMode === "star") {
-                        const n = root.shapeDrawMode === "star" ? 10 : 6, r = Math.max(Math.abs(dx), Math.abs(dy)) / 2
-                        for (let i = 0; i < n; ++i) { const a = -Math.PI / 2 + i * Math.PI * 2 / n, rr = root.shapeDrawMode === "star" && i % 2 ? r * .45 : r; if (!i) ctx.moveTo((x1+x2)/2 + Math.cos(a)*rr, (y1+y2)/2 + Math.sin(a)*rr); else ctx.lineTo((x1+x2)/2 + Math.cos(a)*rr, (y1+y2)/2 + Math.sin(a)*rr) } ctx.closePath()
-                    } else if (root.shapeDrawMode === "block") {
-                        ctx.rect(Math.min(x1,x2), Math.min(y1,y2), Math.abs(dx), Math.abs(dy))
+                    for (let i = 0; i < path.length; ++i) {
+                        const x = root.toCanvasX(path[i].x), y = root.toCanvasY(path[i].y)
+                        if (i === 0) ctx.moveTo(x, y)
+                        else ctx.lineTo(x, y)
                     }
                     ctx.stroke()
-                    // Show live performer destinations while drawing, so the
-                    // tool behaves like a formation preview rather than a
-                    // bare hashed guide.
-                    const count = drillProject.selectedCount
-                    if (count > 0) {
-                        const previewPoint = function(px, py) {
-                            ctx.beginPath(); ctx.arc(px, py, 4, 0, Math.PI * 2)
-                            ctx.fillStyle = "#fbbf24"; ctx.fill()
-                            ctx.lineWidth = 1; ctx.strokeStyle = "#14231d"; ctx.stroke()
-                        }
-                        if (root.shapeDrawMode === "line") {
-                            for (let i = 0; i < count; ++i) {
-                                const t = count === 1 ? 0.5 : i / (count - 1)
-                                previewPoint(x1 + dx * t, y1 + dy * t)
-                            }
-                        } else if (root.shapeDrawMode === "rectangle") {
-                            const left = Math.min(x1, x2), right = Math.max(x1, x2)
-                            const top = Math.min(y1, y2), bottom = Math.max(y1, y2)
-                            const perimeter = 2 * ((right - left) + (bottom - top))
-                            for (let i = 0; i < count; ++i) {
-                                let distance = perimeter * i / count
-                                if (distance <= right - left) previewPoint(left + distance, top)
-                                else if ((distance -= right - left) <= bottom - top) previewPoint(right, top + distance)
-                                else if ((distance -= bottom - top) <= right - left) previewPoint(right - distance, bottom)
-                                else { distance -= right - left; previewPoint(left, bottom - distance) }
-                            }
-                        } else if (root.shapeDrawMode === "circle" || root.shapeDrawMode === "arc") {
-                            const heading = Math.atan2(dy, dx)
-                            const startAngle = root.shapeDrawMode === "circle" ? 0 : heading - Math.PI / 2
-                            const sweep = root.shapeDrawMode === "circle" ? Math.PI * 2 : Math.PI
-                            for (let i = 0; i < count; ++i) {
-                                const t = root.shapeDrawMode === "circle" ? i / count : (count === 1 ? 0.5 : i / (count - 1))
-                                const angle = startAngle + sweep * t
-                                previewPoint(x1 + Math.cos(angle) * radius, y1 + Math.sin(angle) * radius)
-                            }
-                        }
+                    ctx.setLineDash([])
+                    for (let i = 0; i < points.length; ++i) {
+                        ctx.beginPath()
+                        ctx.arc(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y), 4, 0, Math.PI * 2)
+                        ctx.fill()
                     }
                     ctx.setLineDash([])
                     ctx.lineWidth = 1.5
@@ -882,5 +848,5 @@ Item {
             event.accepted = true
         }
     }
-    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds();root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
+    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds();root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){root.cancelDrawing();refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
 }

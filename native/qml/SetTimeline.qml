@@ -33,7 +33,7 @@ Frame {
     SplitView.minimumHeight: 150
     SplitView.maximumHeight: Math.max(150, verticalSplitContext.height - 240)
     padding: 8
-    background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
+    background: Rectangle { color: MarchCraftTheme.panel; radius: 0; border.color: MarchCraftTheme.divider }
     ColumnLayout {
         anchors.fill: parent
         RowLayout {
@@ -71,7 +71,7 @@ Frame {
         }
         RowLayout {
             Layout.fillWidth: true
-            Label { text: "FORMATION VERSION"; visible: verticalSplitContext.width > 760; color: "#a5afbc"; font.bold: true }
+            Label { text: "FORMATION VERSION"; visible: verticalSplitContext.width > 760; color: MarchCraftTheme.textSecondary; font.bold: true; font.pixelSize: 10; font.letterSpacing: 0.8 }
             ComboBox {
                 id: variantSelector
                 Layout.preferredWidth: verticalSplitContext.width > 760 ? 210 : 170

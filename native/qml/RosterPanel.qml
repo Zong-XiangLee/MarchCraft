@@ -22,16 +22,16 @@ Frame {
     SplitView.minimumWidth: 180
     SplitView.maximumWidth: 460
     padding: 0
-    background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
+    background: Rectangle { color: MarchCraftTheme.panel; radius: 0; border.color: MarchCraftTheme.divider }
     ColumnLayout {
         anchors.fill: parent
         spacing: 0
         RowLayout {
             Layout.fillWidth: true
             Layout.margins: 10
-            Label { text: "ROSTER"; font.bold: true; color: "#a5afbc" }
+            Label { text: "ROSTER"; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary }
             Item { Layout.fillWidth: true }
-            Label { text: drillProjectContext.performerCount; color: "#778392" }
+            Label { text: drillProjectContext.performerCount; color: MarchCraftTheme.textMuted; font.pixelSize: 11 }
             AppToolButton { text: "‹"; ToolTip.text: "Collapse roster"; ToolTip.visible: hovered; onClicked: workspaceSettingsContext.rosterCollapsed = true }
         }
         TextField {
@@ -75,12 +75,12 @@ Frame {
                     ColumnLayout {
                         spacing: 0; Layout.fillWidth: true
                         Label { text: rosterDelegate.label; font.bold: true }
-                        Label { text: rosterDelegate.instrument; color: "#a5afbc"; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
+                        Label { text: rosterDelegate.instrument; color: MarchCraftTheme.textSecondary; font.pixelSize: 11; elide: Text.ElideRight; Layout.fillWidth: true }
                     }
-                    Label { visible: rosterDelegate.hasWarning; text: "⚠"; color: "#e07178" }
+                    Label { visible: rosterDelegate.hasWarning; text: "⚠"; color: MarchCraftTheme.danger }
                     Label { visible: rosterDelegate.performerLocked; text: "🔒" }
-                    Label { visible: !rosterDelegate.performerVisible; text: "◌"; color: "#a5afbc" }
-                    Label { text: rosterDelegate.totalDistance.toFixed(1); color: "#a5afbc"; font.pixelSize: 11 }
+                    Label { visible: !rosterDelegate.performerVisible; text: "◌"; color: MarchCraftTheme.textSecondary }
+                    Label { text: rosterDelegate.totalDistance.toFixed(1); color: MarchCraftTheme.textSecondary; font.pixelSize: 11 }
                 }
                 MouseArea {
                     anchors.fill: parent

@@ -45,7 +45,7 @@ Item {
         return drillProject.fieldInsertStep(column)
     }
 
-    Rectangle { anchors.fill: parent; color: "#071019"; radius: 10 }
+    Rectangle { anchors.fill: parent; color: MarchCraftTheme.input; radius: 0; border.color: MarchCraftTheme.divider }
 
     View3D {
         id: view

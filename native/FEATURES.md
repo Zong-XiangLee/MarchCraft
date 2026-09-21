@@ -23,7 +23,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Music | Native MIDI/MusicXML timing and track import, compact wheel-scrollable measure timeline with set-range highlighting, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
-| 3D | Meter-based Y-up world with grounded, height-scaled human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
+| 3D | Meter-based Y-up world with grounded, height-scaled rigged human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 97 sets |
 
@@ -33,7 +33,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Audio can be attached, previewed, offset, and aligned with anchors; automatic beat/phrase inference remains outside the prototype because it is not authoritative for changing-tempo marching arrangements.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
-- The bundled human GLBs and procedural gait use the validated semantic catalog. User GLB ingestion, instrument-specific carriage/meshes, modular uniforms, cinematic rendering, and video export remain production milestones.
+- GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering, and video export remain production milestones.
 - The undo stack is active during a session; cross-session version browsing will be added with the production project archive format.
 # Apple-studio workspace refinement
 
@@ -53,4 +53,17 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Playback updates only motion roles; performer editing is one undoable operation.
 - Clinic dismissal safely handles issues with attached metadata; timed collisions
   remain warnings while geometric crossings alone remain intentional choreography.
-- The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active.
+- The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active. Instrument-specific carriage meshes, modular uniforms, cinematic rendering, and video export remain production milestones.
+
+### Shape drawer reliability
+
+- The drawer exposes all eleven shapes: line, rectangle, circle, triangle, arc, ellipse, diamond, block, polygon, star, and spiral.
+- Drag guides and performer dots use the same field-fitted geometry as placement. Circle/arc drags start at the center; other shapes use the dragged bounds (regular polygons retain their proportions).
+- Releasing a drag opens an asynchronous assignment preview. Apply creates one undoable formation; Cancel leaves the project unchanged.
+- Escape, Enter, right-click, selection changes, and switching drawing tools discard an unfinished drag. Choosing a shape opens the 2D field.
+- Editing any advanced-builder option invalidates the previous preview, including assignment mode and grouping. The builder scrolls within the supported minimum window size.
+
+Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all six assignment modes and 1/7/24 performers, field fitting, preview immutability, Apply, cancellation, and undo/redo. `shapeDrawerMouseGestures` exercises real Qt input in both directions at three zoom levels. `tst_shapedrawer.qml` covers all drag option mappings and each advanced control's preview invalidation. Use `--qa-formation --screenshot output.png` for the advanced builder, optionally with `--qa-minimum`.
+
+- Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
+- The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
