@@ -20,6 +20,7 @@ ApplicationWindow {
     function showQaSurface(surface) {
         if (surface === "preferences") settingsDialog.open()
         else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
+        else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
         else if (surface === "music") timelinePanel.exposedTimelineTabs.currentIndex = 1
     }
 
@@ -151,6 +152,8 @@ ApplicationWindow {
     property bool freehandCreateGroup: false
     function setShapeTool(kind) {
         freehandDrawing = false
+        drillProject.cancelFormationPreview()
+        threeD = false
         shapeDrawing = kind
     }
     function toggleQuickShape(kind) {
@@ -260,8 +263,13 @@ ApplicationWindow {
 
     Popup {
         id: shapePalette
-        x: Math.min(window.width - width - 16, commandBars.shapeButton.mapToItem(window.contentItem, 0, 0).x)
-        y: 92; width: 360; height: 250; padding: 14; modal: false; focus: true
+        parent: Overlay.overlay
+        onOpened: Qt.callLater(function() {
+            const anchor = commandBars.shapeButton.mapToItem(shapePalette.parent, 0, commandBars.shapeButton.height)
+            shapePalette.x = Math.max(8, Math.min(window.width - width - 8, anchor.x))
+            shapePalette.y = anchor.y + 6
+        })
+        width: 380; height: 384; padding: 14; modal: false; focus: true
         enter: Transition {
             NumberAnimation { property: "opacity"; from: 0; to: 1; duration: MarchCraftTheme.motionMedium }
             NumberAnimation { property: "scale"; from: .97; to: 1; duration: MarchCraftTheme.motionMedium; easing.type: Easing.OutCubic }
@@ -273,12 +281,12 @@ ApplicationWindow {
             RowLayout {
                 Label { text: "Formation shapes"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 15 }
                 Item { Layout.fillWidth: true }
-                AppButton { text: "Advanced…"; flat: true; onClicked: { shapePalette.close(); window.shapeDrawing = ""; formationDialog.open() } }
+                AppButton { text: "Advanced…"; flat: true; onClicked: { shapePalette.close(); window.shapeDrawing = ""; window.freehandDrawing = false; formationDialog.open() } }
             }
             GridLayout {
                 columns: 4; columnSpacing: 6; rowSpacing: 6; Layout.fillWidth: true; Layout.fillHeight: true
                 Repeater {
-                    model: [{kind:"line",label:"Line"},{kind:"rectangle",label:"Rectangle"},{kind:"circle",label:"Circle"},{kind:"triangle",label:"Triangle"},{kind:"arc",label:"Arc"},{kind:"ellipse",label:"Ellipse"},{kind:"diamond",label:"Diamond"},{kind:"block",label:"Block"}]
+                    model: [{kind:"line",label:"Line"},{kind:"rectangle",label:"Rectangle"},{kind:"circle",label:"Circle"},{kind:"triangle",label:"Triangle"},{kind:"arc",label:"Arc"},{kind:"ellipse",label:"Ellipse"},{kind:"diamond",label:"Diamond"},{kind:"block",label:"Block"},{kind:"polygon",label:"Polygon"},{kind:"star",label:"Star"},{kind:"spiral",label:"Spiral"}]
                     delegate: AppButton {
                         required property var modelData
                         Layout.fillWidth: true; Layout.fillHeight: true
@@ -287,10 +295,16 @@ ApplicationWindow {
                             ShapeIcon { kind: modelData.kind; iconColor: parent.parent.enabled ? MarchCraftTheme.textPrimary : MarchCraftTheme.textDisabled; Layout.alignment: Qt.AlignHCenter }
                             Label { text: modelData.label; color: MarchCraftTheme.textPrimary; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true; horizontalAlignment: Text.AlignHCenter }
                         }
+                        enabled: drillProject.selectedCount > 0
                         highlighted: window.shapeDrawing === modelData.kind
                         onClicked: { window.setShapeTool(modelData.kind); shapePalette.close() }
                     }
                 }
+            }
+            Label {
+                Layout.fillWidth: true; wrapMode: Text.Wrap
+                text: "Drag on the field, review, then Apply. Esc or right-click cancels drawing."
+                color: MarchCraftTheme.textMuted; font.pixelSize: 11
             }
         }
     }
@@ -408,37 +422,11 @@ ApplicationWindow {
                         freehandPreviewDialog.applied = false
                         freehandPreviewDialog.open()
                     }
-                    onShapeCompleted: function(kind, start, end) {
-                        if (kind === "line") {
-                            drillProject.distributeLine(start.x, start.y, end.x, end.y)
-                        } else if (kind === "rectangle") {
-                            drillProject.distributeRectangle(Math.min(start.x, end.x), Math.min(start.y, end.y),
-                                                             Math.abs(end.x - start.x), Math.abs(end.y - start.y))
-                        } else if (kind === "triangle") {
-                            drillProject.createFormation("triangle", {
-                                centerX: (start.x + end.x) / 2,
-                                centerY: (start.y + end.y) / 2,
-                                width: Math.max(2, Math.max(Math.abs(end.x - start.x), Math.abs(end.y - start.y)))
-                            })
-                        } else if (kind === "ellipse" || kind === "diamond" || kind === "polygon" || kind === "star" || kind === "spiral" || kind === "block") {
-                            const width = Math.max(2, Math.abs(end.x - start.x))
-                            const height = Math.max(2, Math.abs(end.y - start.y))
-                            const centerX = (start.x + end.x) / 2, centerY = (start.y + end.y) / 2
-                            const size = Math.max(width, height)
-                            if (kind === "ellipse") drillProject.createFormation("ellipse", { centerX: centerX, centerY: centerY, width: width, height: height })
-                            else if (kind === "diamond") drillProject.createFormation("diamond", { centerX: centerX, centerY: centerY, width: size })
-                            else if (kind === "polygon") drillProject.createFormation("polygon", { centerX: centerX, centerY: centerY, width: size, sides: 6 })
-                            else if (kind === "star") drillProject.createFormation("star", { centerX: centerX, centerY: centerY, width: size, points: 5 })
-                            else if (kind === "spiral") drillProject.createFormation("spiral", { centerX: centerX, centerY: centerY, width: size, outerRadius: size / 2, turns: 1.5 })
-                            else drillProject.createFormation("block", { centerX: centerX, centerY: centerY, rows: Math.max(1, Math.ceil(Math.sqrt(drillProject.selectedCount))), spacing: Math.max(1, Math.min(width, height) / Math.max(1, Math.ceil(Math.sqrt(drillProject.selectedCount)))) })
-                        } else {
-                            const radius = Math.hypot(end.x - start.x, end.y - start.y)
-                            if (kind === "circle") drillProject.distributeArc(start.x, start.y, radius, 0, 360)
-                            else {
-                                const heading = Math.atan2(end.y - start.y, end.x - start.x) * 180 / Math.PI
-                                drillProject.distributeArc(start.x, start.y, radius, heading - 90, heading + 90)
-                            }
-                        }
+                    onShapeCompleted: function(kind, options) {
+                        drillProject.requestFormationPreview(kind, options, drillProject.formationAssignmentMode)
+                        window.shapeDrawing = ""
+                        freehandPreviewDialog.applied = false
+                        freehandPreviewDialog.open()
                     }
                     onShapeDrawingCanceled: { window.shapeDrawing = ""; window.freehandDrawing = false }
                 }
@@ -492,7 +480,7 @@ ApplicationWindow {
 
     FormationDialog {
         id: formationDialog
-        anchors.centerIn: Overlay.overlay
+        parent: Overlay.overlay
         onSettingsRequested: settingsDialog.open()
     }
 
@@ -511,10 +499,10 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    MovableDialog {
         id: freehandPreviewDialog
         property bool applied: false
-        title: "Review freehand assignment"; modal: true; anchors.centerIn: Overlay.overlay; width: 460
+        title: "Review formation assignment"; parent: Overlay.overlay; width: 460
         standardButtons: Dialog.NoButton
         onClosed: if (!applied) drillProject.cancelFormationPreview()
         contentItem: ColumnLayout {
@@ -531,7 +519,7 @@ ApplicationWindow {
             }
             RowLayout { Layout.alignment: Qt.AlignRight
                 AppButton { text: "Cancel"; onClicked: freehandPreviewDialog.close() }
-                AppButton { text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { freehandPreviewDialog.applied = drillProject.commitFormationPreview(); freehandPreviewDialog.close() } }
+                AppButton { text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { freehandPreviewDialog.applied = drillProject.commitFormationPreview(); if (freehandPreviewDialog.applied) freehandPreviewDialog.close() } }
             }
         }
     }
