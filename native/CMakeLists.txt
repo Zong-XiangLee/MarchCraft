@@ -61,6 +61,8 @@ qt_add_qml_module(marchcraft
         qml/FieldView.qml
         qml/ThreeDView.qml
         qml/PerformerMarker3D.qml
+        qml/HumanPerformer3D.qml
+        qml/HumanGait.js
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
@@ -75,6 +77,9 @@ qt_add_qml_module(marchcraft
         qml/ShapeIcon.qml
         qml/ShapeDrawLogic.qml
         qml/ProjectSetupPage.qml
+    SOURCES
+        src/HumanGeometry.cpp
+        src/HumanGeometry.h
 )
 
 # Headers shared by the application and generated QML registration.
@@ -93,6 +98,16 @@ qt_add_resources(marchcraft "marchcraft_catalog"
     PREFIX "/catalog"
     BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
     FILES "${CMAKE_CURRENT_SOURCE_DIR}/assets/catalog.json")
+
+set(MARCHCRAFT_HUMAN_GLB "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer.glb")
+set(MARCHCRAFT_HUMAN_GLB_LOD1 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod1.glb")
+set(MARCHCRAFT_HUMAN_GLB_LOD2 "${CMAKE_CURRENT_SOURCE_DIR}/assets/performer/human_performer_lod2.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB}" PROPERTIES QT_RESOURCE_ALIAS "human_performer.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD1}" PROPERTIES QT_RESOURCE_ALIAS "human_performer_lod1.glb")
+set_source_files_properties("${MARCHCRAFT_HUMAN_GLB_LOD2}" PROPERTIES QT_RESOURCE_ALIAS "human_performer_lod2.glb")
+qt_add_resources(marchcraft "marchcraft_performer"
+    PREFIX "/performer"
+    FILES "${MARCHCRAFT_HUMAN_GLB}" "${MARCHCRAFT_HUMAN_GLB_LOD1}" "${MARCHCRAFT_HUMAN_GLB_LOD2}")
 
 set(MARCHCRAFT_LOGO_PNG "${CMAKE_CURRENT_SOURCE_DIR}/assets/branding/marchcraft-logo.png")
 set_source_files_properties("${MARCHCRAFT_LOGO_PNG}" PROPERTIES QT_RESOURCE_ALIAS "marchcraft-logo.png")

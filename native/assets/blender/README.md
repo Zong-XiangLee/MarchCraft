@@ -1,8 +1,3 @@
-> Human performer authoring is inactive. Runtime human GLBs, geometry, and gait code
-> have been removed. The source models and scripts described below are retained only
-> as references for a future rebuild; these instructions describe the retired pipeline.
-> Existing licenses and attribution still apply. The runtime uses primitive markers.
-
 # MarchCraft Blender asset contract
 
 This directory is the source-of-truth location for editable `.blend` files. Runtime code never refers to a Blender filename; projects store semantic IDs from `assets/catalog.json`.
@@ -36,8 +31,7 @@ Required clips are `idle`, `march.forward`, `march.backward`, `slide.left`, `sli
 ## Levels of detail
 
 - LOD0: presentation model for close cameras.
-- LOD1: reduced-bone, reduced-material model for normal field viewing.
-- LOD2: rigid or aggressively reduced model for press-box viewing.
+- LOD1: reduced geometry for normal field viewing, retaining the canonical skeleton.
 - LOD2 keeps the weighted human silhouette with aggressively reduced geometry for press-box and performance views.
 
 ## Export and validation
@@ -51,11 +45,11 @@ Export GLB/glTF 2.0 with skins, animations, normals, tangents, and PBR textures.
 - finite bounds and reasonable triangle/material counts;
 - license and attribution metadata.
 
-Qt's build-time asset importer should generate optimized runtime meshes and LODs. User-supplied GLB files are intentionally unsupported in the initial catalog.
+The bundled human uses validated, preconditioned GLBs decoded by `HumanGeometry` and the explicit Qt Quick 3D Skin API. User-supplied GLB files are intentionally unsupported in the initial catalog.
 
 ## Canonical human performer
 
-The authorized Blender source is preserved as `Models/lowpolyboy_rigged.blend`;
+The authorized Blender source is `Models/lowpolyboy_rigged.blend`;
 its creator attribution and the contributor's direct-permission record are in
 `Models/LowPolyBoyAttribution.txt`. First run `extract_lowpolyboy_mesh.py`
 through Blender to preserve its authored deformation weights in a temporary

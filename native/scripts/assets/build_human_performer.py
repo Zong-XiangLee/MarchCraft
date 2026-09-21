@@ -463,8 +463,14 @@ def simplify_geometry(positions, normals, texcoords, colors, joints, weights, in
     clusters = {}
     remap = []
     for index, position in enumerate(positions):
-        key = (round(position[0] / grid_size), round(position[1] / grid_size),
-               round(position[2] / grid_size), joints[index][0], tuple(colors[index]))
+        # Shoe contact and heading are part of the gait contract, not expendable
+        # silhouette detail. Preserve their vertices/weights at every LOD, plus
+        # the crown so normalization cannot move the calibrated ground plane.
+        if position[1] < 0.20 or position[1] > 1.70:
+            key = ("protected", index)
+        else:
+            key = (round(position[0] / grid_size), round(position[1] / grid_size),
+                   round(position[2] / grid_size), joints[index][0], tuple(colors[index]))
         cluster = clusters.get(key)
         if cluster is None:
             cluster = {"members": [], "index": len(clusters)}

@@ -5,8 +5,11 @@ import QtQuick3D.Helpers
 
 Item {
     id: root
+    objectName: "performerView"
     readonly property int insertColumnCount: drillProject.fieldInsertCount
     property real cameraZoom: 1.0
+    property string carriagePose: "horn.up"
+    property bool markTimeDuringHolds: false
     property real cameraDistance: Math.sqrt(cameraBasePosition.y * cameraBasePosition.y
                                             + cameraBasePosition.z * cameraBasePosition.z)
     property vector3d cameraBasePosition: Qt.vector3d(0, 51, 63)
@@ -17,7 +20,10 @@ Item {
     }
 
     function setCameraPreset(preset) {
-        if (preset === "overhead") {
+        if (preset === "performer" || preset === "performer-side") {
+            cameraBasePosition = Qt.vector3d(0, 0, 2.6)
+            cameraBaseRotation = Qt.vector3d(0, preset === "performer-side" ? 90 : 0, 0)
+        } else if (preset === "overhead") {
             cameraBasePosition = Qt.vector3d(0, 86, 0)
             cameraBaseRotation = Qt.vector3d(-90, 0, 0)
         } else if (preset === "field") {
@@ -30,7 +36,7 @@ Item {
         cameraZoom = 1.0
         cameraDistance = Math.sqrt(cameraBasePosition.y * cameraBasePosition.y
                                    + cameraBasePosition.z * cameraBasePosition.z)
-        cameraOrigin.position = Qt.vector3d(0, 0, 0)
+        cameraOrigin.position = Qt.vector3d(0, preset.indexOf("performer") === 0 ? 0.9 : 0, 0)
         cameraOrigin.eulerRotation = cameraBaseRotation
         applyZoom()
     }
@@ -56,6 +62,14 @@ Item {
                               ? SceneEnvironment.NoAA : SceneEnvironment.MSAA
             antialiasingQuality: drillProject.graphicsProfile === "presentation" ? SceneEnvironment.VeryHigh
                                  : drillProject.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
+        }
+
+        HumanGeometry {
+            id: sharedHumanGeometry
+            detailLevel: drillProject.graphicsProfile === "presentation" ? 0
+                       : drillProject.graphicsProfile === "performance" ? 2
+                       : drillProject.graphicsProfile === "automatic"
+                         ? (drillProject.performerCount > 150 ? 2 : 0) : 1
         }
 
         Node {
@@ -359,13 +373,52 @@ Item {
                 required property color performerColor
                 required property bool isSelected
                 required property bool performerVisible
+                required property string bodyRigId
+                required property string uniformId
+                required property string skinPaletteId
+                required property string instrumentAssetId
+                required property string equipmentAssetId
+                required property real performerHeightMeters
+                required property real travelHeading
+                required property real travelStepsPerCount
+                required property string locomotionMode
+                required property real gaitPhase
+                required property real gaitElapsedCounts
+                required property string travelPathType
+                required property bool closingTransition
+                readonly property real animationFacing:
+                    travelPathType === "follow" && locomotionMode !== "idle"
+                        ? travelHeading : facing
+                readonly property bool markingTime: root.markTimeDuringHolds && locomotionMode === "idle"
+                    && drillProject.playbackActive && drillProject.currentSetIndex > 0
+                    && drillProject.currentSetCounts > 0
                 visible: performerVisible
                 position: Qt.vector3d(fieldX - 80, 0, drillProject.fieldDepthSteps / 2 - fieldY)
-                eulerRotation.y: -facing
-                PerformerMarker3D {
+                eulerRotation.y: animationFacing
+                HumanPerformer3D {
+                    geometrySource: sharedHumanGeometry
                     metersPerStep: drillProject.metersPerStep
-                    markerColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
+                    heightMeters: performerNode.performerHeightMeters
+                    uniformColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
+                    bodyRigId: performerNode.bodyRigId
+                    skinPaletteId: performerNode.skinPaletteId
+                    instrumentAssetId: performerNode.instrumentAssetId
+                    equipmentAssetId: performerNode.equipmentAssetId
                     selected: performerNode.isSelected
+                    marching: (performerNode.locomotionMode !== "idle" || performerNode.markingTime) && drillProject.playbackActive
+                    gaitPhase: performerNode.gaitPhase
+                    gaitElapsedCounts: performerNode.gaitElapsedCounts
+                    facingDegrees: performerNode.animationFacing
+                    travelHeading: performerNode.travelHeading
+                    transitionProgress: drillProject.playhead
+                    countsInMove: drillProject.currentSetCounts
+                    travelStepsPerCount: performerNode.travelStepsPerCount
+                    locomotionMode: performerNode.markingTime ? "mark_time" : performerNode.locomotionMode
+                    carriagePose: root.carriagePose
+                    closingTransition: !performerNode.markingTime && performerNode.closingTransition
+                    castBodyShadow: drillProject.graphicsProfile === "presentation" ||
+                                    (drillProject.graphicsProfile !== "performance" &&
+                                     drillProject.performerCount <= 150)
                 }
             }
         }
@@ -469,12 +522,23 @@ Item {
             Component.onCompleted: currentIndex = indexOfValue(drillProject.graphicsProfile)
             onActivated: drillProject.graphicsProfile = currentValue
         }
+        ComboBox {
+            width: 135
+            model: ["Horns up", "Horns down"]
+            currentIndex: root.carriagePose === "horn.down" ? 1 : 0
+            onActivated: root.carriagePose = currentIndex === 1 ? "horn.down" : "horn.up"
+        }
+        CheckBox {
+            text: "Mark time on holds"
+            checked: root.markTimeDuringHolds
+            onToggled: root.markTimeDuringHolds = checked
+        }
         Label {
-            visible: !assetCatalog.valid
-            text: "Asset catalog error"
+            visible: !assetCatalog.valid || !sharedHumanGeometry.valid
+            text: "Performer asset error"
             color: "#e07178"
             ToolTip.visible: hovered
-            ToolTip.text: assetCatalog.validationErrors.join("\n")
+            ToolTip.text: assetCatalog.validationErrors.join("\n") + "\n" + sharedHumanGeometry.errorString
             property bool hovered: catalogHover.hovered
             HoverHandler { id: catalogHover }
         }
