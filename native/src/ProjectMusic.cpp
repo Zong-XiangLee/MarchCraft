@@ -124,7 +124,9 @@ QVariantMap DrillProject::musicMeasureInfo(int index) const
     return {{QStringLiteral("index"), index}, {QStringLiteral("number"), measure.displayNumber},
             {QStringLiteral("startTick"), measure.startTick}, {QStringLiteral("endTick"), measure.endTick},
             {QStringLiteral("numerator"), measure.numerator}, {QStringLiteral("denominator"), measure.denominator},
-            {QStringLiteral("counts"), measure.counts}, {QStringLiteral("noteCount"), measure.noteCount},
+            {QStringLiteral("counts"), measure.counts},
+            {QStringLiteral("beatTicks"), MarchCraft::TicksPerQuarter * 4 / qMax(1, measure.denominator)},
+            {QStringLiteral("noteCount"), measure.noteCount},
             {QStringLiteral("density"), qMin(1.0, measure.noteCount / 160.0)},
             {QStringLiteral("tempo"), bpm}, {QStringLiteral("partial"), measure.partial},
             {QStringLiteral("selected"), index >= qMin(m_musicSelectionStart, m_musicSelectionEnd)

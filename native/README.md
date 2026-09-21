@@ -31,11 +31,11 @@ Apply action before project data changes.
 - Adaptive equal-distance spirals with half-step turns and direction controls, plus optional shape-created groups
 - Persisted colored-symbol, compact-dot, and black-dot marker presets with adjustable sizing
 - Constant-speed arc-length playback with uninterrupted whole-show timing
-- Tabbed performer/field configuration, optional step grid, step/yard display units, shape resize/rotation handles, and a live horizontally draggable set timeline with an insertion marker
+- Tabbed performer/field configuration, optional step grid, step/yard display units, shape resize/rotation handles, and a time-scaled drill timeline with dedicated reorder handles and an insertion marker
 - New and imported shows begin with a zero-count opening set, matching coordinate sheets. Optional legacy opening holds remain available; ordinary holds use consecutive identical-coordinate sets.
 - Freehand formation drawing for letters and organic forms, with cleanup/recognition, equal-spacing distribution, collision-aware placement, and shortest/balanced/expressive move assignment
 - High-school, college, professional, and indoor field geometry
-- Native MIDI/MusicXML measure, meter, tempo, and track import; compact music timeline; bundled FluidSynth MIDI playback; anchored rehearsal audio
+- Native MIDI/MusicXML measure, meter, tempo, and track import; unified drill/music/audio timeline; bundled FluidSynth MIDI playback; anchored rehearsal audio
 - Distance analytics, step-size warnings, spacing/collision checks, and coordinates
 - Transactional `.marchcraft` project files with legacy `.drill` import, automatic recovery, redesigned multi-page PDF coordinate sheets, and CSV export
 - The supplied `data/coordinates.json` is bundled as the default 204-performer, 97-set test show
@@ -59,7 +59,7 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the live insertion line and neighboring-card displacement state. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Automated QA never plays the launch sound.
 
 ## Controls
 
@@ -72,10 +72,14 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 - Use **Shape** to distribute selected performers on the full formation library; enable **Create as group** when desired.
 - Select an entire persistent shape to reveal corner resize handles and the rotation handle; resizing preserves the shape and performer spacing.
 - Use **Freehand**, choose cleanup and movement behavior, then draw directly on the field. Straight strokes and circles can be recognized automatically; handwriting is smoothed while retaining its form.
-- Select a destination set and press **Play** to preview its transition.
-- Press **Play show** to animate every set in sequence using each set's counts and tempo.
-- Open the **Music** timeline tab and import MIDI to select measures, preview 8/16/32-count subdivisions or one long move, and create synchronized sets.
-- Use **Tracks** as a MIDI mixer for mute, solo, and per-track volume. MIDI plays through the bundled FluidSynth and GeneralUser GS bank without requiring rehearsal audio.
+- The timeline has aligned **Drill**, **Music**, and **Audio** lanes on one elapsed-time ruler. Transition blocks end at their destination page; the opening hold appears before the music begins.
+- Click a page to jump to its exact formation. Playback keeps running when already playing; stopped navigation displays the page for editing. Double-click pauses and opens the page editor. The editing page stays separate from the animated transition destination.
+- Click or drag the ruler/playhead to scrub; release resumes only if playback was running. **Play** / Ctrl+Space resumes at the playhead. **Page tools → Play from selection** starts at the selected range's first page.
+- Wheel-scroll all lanes together; Ctrl+wheel zooms around the pointer. **Fit show** displays the whole sequence. **Follow** scrolls with playback; manual scrolling disables it until re-enabled.
+- Shift-click pages to select a loop range. Seeking within an enabled loop preserves its range; seeking outside disables looping without adding an undo entry. Navigation exits single-transition preview mode.
+- Drag a page's dotted handle while stopped to reorder it with insertion feedback and undo. This does not trim durations; timing edits remain in the existing dialogs.
+- Use **Music tools** to import MIDI/MusicXML, attach rehearsal audio, adjust offsets/synchronization, map pages, manage movements/parts, and open the MIDI track mixer. Drag or Shift-click musical measures to select them; double-click a measure to seek to its start. Page generation retains its preview and explicit **Create sets** step.
+- MIDI plays through bundled FluidSynth and the GeneralUser GS bank. The waveform uses decoded audio timestamps and the same offset/anchor mapping as playback. The sequence spans the longest of drill, imported music, and rehearsal audio: final formations hold after drill ends and drill continues silently after audio ends.
 
 ## Licensing note
 

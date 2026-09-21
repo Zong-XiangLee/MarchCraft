@@ -183,7 +183,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     }
     m_capability = MarchCraft::CapabilityProfile::fromJson(object.value(QStringLiteral("capabilityProfile")).toObject());
     m_playhead = 0.0;
-    m_playbackActive = false;
+    m_playbackActive = false; m_playbackSet = -1;
     m_transitionPaths.clear();
     m_analyticsValid = false;
     ensurePlacements();
@@ -194,6 +194,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     emit projectChanged(); emit setsChanged(); emit currentSetChanged(); emit selectionChanged();
     emit sceneChanged(); emit propsChanged();
     emit playbackActiveChanged();
+    emit playbackFrameChanged();
     emit timingChanged();
     emit musicChanged();
     emit setRangeChanged(); emit transportSettingsChanged();

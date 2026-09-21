@@ -107,6 +107,8 @@ void MidiSynthEngine::stop()
 
 void MidiSynthEngine::seekTick(qint64 tick)
 {
+    // Discard queued audio from the previous position before rebuilding MIDI state.
+    if (m_sink) m_sink->reset();
     QMutexLocker lock(&m_mutex);
     tick = qBound<qint64>(0, tick, m_document.durationTick); restoreState(tick);
     m_startTick = tick; m_renderedFrames = 0; m_positionMs.store(m_document.millisecondsAt(tick));

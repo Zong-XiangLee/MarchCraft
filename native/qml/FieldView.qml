@@ -308,7 +308,7 @@ Item {
                             ctx.lineTo(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y))
                         ctx.stroke()
                     }
-                    if (!root.showPaths || drillProject.currentSetIndex <= 0) return
+                    if (!root.showPaths || drillProject.playbackSetIndex <= 0) return
                     for (let row = 0; row < performerRepeater.count; ++row) {
                         const marcher = performerRepeater.itemAt(row)
                         if (!marcher) continue
@@ -328,6 +328,7 @@ Item {
                     target: drillProject
                     function onShapesChanged() { geometryCanvas.requestPaint() }
                     function onCurrentSetChanged() { geometryCanvas.requestPaint() }
+                    function onPlaybackFrameChanged() { geometryCanvas.requestPaint() }
                     function onProjectChanged() { geometryCanvas.requestPaint() }
                     function onSelectionChanged() { geometryCanvas.requestPaint() }
                 }
@@ -760,7 +761,7 @@ Item {
                                 root.contextMenuRequested(p.x, p.y, marcher.index)
                                 return
                             }
-                            drillProject.playbackActive = false
+                            transport.editSet(drillProject.currentSetIndex)
                             const p = mapToItem(field, mouse.x, mouse.y)
                             pressField = Qt.point(root.toFieldX(p.x), root.toFieldY(p.y))
                             startPosition = Qt.point(marcher.fieldX, marcher.fieldY)

@@ -96,6 +96,9 @@ int main(int argc, char *argv[])
     const int midiFlag = arguments.indexOf(QStringLiteral("--midi"));
     if (midiFlag >= 0 && midiFlag + 1 < arguments.size())
         project.importMidi(arguments.at(midiFlag + 1));
+    const int audioFlag = arguments.indexOf(QStringLiteral("--audio"));
+    if (audioFlag >= 0 && audioFlag + 1 < arguments.size())
+        project.attachAudio(arguments.at(audioFlag + 1));
     const int qaPdfFlag = arguments.indexOf(QStringLiteral("--qa-coordinate-pdf"));
     if (qaPdfFlag >= 0 && qaPdfFlag + 1 < arguments.size()) {
         project.newProject();
@@ -222,7 +225,7 @@ int main(int argc, char *argv[])
                 return;
             }
             QTimer::singleShot(900, &application, [&project, &application, screenshotRequested] {
-                const bool advancing = project.currentSetIndex() > 0 && project.playhead() > 0.01;
+                const bool advancing = project.playbackSetIndex() > 0 && project.playhead() > 0.01;
                 if (!advancing || !screenshotRequested)
                     application.exit(advancing ? 0 : 3);
             });

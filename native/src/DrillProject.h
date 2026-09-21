@@ -77,6 +77,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(int openingCounts READ openingCounts NOTIFY setsChanged)
     Q_PROPERTY(double openingDurationMs READ openingDurationMs NOTIFY timingChanged)
     Q_PROPERTY(double playhead READ playhead WRITE setPlayhead NOTIFY playheadChanged)
+    Q_PROPERTY(int playbackSetIndex READ playbackSetIndex NOTIFY playbackFrameChanged)
+    Q_PROPERTY(int playbackSetCounts READ playbackSetCounts NOTIFY playbackFrameChanged)
+    Q_PROPERTY(double audioDurationMs READ audioDurationMs NOTIFY waveformChanged)
     Q_PROPERTY(bool playbackActive READ playbackActive WRITE setPlaybackActive NOTIFY playbackActiveChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
@@ -243,6 +246,11 @@ public:
     double openingDurationMs() const;
     double playhead() const { return m_playhead; }
     void setPlayhead(double value);
+    int playbackSetIndex() const { return m_playbackActive && m_playbackSet >= 0 ? m_playbackSet : m_currentSet; }
+    int playbackSetCounts() const;
+    void setPlaybackFrame(int destination, double progress);
+    double audioDurationMs() const { return m_audioDurationMs; }
+    Q_INVOKABLE double waveformPeakAtMs(double milliseconds) const;
     bool playbackActive() const { return m_playbackActive; }
     void setPlaybackActive(bool value);
     bool dirty() const { return m_dirty; }
@@ -478,6 +486,7 @@ signals:
     void setsChanged();
     void playheadChanged();
     void playbackActiveChanged();
+    void playbackFrameChanged();
     void dirtyChanged();
     void statusMessageChanged();
     void selectionChanged();
@@ -567,6 +576,9 @@ private:
     QString m_statusMessage{QStringLiteral("Ready")};
     double m_bpm = 120.0;
     double m_playhead = 0.0;
+    int m_playbackSet = -1;
+    double m_audioDurationMs = 0.0;
+    QVector<double> m_waveformEndMs;
     bool m_playbackActive = false;
     int m_currentSet = 0;
     int m_selectedSetStart = 0;

@@ -138,6 +138,8 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
                 const quint8 *values = buffer.constData<quint8>();
                 for (qsizetype i = 0; i < samples; ++i) peak = qMax(peak, qAbs(double(values[i]) - 128.0) / 128.0);
             }
+            m_audioDurationMs = qMax(m_audioDurationMs, (buffer.startTime() >= 0 ? buffer.startTime() / 1000.0 : m_audioDurationMs) + buffer.duration() / 1000.0);
+            m_waveformEndMs.push_back(m_audioDurationMs);
             m_waveformPeaks.push_back(qBound(0.0, peak, 1.0));
             emit waveformChanged();
         });
@@ -373,7 +375,7 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
         return {};
     const auto &performer = m_performers.at(index.row());
     const auto placement = placementAt(index.row(), m_currentSet);
-    const auto from = placementAt(index.row(), qMax(0, m_currentSet - 1));
+    const auto from = placementAt(index.row(), qMax(0, playbackSetIndex() - 1));
     const auto displayed = m_playbackActive ? interpolatedPosition(index.row()) : placement.position;
     switch (role) {
     case IdRole: return performer.id;
@@ -397,7 +399,7 @@ QVariant DrillProject::data(const QModelIndex &index, int role) const
     case LocomotionModeRole: return cachedAnimationStateAt(index.row()).locomotion;
     case GaitPhaseRole: return cachedAnimationStateAt(index.row()).normalizedTime;
     case GaitElapsedCountsRole: return cachedAnimationStateAt(index.row()).elapsedCounts;
-    case TravelPathTypeRole: return m_currentSet > 0 ? placement.pathType : QStringLiteral("direct");
+    case TravelPathTypeRole: return playbackSetIndex() > 0 ? placementAt(index.row(), playbackSetIndex()).pathType : QStringLiteral("direct");
     case ClosingTransitionRole: return cachedAnimationStateAt(index.row()).closesAtDestination;
     case TotalDistanceRole: return performerTotalDistance(index.row());
     case WarningRole: return performerHasWarning(index.row());
@@ -549,6 +551,8 @@ void DrillProject::setCurrentSetIndex(int value)
     if (m_currentSet == value)
         return;
     m_currentSet = value;
+    m_playbackSet = -1;
+    emit playbackFrameChanged();
     m_transitionPaths.clear();
     m_analyticsValid = false;
     m_playhead = 0.0;
@@ -643,12 +647,33 @@ void DrillProject::setPlayhead(double value)
                           LocomotionModeRole, GaitPhaseRole, GaitElapsedCountsRole, ClosingTransitionRole});
 }
 
+int DrillProject::playbackSetCounts() const
+{
+    const int destination = playbackSetIndex();
+    return destination >= 0 && destination < m_sets.size() ? m_sets[destination].counts : 0;
+}
+
+void DrillProject::setPlaybackFrame(int destination, double progress)
+{
+    destination = m_sets.isEmpty() ? -1 : qBound(0, destination, m_sets.size() - 1);
+    const bool activeChanged = !m_playbackActive;
+    const bool destinationChanged = m_playbackSet != destination;
+    m_playbackSet = destination;
+    m_playbackActive = true;
+    if (activeChanged) emit playbackActiveChanged();
+    if (activeChanged || destinationChanged) emit playbackFrameChanged();
+    setPlayhead(progress);
+    if (activeChanged || destinationChanged) emitAllDataChanged();
+}
+
 void DrillProject::setPlaybackActive(bool value)
 {
     if (m_playbackActive == value)
         return;
     m_playbackActive = value;
+    if (!value) m_playbackSet = -1;
     emit playbackActiveChanged();
+    emit playbackFrameChanged();
     emitAllDataChanged();
 }
 
@@ -673,7 +698,7 @@ void DrillProject::attachAudio(const QString &urlOrPath)
 
 void DrillProject::startWaveformDecode()
 {
-    m_audioDecoder->stop(); m_waveformPeaks.clear(); emit waveformChanged();
+    m_audioDecoder->stop(); m_waveformPeaks.clear(); m_waveformEndMs.clear(); m_audioDurationMs = 0.0; emit waveformChanged();
     if (m_audioSource.isEmpty() || !QFileInfo::exists(m_audioSource)) return;
     m_audioDecoder->setSource(QUrl::fromLocalFile(m_audioSource)); m_audioDecoder->start();
 }
@@ -681,6 +706,13 @@ void DrillProject::startWaveformDecode()
 double DrillProject::waveformPeak(int index) const
 {
     return index >= 0 && index < m_waveformPeaks.size() ? m_waveformPeaks[index] : 0.0;
+}
+
+double DrillProject::waveformPeakAtMs(double milliseconds) const
+{
+    if (milliseconds < 0.0 || milliseconds >= m_audioDurationMs) return 0.0;
+    const auto it = std::upper_bound(m_waveformEndMs.cbegin(), m_waveformEndMs.cend(), milliseconds);
+    return waveformPeak(int(it - m_waveformEndMs.cbegin()));
 }
 
 void DrillProject::addAudioAnchor(double audioMs, qint64 musicTick)
@@ -788,15 +820,16 @@ void DrillProject::newProject()
     m_music.clear();
     m_musicSections.clear();
     m_musicSelectionStart = m_musicSelectionEnd = -1;
-    m_audioOffsetMs = 0.0; m_waveformPeaks.clear();
+    m_audioOffsetMs = 0.0; m_waveformPeaks.clear(); m_waveformEndMs.clear(); m_audioDurationMs = 0.0;
     m_projectPath.clear();
     m_currentSet = 0;
     m_selectedSetStart = m_selectedSetEnd = 0;
     m_playbackSource = QStringLiteral("midi"); m_midiMasterVolume = 0.75; m_loopEnabled = false;
     m_playhead = 0.0;
-    m_playbackActive = false;
+    m_playbackActive = false; m_playbackSet = -1;
     endResetModel();
     emit playbackActiveChanged();
+    emit playbackFrameChanged();
     emit playheadChanged();
     emit performerCountChanged();
     m_undo.clear();

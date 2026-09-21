@@ -21,7 +21,7 @@ ApplicationWindow {
         if (surface === "preferences") settingsDialog.open()
         else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
-        else if (surface === "music") timelinePanel.exposedTimelineTabs.currentIndex = 1
+        else if (surface === "music") timelinePanel.showMusic()
     }
 
     property int activePerformer: -1
@@ -137,11 +137,7 @@ ApplicationWindow {
     }
     onQaSetDragPreviewChanged: if (qaSetDragPreview) {
         Qt.callLater(function() {
-            timelinePanel.exposedSetStrip.dragFrom = 0
-            timelinePanel.exposedSetStrip.dropSlot = Math.min(3, drillProject.setCount)
-            timelinePanel.exposedSetStrip.dragViewportX = Math.min(timelinePanel.exposedSetStrip.width - 56, timelinePanel.exposedSetStrip.cardPitch * 2.5)
-            const first = drillProject.setInfo(0)
-            timelinePanel.exposedSetStrip.draggedLabel = first.number + " · " + first.name
+            timelinePanel.showDragPreview()
         })
     }
     property bool freehandDrawing: false
@@ -331,11 +327,23 @@ ApplicationWindow {
         background: Rectangle { color: MarchCraftTheme.surfaceRaised; radius: MarchCraftTheme.radiusLarge; border.color: MarchCraftTheme.dividerStrong }
         contentItem: ColumnLayout {
             spacing: 4
-            AppButton { text: "New variant…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); variantDialog.open() } }
-            AppButton { text: "New set…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); setDialog.editing = false; setDialog.open() } }
-            AppButton { text: "Edit current set…"; flat: true; enabled: drillProject.setCount > 0; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); setDialog.editing = true; setDialog.open() } }
+            ComboBox {
+                Layout.fillWidth: true
+                model: drillProject.currentVariantCount
+                currentIndex: Math.max(0, drillProject.currentVariantIndex)
+                displayText: "Variant " + (drillProject.variantInfo(currentIndex).label || "")
+                delegate: ItemDelegate {
+                    required property int index
+                    text: "Variant " + drillProject.variantInfo(index).label + " · " + drillProject.variantInfo(index).name
+                }
+                onActivated: { transport.editSet(drillProject.currentSetIndex); drillProject.activateVariant(currentIndex) }
+            }
+            AppButton { text: "Play from selection"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); transport.playFromSelection() } }
+            AppButton { text: "New variant…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); transport.editSet(drillProject.currentSetIndex); variantDialog.open() } }
+            AppButton { text: "New set…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); transport.editSet(drillProject.currentSetIndex); setDialog.editing = false; setDialog.open() } }
+            AppButton { text: "Edit current set…"; flat: true; enabled: drillProject.setCount > 0; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); transport.editSet(drillProject.currentSetIndex); setDialog.editing = true; setDialog.open() } }
             AppButton { text: "Add sets in batch…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); batchSetDialog.open() } }
-            AppButton { text: drillProject.currentVariantCount > 1 ? "Archive variant" : "Archive set"; flat: true; enabled: drillProject.setCount > 1 || drillProject.currentVariantCount > 1; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); drillProject.archiveCurrentVariant() } }
+            AppButton { text: drillProject.currentVariantCount > 1 ? "Archive variant" : "Archive set"; flat: true; enabled: drillProject.setCount > 1 || drillProject.currentVariantCount > 1; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); transport.editSet(drillProject.currentSetIndex); drillProject.archiveCurrentVariant() } }
             AppButton { text: "Open archive…"; flat: true; Layout.fillWidth: true; onClicked: { timelineActionsPopup.close(); archiveDialog.open() } }
         }
     }
@@ -561,13 +569,13 @@ ApplicationWindow {
 
     Menu {
         id: setContextMenu; property int setIndex: -1
-        AppMenuItem { text: "Edit set"; onTriggered: { drillProject.currentSetIndex=setContextMenu.setIndex; setDialog.editing=true; setDialog.open() } }
-        AppMenuItem { text: "Copy set"; onTriggered: { drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
-        AppMenuItem { text: "Add before"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
-        AppMenuItem { text: "Add after"; onTriggered: { drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
-        AppMenuItem { text: "Create variant"; onTriggered: { drillProject.currentSetIndex=setContextMenu.setIndex; variantDialog.open() } }
+        AppMenuItem { text: "Edit set"; onTriggered: { transport.editSet(setContextMenu.setIndex); setDialog.editing=true; setDialog.open() } }
+        AppMenuItem { text: "Copy set"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        AppMenuItem { text: "Add before"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        AppMenuItem { text: "Add after"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        AppMenuItem { text: "Create variant"; onTriggered: { transport.editSet(setContextMenu.setIndex); variantDialog.open() } }
         MenuSeparator {}
-        AppMenuItem { text: "Delete set"; enabled: drillProject.setCount>1; onTriggered: { drillProject.archiveSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        AppMenuItem { text: "Delete set"; enabled: drillProject.setCount>1; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.archiveSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
     }
 
     Dialog {
@@ -936,8 +944,8 @@ ApplicationWindow {
         onRejected: window.savePurpose = "normal"
     }
     FileDialog { id: importCoordinateDialog; title: "Import coordinate data"; nameFilters: ["Coordinate JSON (*.json)"]; onAccepted: drillProject.importCoordinateJson(selectedFile) }
-    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.exposedTimelineTabs.currentIndex = 1; drillProject.importMidiAsync(selectedFile) } }
-    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.exposedTimelineTabs.currentIndex = 1; drillProject.importMusicXml(selectedFile) } }
+    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMidiAsync(selectedFile) } }
+    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMusicXml(selectedFile) } }
     FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: drillProject.attachAudio(selectedFile) }
     FileDialog { id: csvDialog; title: "Export analytics"; fileMode: FileDialog.SaveFile; nameFilters: ["CSV (*.csv)"]; defaultSuffix: "csv"; onAccepted: drillProject.exportCsv(selectedFile) }
     FileDialog { id: pdfDialog; title: "Export coordinate sheets"; fileMode: FileDialog.SaveFile; nameFilters: ["PDF (*.pdf)"]; defaultSuffix: "pdf"; onAccepted: drillProject.exportCoordinatePdf(selectedFile) }
