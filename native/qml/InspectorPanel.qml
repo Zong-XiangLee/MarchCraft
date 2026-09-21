@@ -147,9 +147,43 @@ Frame {
             RowLayout {
                 visible: drillProjectContext.selectedCount > 0
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                AppButton { Layout.minimumWidth: 0; text: "Direct"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("direct") }
-                AppButton { Layout.minimumWidth: 0; text: "Curve"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("curved") }
-                AppButton { Layout.minimumWidth: 0; text: "Delayed"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("delayed") }
+                AppButton { Layout.minimumWidth: 0; text: "Direct"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; ToolTip.visible: hovered; ToolTip.text: "Use a straight route; delayed starts remain count-based"; onClicked: drillProjectContext.setSelectedTransitionPath("direct") }
+                AppButton { Layout.minimumWidth: 0; text: "Curve"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; ToolTip.visible: hovered; ToolTip.text: "Create a quadratic route with one draggable field handle"; onClicked: drillProjectContext.setSelectedTransitionPath("curved") }
+                AppButton { Layout.minimumWidth: 0; text: "Clear delay"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedStepOffCount(0) }
+            }
+            GridLayout {
+                visible: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0
+                columns: 3; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                Label { text: "Step off"; color: "#a5afbc" }
+                SpinBox { id: stepOffCount; from: 0; to: Math.max(0, drillProjectContext.currentSetCounts - 1); value: Number(inspector.person.stepOffCount || 0); Layout.fillWidth: true }
+                AppButton { text: "Apply"; onClicked: drillProjectContext.setSelectedStepOffCount(stepOffCount.value) }
+                Label { text: "Stagger"; color: "#a5afbc" }
+                SpinBox { id: staggerInterval; from: 0; to: Math.max(0, drillProjectContext.currentSetCounts - 1); value: 1; Layout.fillWidth: true }
+                AppButton { text: "Assign"; onClicked: drillProjectContext.staggerSelectedStepOffs(stepOffCount.value, staggerInterval.value, false) }
+            }
+            ColumnLayout {
+                visible: drillProjectContext.selectionIsExactGroup && drillProjectContext.currentSetIndex > 0
+                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 6
+                Label { text: "GROUP MOTION"; font.bold: true; color: "#a5afbc" }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: "Angle"; color: "#a5afbc" }
+                    SpinBox { id: groupMotionAngle; from: 1; to: 360; value: 90; Layout.fillWidth: true }
+                    CheckBox { id: groupMotionClockwise; text: "CW"; checked: true }
+                    CheckBox { id: groupMotionReverse; text: "Reverse" }
+                }
+                RowLayout {
+                    Layout.fillWidth: true
+                    AppButton { Layout.fillWidth: true; text: "Gate"; enabled: windowContext.activePerformer >= 0; ToolTip.visible: hovered; ToolTip.text: "Rotate the exact group around the active stationary member"; onClicked: drillProjectContext.previewGroupMotion("gate", windowContext.activePerformer, 0, 0, groupMotionAngle.value, groupMotionClockwise.checked, false, staggerInterval.value) }
+                    AppButton { Layout.fillWidth: true; text: "Pivot"; enabled: windowContext.activePerformer >= 0; ToolTip.visible: hovered; ToolTip.text: "Preview a rigid rotation around a draggable field pivot"; onClicked: { const b=drillProjectContext.selectedBounds(); drillProjectContext.previewGroupMotion("pivot", windowContext.activePerformer, b.centerX, b.centerY, groupMotionAngle.value, groupMotionClockwise.checked, false, staggerInterval.value) } }
+                    AppButton { Layout.fillWidth: true; text: "Follow"; enabled: windowContext.activePerformer >= 0; ToolTip.visible: hovered; ToolTip.text: "Use the active performer as leader and trail the persistent order"; onClicked: drillProjectContext.previewGroupMotion("follow", windowContext.activePerformer, 0, 0, 0, true, groupMotionReverse.checked, staggerInterval.value) }
+                }
+                Label { visible: drillProjectContext.groupMotionPreviewWarning.length > 0; text: drillProjectContext.groupMotionPreviewWarning; color: "#d6a75d"; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                RowLayout {
+                    visible: drillProjectContext.groupMotionPreviewActive; Layout.alignment: Qt.AlignRight
+                    AppButton { text: "Cancel"; onClicked: drillProjectContext.cancelGroupMotionPreview() }
+                    AppButton { text: "Apply motion"; highlighted: true; onClicked: drillProjectContext.applyGroupMotionPreview() }
+                }
             }
             RowLayout {
                 visible: drillProjectContext.selectedCount > 0

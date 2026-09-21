@@ -470,8 +470,17 @@ void DrillProject::recalculateCounts()
 {
     if (m_sets.isEmpty()) return;
     m_sets[0].stepMultiplier = 0.0;
-    for (int i = 1; i < m_sets.size(); ++i)
+    for (int i = 1; i < m_sets.size(); ++i) {
         m_sets[i].counts = pulsesBetween(m_sets[i - 1].startTick, m_sets[i].startTick);
+        const int maximumDelay = qMax(0, m_sets[i].counts - 1);
+        auto clampVariant = [maximumDelay](MarchCraft::SetVariant &variant) {
+            for (auto placement = variant.placements.begin(); placement != variant.placements.end(); ++placement)
+                placement->stepOffCount = qBound(0, placement->stepOffCount, maximumDelay);
+        };
+        for (auto &variant : m_sets[i].variants) clampVariant(variant);
+        for (auto &variant : m_sets[i].archivedVariants) clampVariant(variant);
+    }
+    m_transitionPaths.clear(); m_analyticsValid = false;
     emit currentSetChanged(); emit setsChanged();
 }
 

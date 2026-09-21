@@ -5,8 +5,9 @@
 
 namespace MarchCraft {
 
-TransitionPath::TransitionPath(QPointF origin, const Placement &destination)
-    : m_delayed(destination.pathType == QStringLiteral("delayed"))
+TransitionPath::TransitionPath(QPointF origin, const Placement &destination, int transitionCounts)
+    : m_delayFraction(transitionCounts > 0
+          ? std::clamp(double(destination.stepOffCount) / transitionCounts, 0.0, 0.99) : 0.0)
 {
     m_points.push_back(origin);
     if (destination.pathType == QStringLiteral("curved") && !destination.pathPoints.isEmpty()) {
@@ -32,7 +33,8 @@ QPointF TransitionPath::position(double progress) const
 {
     if (m_points.isEmpty()) return {};
     progress = std::clamp(progress, 0.0, 1.0);
-    if (m_delayed) progress = progress < 0.25 ? 0.0 : (progress - 0.25) / 0.75;
+    if (m_delayFraction > 0.0)
+        progress = progress <= m_delayFraction ? 0.0 : (progress - m_delayFraction) / (1.0 - m_delayFraction);
     if (progress >= 1.0) return m_points.last();
     const double target = progress * distance();
     const auto found = std::lower_bound(m_cumulative.cbegin() + 1, m_cumulative.cend(), target);

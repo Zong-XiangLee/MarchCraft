@@ -55,7 +55,7 @@ const MarchCraft::TransitionPath &DrillProject::transitionPath(int performerInde
     if (found != m_transitionPaths.cend()) return found.value();
     return m_transitionPaths.insert(key, MarchCraft::TransitionPath(
         placementAt(performerIndex, destinationSet - 1).position,
-        placementAt(performerIndex, destinationSet))).value();
+        placementAt(performerIndex, destinationSet), m_sets[destinationSet].counts)).value();
 }
 
 QPointF DrillProject::pathPosition(int performerIndex, int destinationSet, double progress) const

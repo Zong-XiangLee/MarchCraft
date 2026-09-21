@@ -150,6 +150,7 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
         ++m_projectRevision; cancelFormationPreview();
     });
     connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelFormationPreview);
+    connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelGroupMotionPreview);
     connect(&m_undo, &QUndoStack::cleanChanged, this, [this](bool clean) {
         if (m_dirty == !clean) return;
         m_dirty = !clean;
@@ -1002,8 +1003,10 @@ void DrillProject::addSet(const QString &name, int counts, bool subset)
     set.counts = qMax(1, counts);
     set.startTick = m_sets.isEmpty() ? 0 : advancePulses(m_sets[qMax(0, m_currentSet)].startTick, set.counts);
     set.subset = subset;
-    if (!m_sets.isEmpty())
+    if (!m_sets.isEmpty()) {
         set.activeVariant().placements = m_sets[qMax(0, m_currentSet)].activeVariant().placements;
+        set.activeVariant().groups = m_sets[qMax(0, m_currentSet)].activeVariant().groups;
+    }
     m_sets.insert(m_currentSet + 1, set);
     m_currentSet++;
     emit setsChanged();
@@ -1019,8 +1022,12 @@ void DrillProject::batchAddSets(int numberOfSets, int counts)
     const auto before = toJson();
     int insertAt = m_currentSet + 1;
     QHash<QString, Placement> placements;
+    QVector<MarchCraft::PerformerGroup> groups;
     if (!m_sets.isEmpty())
+    {
         placements = m_sets[qMax(0, m_currentSet)].activeVariant().placements;
+        groups = m_sets[qMax(0, m_currentSet)].activeVariant().groups;
+    }
     for (int i = 0; i < numberOfSets; ++i) {
         DrillSet set;
         set.number = QString::number(m_sets.size() + 1);
@@ -1030,6 +1037,7 @@ void DrillProject::batchAddSets(int numberOfSets, int counts)
                                     : m_sets[insertAt + i - 1].startTick);
         set.startTick = advancePulses(base, counts);
         set.activeVariant().placements = placements;
+        set.activeVariant().groups = groups;
         m_sets.insert(insertAt + i, set);
     }
     m_currentSet = insertAt;
@@ -1057,7 +1065,7 @@ void DrillProject::duplicateSetAt(int index)
 {
     if(index<0||index>=m_sets.size())return; const auto before=toJson(); DrillSet copy=m_sets[index];
     copy.id=QUuid::createUuid().toString(QUuid::WithoutBraces); copy.archivedOrder=-1;
-    auto renewVariant=[](MarchCraft::SetVariant &variant){variant.id=QUuid::createUuid().toString(QUuid::WithoutBraces);QHash<QString,QString> groupIds;for(auto&group:variant.groups){const QString old=group.id;group.id=QUuid::createUuid().toString(QUuid::WithoutBraces);groupIds.insert(old,group.id);}for(auto&shape:variant.shapes){shape.id=QUuid::createUuid().toString(QUuid::WithoutBraces);if(groupIds.contains(shape.groupId))shape.groupId=groupIds.value(shape.groupId);}};
+    auto renewVariant=[](MarchCraft::SetVariant &variant){variant.id=QUuid::createUuid().toString(QUuid::WithoutBraces);QHash<QString,QString> groupIds;for(auto&group:variant.groups){const QString old=group.id;group.id=QUuid::createUuid().toString(QUuid::WithoutBraces);groupIds.insert(old,group.id);}for(auto&shape:variant.shapes){shape.id=QUuid::createUuid().toString(QUuid::WithoutBraces);if(groupIds.contains(shape.groupId))shape.groupId=groupIds.value(shape.groupId);}for(auto&motion:variant.groupTransitions)if(groupIds.contains(motion.groupId))motion.groupId=groupIds.value(motion.groupId);};
     for(auto&variant:copy.variants)renewVariant(variant);for(auto&variant:copy.archivedVariants)renewVariant(variant);
     copy.activeVariantId=copy.variants.value(qMax(0,m_sets[index].activeVariantIndex())).id;
     const int insert=index+1; const int counts=qMax(1,copy.counts); copy.startTick=advancePulses(m_sets[index].startTick,counts);
@@ -1068,7 +1076,7 @@ void DrillProject::duplicateSetAt(int index)
 void DrillProject::insertSetAt(int index)
 {
     index=qBound(0,index,m_sets.size());const auto before=toJson();DrillSet set;set.number=QString::number(index+1);set.activeVariant().name=QStringLiteral("New set");set.counts=index==0?0:8;
-    if(!m_sets.isEmpty()){const int source=qBound(0,index-1,m_sets.size()-1);set.activeVariant().placements=m_sets[source].activeVariant().placements;set.startTick=index==0?0:advancePulses(m_sets[source].startTick,8);const qint64 shift=index==0?advancePulses(0,8):set.startTick-m_sets[source].startTick;for(int i=index;i<m_sets.size();++i)m_sets[i].startTick+=shift;}
+    if(!m_sets.isEmpty()){const int source=qBound(0,index-1,m_sets.size()-1);set.activeVariant().placements=m_sets[source].activeVariant().placements;set.activeVariant().groups=m_sets[source].activeVariant().groups;set.startTick=index==0?0:advancePulses(m_sets[source].startTick,8);const qint64 shift=index==0?advancePulses(0,8):set.startTick-m_sets[source].startTick;for(int i=index;i<m_sets.size();++i)m_sets[i].startTick+=shift;}
     m_sets.insert(index,set);m_currentSet=index;recalculateCounts();emit setsChanged();emit currentSetChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Insert set"));
 }
 
@@ -1416,6 +1424,7 @@ void DrillProject::groupSelected(const QString &name)
     for (const auto &performer : m_performers) if (performer.selected) selected.push_back(performer.id);
     const auto before = toJson();
     auto &variant = m_sets[m_currentSet].activeVariant();
+    variant.groupTransitions.clear();
     QSet<QString> selectedIds;
     for (const auto &id : selected) selectedIds.insert(id);
     for (auto &group : variant.groups)
@@ -1435,7 +1444,8 @@ void DrillProject::removeSelectedFromGroup()
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
-    const auto before = toJson(); auto &groups = m_sets[m_currentSet].activeVariant().groups;
+    const auto before = toJson(); auto &variant = m_sets[m_currentSet].activeVariant();
+    variant.groupTransitions.clear(); auto &groups = variant.groups;
     for (auto &group : groups)
         group.performerIds.erase(std::remove_if(group.performerIds.begin(), group.performerIds.end(),
             [&](const QString &id) { return selected.contains(id); }), group.performerIds.end());
@@ -1450,7 +1460,8 @@ void DrillProject::ungroupSelected()
     QSet<QString> selected;
     for (const auto &performer : m_performers) if (performer.selected) selected.insert(performer.id);
     if (selected.isEmpty()) return;
-    const auto before = toJson(); auto &groups = m_sets[m_currentSet].activeVariant().groups;
+    const auto before = toJson(); auto &variant = m_sets[m_currentSet].activeVariant();
+    variant.groupTransitions.clear(); auto &groups = variant.groups;
     groups.erase(std::remove_if(groups.begin(), groups.end(), [&](const auto &group) {
         for (const auto &id : group.performerIds) if (selected.contains(id)) return true;
         return false;
@@ -1513,25 +1524,8 @@ void DrillProject::previewMove(double dx, double dy, bool lockX, bool lockY)
 void DrillProject::endMove()
 {
     if (m_moveBefore.isEmpty()) return;
-    if (m_currentSet >= 0) {
-        auto &shapes = m_sets[m_currentSet].activeVariant().shapes;
-        for (int i = shapes.size() - 1; i >= 0; --i) {
-            auto &shape = shapes[i];
-            if (!m_shapePointStarts.contains(shape.id)) continue;
-            bool allMoved = !shape.performerIds.isEmpty(), anyMoved = false;
-            for (const auto &id : shape.performerIds) {
-                anyMoved = anyMoved || m_moveStarts.contains(id);
-                allMoved = allMoved && m_moveStarts.contains(id);
-            }
-            if (!anyMoved || allMoved) continue;
-            shape.performerIds.erase(std::remove_if(shape.performerIds.begin(), shape.performerIds.end(),
-                [this](const QString &id) { return m_moveStarts.contains(id); }), shape.performerIds.end());
-            if (shape.performerIds.size() < 2) { shapes.removeAt(i); continue; }
-            shape.type = QStringLiteral("detached"); shape.closed = false; shape.points.clear();
-            for (const auto &id : shape.performerIds)
-                shape.points.push_back(m_sets[m_currentSet].activeVariant().placements.value(id).position);
-        }
-    }
+    detachPartiallyEditedShapes();
+    invalidateGroupMotionsForSelection();
     commitSnapshot(m_moveBefore, QStringLiteral("Move performers"));
     m_moveBefore = {};
     m_moveStarts.clear();
@@ -1560,13 +1554,36 @@ int DrillProject::selectedShapeIndex() const
 
 void DrillProject::beginScale()
 {
-    const int shapeIndex=selectedShapeIndex();if(shapeIndex<0)return;const auto&shape=m_sets[m_currentSet].activeVariant().shapes[shapeIndex];
-    int row=0;while(row<m_performers.size()&&!m_performers[row].selected)++row;beginMove(row,false);m_rotatePivot=shape.anchor;
+    if(selectedCount()<2)return;const auto bounds=selectedBounds();if(bounds.isEmpty())return;
+    int row=0;while(row<m_performers.size()&&!m_performers[row].selected)++row;beginMove(row,false);
+    m_rotatePivot={bounds.value(QStringLiteral("centerX")).toDouble(),bounds.value(QStringLiteral("centerY")).toDouble()};
+}
+
+void DrillProject::detachPartiallyEditedShapes()
+{
+    if (m_currentSet < 0) return;
+    auto &shapes = m_sets[m_currentSet].activeVariant().shapes;
+    for (int i = shapes.size() - 1; i >= 0; --i) {
+        auto &shape = shapes[i];
+        if (!m_shapePointStarts.contains(shape.id)) continue;
+        bool allEdited = !shape.performerIds.isEmpty(), anyEdited = false;
+        for (const auto &id : shape.performerIds) {
+            anyEdited = anyEdited || m_moveStarts.contains(id);
+            allEdited = allEdited && m_moveStarts.contains(id);
+        }
+        if (!anyEdited || allEdited) continue;
+        shape.performerIds.erase(std::remove_if(shape.performerIds.begin(), shape.performerIds.end(),
+            [this](const QString &id) { return m_moveStarts.contains(id); }), shape.performerIds.end());
+        if (shape.performerIds.size() < 2) { shapes.removeAt(i); continue; }
+        shape.type = QStringLiteral("detached"); shape.closed = false; shape.points.clear();
+        for (const auto &id : shape.performerIds)
+            shape.points.push_back(m_sets[m_currentSet].activeVariant().placements.value(id).position);
+    }
 }
 
 void DrillProject::previewScale(double factor)
 {
-    if(m_moveStarts.isEmpty()||selectedShapeIndex()<0)return;factor=qBound(0.08,factor,12.0);
+    if(m_moveStarts.isEmpty())return;factor=qBound(0.08,factor,12.0);
     QHash<QString,QPointF> scaled;double left=1e9,right=-1e9,top=1e9,bottom=-1e9;
     for(auto it=m_moveStarts.cbegin();it!=m_moveStarts.cend();++it){const QPointF p=m_rotatePivot+(it.value()-m_rotatePivot)*factor;scaled.insert(it.key(),p);left=qMin(left,p.x());right=qMax(right,p.x());top=qMin(top,p.y());bottom=qMax(bottom,p.y());}
     QPointF shift;if(left<canvasMinX())shift.rx()+=canvasMinX()-left;if(right>canvasMaxX())shift.rx()-=right-canvasMaxX();if(top<canvasMinY())shift.ry()+=canvasMinY()-top;if(bottom>canvasMaxY())shift.ry()-=bottom-canvasMaxY();
@@ -1577,7 +1594,7 @@ void DrillProject::previewScale(double factor)
 
 void DrillProject::endScale()
 {
-    if(m_moveBefore.isEmpty())return;commitSnapshot(m_moveBefore,QStringLiteral("Resize formation"));m_moveBefore={};m_moveStarts.clear();m_shapePointStarts.clear();m_shapeAnchorStarts.clear();m_shapeRotationStarts.clear();m_shapeSizeStarts.clear();emit shapesChanged();
+    if(m_moveBefore.isEmpty())return;detachPartiallyEditedShapes();invalidateGroupMotionsForSelection();commitSnapshot(m_moveBefore,QStringLiteral("Resize formation"));m_moveBefore={};m_moveStarts.clear();m_shapePointStarts.clear();m_shapeAnchorStarts.clear();m_shapeRotationStarts.clear();m_shapeSizeStarts.clear();emit shapesChanged();
 }
 
 void DrillProject::beginRotate()
@@ -1601,7 +1618,7 @@ void DrillProject::previewRotate(double degrees)
 
 void DrillProject::endRotate()
 {
-    if(m_moveBefore.isEmpty())return; commitSnapshot(m_moveBefore,QStringLiteral("Rotate formation")); m_moveBefore={};m_moveStarts.clear();m_shapePointStarts.clear();m_shapeAnchorStarts.clear();m_shapeRotationStarts.clear();m_shapeSizeStarts.clear();emit shapesChanged();
+    if(m_moveBefore.isEmpty())return; detachPartiallyEditedShapes();invalidateGroupMotionsForSelection();commitSnapshot(m_moveBefore,QStringLiteral("Rotate formation")); m_moveBefore={};m_moveStarts.clear();m_shapePointStarts.clear();m_shapeAnchorStarts.clear();m_shapeRotationStarts.clear();m_shapeSizeStarts.clear();emit shapesChanged();
 }
 
 void DrillProject::nudgeSelected(double dx, double dy)
@@ -1706,6 +1723,7 @@ QVariantMap DrillProject::performerInfo(int row) const
             {QStringLiteral("incomingDistance"), incoming}, {QStringLiteral("outgoingDistance"), outgoing},
             {QStringLiteral("stepsPerCount"), stepsPerCount}, {QStringLiteral("directionChange"), directionChange},
             {QStringLiteral("pathType"), m_currentSet > 0 ? placementAt(row, m_currentSet).pathType : QStringLiteral("direct")},
+            {QStringLiteral("stepOffCount"), m_currentSet > 0 ? placementAt(row, m_currentSet).stepOffCount : 0},
             {QStringLiteral("warning"), warning},
             {QStringLiteral("distance"), performerTotalDistance(row)}};
 }
