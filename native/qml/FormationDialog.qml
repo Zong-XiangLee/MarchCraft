@@ -2,7 +2,7 @@ import QtQuick
 import QtQuick.Controls
 import QtQuick.Layouts
 
-Dialog {
+MovableDialog {
     id: dialog
     title: "Smart shape builder"
     modal: true
@@ -44,17 +44,15 @@ Dialog {
         spacing.value = Math.round(defaults.spacing || 4)
     }
 
-    onOpened: { drillProject.cancelFormationPreview(); reloadDefaults(); assignmentMode.currentIndex = 0 }
+    onOpened: { drillProject.cancelFormationPreview(); reloadDefaults(); assignmentMode.currentIndex = Math.max(0, assignmentMode.indexOfValue(drillProject.formationAssignmentMode)) }
     onClosed: drillProject.cancelFormationPreview()
 
-    Connections {
-        target: drillProject
-        function onShapePlacementModeChanged() {
-            if (!dialog.visible) return
-            const defaults = drillProject.formationDefaults(kind.currentValue || "line", drillProject.shapePlacementMode)
-            centerX.value = Math.round(defaults.centerX ?? 80)
-            centerY.value = Math.round(defaults.centerY ?? 42)
-        }
+    property string placementMode: drillProject.shapePlacementMode
+    onPlacementModeChanged: {
+        if (!visible) return
+        const defaults = drillProject.formationDefaults(kind.currentValue || "line", placementMode)
+        centerX.value = Math.round(defaults.centerX ?? 80)
+        centerY.value = Math.round(defaults.centerY ?? 42)
     }
 
     contentItem: ScrollView {
@@ -137,6 +135,7 @@ Dialog {
             Label { text: "Performer assignment"; font.bold: true }
             ComboBox {
                 id: assignmentMode; objectName: "assignmentMode"; Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                onActivated: drillProject.formationAssignmentMode = currentValue
                 model: [
                     {text:"Rehearsal safe (recommended)",value:"rehearsalSafe"},
                     {text:"Shortest total distance",value:"shortest"},

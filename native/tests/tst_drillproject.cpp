@@ -19,6 +19,7 @@
 #include <QJsonDocument>
 #include <QSet>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -441,6 +442,39 @@ private slots:
         QCOMPARE(project.coordinateFor(0), QStringLiteral("Side 1: On 40 yard line · 2 steps in front of front hash"));
         QCOMPARE(project.coordinateFor(1), QStringLiteral("Side 2: On 40 yard line · 2 steps in front of back hash"));
         QCOMPARE(project.coordinateFor(2), QStringLiteral("Side 2: On 40 yard line · 2 steps behind back hash"));
+    }
+
+    void formationAssignmentPreferencePersists()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString organization = QCoreApplication::organizationName();
+        const QString application = QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftTests"));
+        QCoreApplication::setApplicationName(QFileInfo(temporary.path()).fileName());
+        const auto restoreSettings = qScopeGuard([&] {
+            QSettings().clear();
+            QCoreApplication::setOrganizationName(organization);
+            QCoreApplication::setApplicationName(application);
+        });
+        DrillProject project;
+        const QStringList modes{QStringLiteral("shortest"), QStringLiteral("preserveOrder"),
+            QStringLiteral("evenEffort"), QStringLiteral("featureMove"), QStringLiteral("rosterOrder"),
+            QStringLiteral("rehearsalSafe")};
+        QSignalSpy settingsChanged(&project, &DrillProject::editorSettingsChanged);
+        for (const auto &mode : modes) {
+            project.setFormationAssignmentMode(mode);
+            QCOMPARE(project.formationAssignmentMode(), mode);
+            QCOMPARE(QSettings().value(QStringLiteral("formation/assignmentMode")).toString(), mode);
+            DrillProject reopened;
+            QCOMPARE(reopened.formationAssignmentMode(), mode);
+            reopened.newProject();
+            QCOMPARE(reopened.formationAssignmentMode(), mode);
+        }
+        QCOMPARE(settingsChanged.size(), modes.size());
+        project.setFormationAssignmentMode(QStringLiteral("invalid"));
+        QCOMPARE(project.formationAssignmentMode(), QStringLiteral("rehearsalSafe"));
+        QCOMPARE(settingsChanged.size(), modes.size());
     }
 
     void shapeDrawerMouseGestures_data()

@@ -87,6 +87,8 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
 {
     m_backgroundWorkerClone = backgroundWorker;
     QSettings settings;
+    m_formationAssignmentMode = MarchCraft::assignmentModeName(MarchCraft::assignmentModeFromName(
+        settings.value(QStringLiteral("formation/assignmentMode"), QStringLiteral("rehearsalSafe")).toString()));
     m_shapePlacementMode = settings.value(QStringLiteral("formation/placementMode"), QStringLiteral("selection")).toString();
     m_showShapeGuides = settings.value(QStringLiteral("view/showShapeGuides"), false).toBool();
     m_showTransitionPaths = settings.value(QStringLiteral("view/showTransitionPaths"), true).toBool();
@@ -160,6 +162,15 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     m_autosaveTimer.stop();
     m_undo.clear();
     m_dirty = false;
+}
+
+void DrillProject::setFormationAssignmentMode(const QString &mode)
+{
+    const QString next = MarchCraft::assignmentModeName(MarchCraft::assignmentModeFromName(mode));
+    if (next == m_formationAssignmentMode) return;
+    m_formationAssignmentMode = next;
+    QSettings().setValue(QStringLiteral("formation/assignmentMode"), next);
+    emit editorSettingsChanged();
 }
 
 void DrillProject::setShapePlacementMode(const QString &mode)

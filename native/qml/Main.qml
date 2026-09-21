@@ -423,7 +423,7 @@ ApplicationWindow {
                         freehandPreviewDialog.open()
                     }
                     onShapeCompleted: function(kind, options) {
-                        drillProject.requestFormationPreview(kind, options, "rehearsalSafe")
+                        drillProject.requestFormationPreview(kind, options, drillProject.formationAssignmentMode)
                         window.shapeDrawing = ""
                         freehandPreviewDialog.applied = false
                         freehandPreviewDialog.open()
@@ -480,7 +480,7 @@ ApplicationWindow {
 
     FormationDialog {
         id: formationDialog
-        anchors.centerIn: Overlay.overlay
+        parent: Overlay.overlay
         onSettingsRequested: settingsDialog.open()
     }
 
@@ -499,10 +499,10 @@ ApplicationWindow {
         }
     }
 
-    Dialog {
+    MovableDialog {
         id: freehandPreviewDialog
         property bool applied: false
-        title: "Review formation assignment"; modal: true; anchors.centerIn: Overlay.overlay; width: 460
+        title: "Review formation assignment"; parent: Overlay.overlay; width: 460
         standardButtons: Dialog.NoButton
         onClosed: if (!applied) drillProject.cancelFormationPreview()
         contentItem: ColumnLayout {

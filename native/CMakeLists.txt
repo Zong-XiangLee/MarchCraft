@@ -64,6 +64,7 @@ qt_add_qml_module(marchcraft
         qml/Venue3D.qml
         qml/Prop3D.qml
         qml/FormationDialog.qml
+        qml/MovableDialog.qml
         qml/MusicPanel.qml
         qml/MarchCraftTheme.qml
         qml/AppButton.qml

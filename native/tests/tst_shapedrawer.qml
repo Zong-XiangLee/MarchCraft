@@ -11,6 +11,7 @@ TestCase {
 
     QtObject {
         id: drillProject
+        property string formationAssignmentMode: "rehearsalSafe"
         property int selectedCount: 12
         property string shapePlacementMode: "selection"
         property real fieldDepthSteps: 84
@@ -29,6 +30,38 @@ TestCase {
     FormationDialog { id: builder; parent: testCase }
 
     function cleanup() { builder.close(); wait(1); drillProject.shapePlacementMode = "selection" }
+
+    function test_assignment_survives_reopen_data() {
+        return ["rehearsalSafe", "shortest", "preserveOrder", "evenEffort", "featureMove", "rosterOrder"]
+            .map(function(mode) { return {tag: mode, mode: mode} })
+    }
+    function test_assignment_survives_reopen(data) {
+        builder.open(); tryCompare(builder, "opened", true)
+        const assignment = findChild(builder, "assignmentMode")
+        assignment.currentIndex = assignment.indexOfValue(data.mode)
+        assignment.activated(assignment.currentIndex)
+        compare(drillProject.formationAssignmentMode, data.mode)
+        builder.close(); tryCompare(builder, "visible", false)
+        assignment.currentIndex = 0
+        builder.open(); tryCompare(builder, "opened", true)
+        compare(assignment.currentValue, data.mode)
+    }
+
+    function test_drag_preserves_preview_and_stays_in_window() {
+        builder.open(); tryCompare(builder, "opened", true)
+        const handle = findChild(builder, "dialogDragHandle")
+        verify(handle !== null)
+        const oldX = builder.x
+        drillProject.formationPreviewActive = true
+        mousePress(handle, 100, 20)
+        mouseMove(handle, 200, 20, 30)
+        mouseRelease(handle, 100, 20)
+        verify(builder.x > oldX)
+        verify(builder.x >= 8 && builder.x + builder.width <= testCase.width - 8)
+        verify(drillProject.formationPreviewActive)
+        verify(builder.visible)
+        compare(builder.dim, false)
+    }
 
     function test_placement_settings_refresh_center() {
         builder.open(); tryCompare(builder, "opened", true)

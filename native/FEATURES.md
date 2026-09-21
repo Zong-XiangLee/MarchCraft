@@ -64,3 +64,6 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Editing any advanced-builder option invalidates the previous preview, including assignment mode and grouping. The builder scrolls within the supported minimum window size.
 
 Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all six assignment modes and 1/7/24 performers, field fitting, preview immutability, Apply, cancellation, and undo/redo. `shapeDrawerMouseGestures` exercises real Qt input in both directions at three zoom levels. `tst_shapedrawer.qml` covers all drag option mappings and each advanced control's preview invalidation. Use `--qa-formation --screenshot output.png` for the advanced builder, optionally with `--qa-minimum`.
+
+- Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
+- The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.

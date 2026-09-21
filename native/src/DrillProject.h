@@ -41,6 +41,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(int currentVariantIndex READ currentVariantIndex WRITE activateVariant NOTIFY currentSetChanged)
     Q_PROPERTY(int archivedSetCount READ archivedSetCount NOTIFY setsChanged)
     Q_PROPERTY(int currentShapeCount READ currentShapeCount NOTIFY shapesChanged)
+    Q_PROPERTY(QString formationAssignmentMode READ formationAssignmentMode WRITE setFormationAssignmentMode NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString shapePlacementMode READ shapePlacementMode WRITE setShapePlacementMode NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool showShapeGuides READ showShapeGuides WRITE setShowShapeGuides NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool showTransitionPaths READ showTransitionPaths WRITE setShowTransitionPaths NOTIFY editorSettingsChanged)
@@ -189,6 +190,8 @@ public:
     int currentShapeCount() const;
     QString shapePlacementMode() const { return m_shapePlacementMode; }
     void setShapePlacementMode(const QString &mode);
+    QString formationAssignmentMode() const { return m_formationAssignmentMode; }
+    void setFormationAssignmentMode(const QString &mode);
     bool showShapeGuides() const { return m_showShapeGuides; }
     void setShowShapeGuides(bool value);
     bool showTransitionPaths() const { return m_showTransitionPaths; }
@@ -583,6 +586,7 @@ private:
     QHash<QString, double> m_shapeRotationStarts;
     QHash<QString, QSizeF> m_shapeSizeStarts;
     QPointF m_rotatePivot;
+    QString m_formationAssignmentMode{QStringLiteral("rehearsalSafe")};
     QString m_shapePlacementMode{QStringLiteral("selection")};
     bool m_showShapeGuides = false;
     bool m_showTransitionPaths = true;
