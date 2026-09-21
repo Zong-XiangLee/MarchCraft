@@ -14,10 +14,11 @@ Canvas {
         if(kind==="line"){c.moveTo(p,h-p);c.lineTo(w-p,p)}
         else if(kind==="rectangle")c.rect(p,p,w-2*p,h-2*p)
         else if(kind==="circle")c.arc(x,y,r,0,Math.PI*2)
-        else if(kind==="ellipse")c.ellipse(x,y,r,r*.62,0,0,Math.PI*2)
+        else if(kind==="ellipse")c.ellipse(x-r,y-r*.62,r*2,r*1.24)
         else if(kind==="triangle"){c.moveTo(x,p);c.lineTo(w-p,h-p);c.lineTo(p,h-p);c.closePath()}
         else if(kind==="diamond"){c.moveTo(x,p);c.lineTo(w-p,y);c.lineTo(x,h-p);c.lineTo(p,y);c.closePath()}
         else if(kind==="arc")c.arc(x,y+3,r,Math.PI,Math.PI*2)
+        else if(kind==="spiral"){for(let i=0;i<=64;++i){const t=i/64,a=t*Math.PI*3,rr=r*t;const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr;if(!i)c.moveTo(px,py);else c.lineTo(px,py)}}
         else if(kind==="block"){c.rect(p,p,w-2*p,h-2*p);c.moveTo(x,p);c.lineTo(x,h-p);c.moveTo(p,y);c.lineTo(w-p,y)}
         else { const n=kind==="star"?10:6; for(let i=0;i<n;++i){const a=-Math.PI/2+i*Math.PI*2/n,rr=kind==="star"&&i%2?r*.45:r;const px=x+Math.cos(a)*rr,py=y+Math.sin(a)*rr;if(!i)c.moveTo(px,py);else c.lineTo(px,py)}c.closePath() }
         c.stroke()

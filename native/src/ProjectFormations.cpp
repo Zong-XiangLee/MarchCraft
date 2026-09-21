@@ -271,15 +271,11 @@ QVariantMap DrillProject::formationEstimate(const QString &type, const QVariantM
             {QStringLiteral("currentAverageSpacing"),metrics.value(QStringLiteral("averageSpacing"))}};
 }
 
-void DrillProject::createFormation(const QString &type, const QVariantMap &options)
+QVariantMap DrillProject::formationGeometry(const QString &type, const QVariantMap &options) const
 {
-    if (!m_generatingFormationPreview) {
-        const QString mode = options.value(QStringLiteral("assignmentMode"), QStringLiteral("rehearsalSafe")).toString();
-        previewFormation(type, options, mode); commitFormationPreview(); return;
-    }
     QVector<int> selected;
     for (int i = 0; i < m_performers.size(); ++i) if (m_performers[i].selected) selected.push_back(i);
-    if (selected.isEmpty() || m_currentSet < 0) return;
+    if (selected.isEmpty() || m_currentSet < 0) return {};
     const QString kind = type.trimmed().toLower();
     QVariantMap values = formationDefaults(kind, options.value(QStringLiteral("placementMode")).toString());
     for (auto it = options.cbegin(); it != options.cend(); ++it) values.insert(it.key(), it.value());
@@ -390,7 +386,7 @@ void DrillProject::createFormation(const QString &type, const QVariantMap &optio
                                                                  (row - (rows - 1) / 2.0) * spacing), center, rotation));
         }
         path = placements;
-    } else return;
+    } else return {};
     fitPathToField(path, center, canvasMinX(), canvasMaxX(), canvasMinY(), canvasMaxY());
     if (placements.isEmpty()) {
         placements = kind == QStringLiteral("rectangle")
@@ -401,7 +397,35 @@ void DrillProject::createFormation(const QString &type, const QVariantMap &optio
         QPointF ignored = values.contains(QStringLiteral("centerX")) ? QPointF(values.value(QStringLiteral("centerX")).toDouble(), values.value(QStringLiteral("centerY")).toDouble()) : center;
         fitPathToField(placements, ignored, canvasMinX(), canvasMaxX(), canvasMinY(), canvasMaxY()); path = placements; center = ignored;
     }
-    if (placements.size() != selected.size()) return;
+    if (placements.size() != selected.size()) return {};
+    QVariantList pathValues, destinationValues;
+    for (const auto &point : path) pathValues.push_back(point);
+    for (const auto &point : placements) destinationValues.push_back(point);
+    return {{QStringLiteral("path"), pathValues}, {QStringLiteral("placements"), destinationValues},
+            {QStringLiteral("center"), center}, {QStringLiteral("closed"), closed},
+            {QStringLiteral("options"), values}};
+}
+
+void DrillProject::createFormation(const QString &type, const QVariantMap &options)
+{
+    if (!m_generatingFormationPreview) {
+        const QString mode = options.value(QStringLiteral("assignmentMode"), QStringLiteral("rehearsalSafe")).toString();
+        previewFormation(type, options, mode); commitFormationPreview(); return;
+    }
+    const auto geometry = formationGeometry(type, options);
+    if (geometry.isEmpty()) return;
+    QVector<int> selected;
+    for (int i = 0; i < m_performers.size(); ++i) if (m_performers[i].selected) selected.push_back(i);
+    const QString kind = type.trimmed().toLower();
+    QVariantMap values = geometry.value(QStringLiteral("options")).toMap();
+    const QPointF center = geometry.value(QStringLiteral("center")).toPointF();
+    const bool closed = geometry.value(QStringLiteral("closed")).toBool();
+    const double width = qMax(2.0, values.value(QStringLiteral("width")).toDouble());
+    const double height = qMax(2.0, values.value(QStringLiteral("height")).toDouble());
+    const double rotation = values.value(QStringLiteral("rotation")).toDouble();
+    QVector<QPointF> path, placements;
+    for (const auto &point : geometry.value(QStringLiteral("path")).toList()) path.push_back(point.toPointF());
+    for (const auto &point : geometry.value(QStringLiteral("placements")).toList()) placements.push_back(point.toPointF());
     const QString assignmentMode = values.value(QStringLiteral("assignmentMode"), QStringLiteral("rehearsalSafe")).toString();
     const QVector<int> assignment = assignedTargetIndices(selected, placements, closed, assignmentMode);
     MarchCraft::FormationShape shape; shape.type = kind; shape.points = path; shape.anchor = center;

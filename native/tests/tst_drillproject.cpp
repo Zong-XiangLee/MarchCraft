@@ -8,9 +8,18 @@
 #include "TransitionPath.h"
 
 #include <QFile>
+#include <QLineF>
+#include <QQmlContext>
+#include <QJSValue>
+#include <QQmlError>
+#include <QQuickItem>
+#include <QQuickView>
+#include <algorithm>
+#include <cmath>
 #include <QJsonDocument>
 #include <QSet>
 #include <QSettings>
+#include <QScopeGuard>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -433,6 +442,184 @@ private slots:
         QCOMPARE(project.coordinateFor(0), QStringLiteral("Side 1: On 40 yard line · 2 steps in front of front hash"));
         QCOMPARE(project.coordinateFor(1), QStringLiteral("Side 2: On 40 yard line · 2 steps in front of back hash"));
         QCOMPARE(project.coordinateFor(2), QStringLiteral("Side 2: On 40 yard line · 2 steps behind back hash"));
+    }
+
+    void formationAssignmentPreferencePersists()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString organization = QCoreApplication::organizationName();
+        const QString application = QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftTests"));
+        QCoreApplication::setApplicationName(QFileInfo(temporary.path()).fileName());
+        const auto restoreSettings = qScopeGuard([&] {
+            QSettings().clear();
+            QCoreApplication::setOrganizationName(organization);
+            QCoreApplication::setApplicationName(application);
+        });
+        DrillProject project;
+        const QStringList modes{QStringLiteral("shortest"), QStringLiteral("preserveOrder"),
+            QStringLiteral("evenEffort"), QStringLiteral("featureMove"), QStringLiteral("rosterOrder"),
+            QStringLiteral("rehearsalSafe")};
+        QSignalSpy settingsChanged(&project, &DrillProject::editorSettingsChanged);
+        for (const auto &mode : modes) {
+            project.setFormationAssignmentMode(mode);
+            QCOMPARE(project.formationAssignmentMode(), mode);
+            QCOMPARE(QSettings().value(QStringLiteral("formation/assignmentMode")).toString(), mode);
+            DrillProject reopened;
+            QCOMPARE(reopened.formationAssignmentMode(), mode);
+            reopened.newProject();
+            QCOMPARE(reopened.formationAssignmentMode(), mode);
+        }
+        QCOMPARE(settingsChanged.size(), modes.size());
+        project.setFormationAssignmentMode(QStringLiteral("invalid"));
+        QCOMPARE(project.formationAssignmentMode(), QStringLiteral("rehearsalSafe"));
+        QCOMPARE(settingsChanged.size(), modes.size());
+    }
+
+    void shapeDrawerMouseGestures_data()
+    {
+        QTest::addColumn<QString>("kind");
+        for (const char *kind : {"line", "rectangle", "circle", "arc", "ellipse", "triangle",
+                                 "diamond", "polygon", "star", "spiral", "block"})
+            QTest::newRow(kind) << QString::fromLatin1(kind);
+    }
+
+    void shapeDrawerMouseGestures()
+    {
+        QFETCH(QString, kind);
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("P"), 12, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll();
+        WorkspaceController workspace;
+        QQuickView view;
+        view.rootContext()->setContextProperty(QStringLiteral("workspaceController"), &workspace);
+        view.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
+        view.setResizeMode(QQuickView::SizeRootObjectToView);
+        view.resize(900, 560);
+        view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("../qml/FieldView.qml")));
+        QCOMPARE(view.status(), QQuickView::Ready);
+        view.show(); QVERIFY(QTest::qWaitForWindowExposed(&view));
+        auto *root = view.rootObject();
+        auto *area = root->findChild<QQuickItem *>(QStringLiteral("shapeDrawingArea"));
+        QVERIFY(area);
+        QSignalSpy completed(root, SIGNAL(shapeCompleted(QString,QVariant)));
+        QSignalSpy canceled(root, SIGNAL(shapeDrawingCanceled()));
+        QVERIFY(completed.isValid()); QVERIFY(canceled.isValid());
+        for (double zoom : {0.7, 1.0, 2.0}) {
+            root->setProperty("zoom", zoom);
+            root->setProperty("shapeDrawMode", kind);
+            QTest::qWait(10);
+            const QPoint start = area->mapToScene(QPointF(area->width() * 0.25, area->height() * 0.25)).toPoint();
+            const QPoint end = start + QPoint(95, 48);
+            for (bool reversed : {false, true}) {
+                completed.clear();
+                QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, reversed ? end : start);
+                QTest::mouseMove(&view, reversed ? start : end, 20);
+                QTest::qWait(20);
+                const QString captureDirectory = qEnvironmentVariable("MARCHCRAFT_QA_OUTPUT");
+                if (!captureDirectory.isEmpty() && zoom == 1.0 && !reversed) {
+                    QTest::qWait(100);
+                    QVERIFY(view.grabWindow().save(captureDirectory + QLatin1Char('/') + kind + QStringLiteral(".png")));
+                }
+                QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, reversed ? start : end);
+                QCOMPARE(completed.size(), 1);
+                QCOMPARE(completed.first().at(0).toString(), kind);
+                const auto options = qvariant_cast<QJSValue>(completed.first().at(1)).toVariant().toMap();
+                QVERIFY(!options.isEmpty());
+                QCOMPARE(project.formationGeometry(kind, options).value(QStringLiteral("placements")).toList().size(), 12);
+                QCOMPARE(project.currentShapeCount(), 0);
+            }
+            completed.clear();
+            QTest::mouseClick(&view, Qt::LeftButton, Qt::NoModifier, start);
+            QCOMPARE(completed.size(), 0);
+            QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(&view, end, 20);
+            QTest::keyClick(&view, Qt::Key_Escape);
+            QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, end);
+            QCOMPARE(completed.size(), 0);
+            QVERIFY(!area->property("selecting").toBool());
+            QTest::mousePress(&view, Qt::LeftButton, Qt::NoModifier, start);
+            QTest::mouseMove(&view, end, 20);
+            root->setProperty("shapeDrawMode", QString());
+            QTest::mouseRelease(&view, Qt::LeftButton, Qt::NoModifier, end);
+            QCOMPARE(completed.size(), 0);
+            root->setProperty("shapeDrawMode", kind);
+            QTest::mouseClick(&view, Qt::RightButton, Qt::NoModifier, start);
+            QVERIFY(!area->property("selecting").toBool());
+        }
+        QCOMPARE(canceled.size(), 6);
+    }
+
+    void shapeDrawerGeometryAndTransactions_data()
+    {
+        QTest::addColumn<QString>("kind");
+        QTest::addColumn<QString>("mode");
+        QTest::addColumn<int>("count");
+        const QStringList kinds{QStringLiteral("line"), QStringLiteral("rectangle"), QStringLiteral("circle"),
+            QStringLiteral("arc"), QStringLiteral("ellipse"), QStringLiteral("triangle"), QStringLiteral("diamond"),
+            QStringLiteral("polygon"), QStringLiteral("star"), QStringLiteral("spiral"), QStringLiteral("block")};
+        const QStringList modes{QStringLiteral("rehearsalSafe"), QStringLiteral("shortest"),
+            QStringLiteral("preserveOrder"), QStringLiteral("evenEffort"), QStringLiteral("featureMove"), QStringLiteral("rosterOrder")};
+        for (const auto &kind : kinds) for (const auto &mode : modes) for (int count : {1, 7, 24})
+            QTest::newRow(qPrintable(kind + QLatin1Char('-') + mode + QString::number(count))) << kind << mode << count;
+    }
+
+    void shapeDrawerGeometryAndTransactions()
+    {
+        QFETCH(QString, kind); QFETCH(QString, mode); QFETCH(int, count);
+        DrillProject project; project.newProject();
+        project.batchAddPerformers(QStringLiteral("P"), count, QStringLiteral("Guard"), QStringLiteral("Guard"));
+        project.selectAll(); project.addSet(QStringLiteral("Destination"), 16);
+        const QVariantMap options{{QStringLiteral("centerX"), 0.0}, {QStringLiteral("centerY"), 0.0},
+            {QStringLiteral("width"), 190.0}, {QStringLiteral("height"), 90.0},
+            {QStringLiteral("radius"), 70.0}, {QStringLiteral("outerRadius"), 60.0},
+            {QStringLiteral("rotation"), 37.0}, {QStringLiteral("sweepAngle"), -230.0},
+            {QStringLiteral("rows"), 3}, {QStringLiteral("createGroup"), true}};
+        const auto state = [&] {
+            QVariantList result;
+            for (int row = 0; row < count; ++row)
+                result.push_back(QPointF(project.data(project.index(row, 0), DrillProject::XRole).toDouble(),
+                                        project.data(project.index(row, 0), DrillProject::YRole).toDouble()));
+            for (int i = 0; i < project.currentShapeCount(); ++i) result.push_back(project.shapeInfo(i));
+            return result;
+        };
+        const auto before = state();
+        const auto geometry = project.formationGeometry(kind, options);
+        const auto destinations = geometry.value(QStringLiteral("placements")).toList();
+        QCOMPARE(destinations.size(), count);
+        QCOMPARE(state(), before);
+        QVERIFY(!project.formationPreviewActive());
+        for (const auto &value : destinations) {
+            const auto point = value.toPointF();
+            QVERIFY(std::isfinite(point.x()) && std::isfinite(point.y()));
+            QVERIFY(point.x() >= project.canvasMinX() && point.x() <= project.canvasMaxX());
+            QVERIFY(point.y() >= project.canvasMinY() && point.y() <= project.canvasMaxY());
+        }
+        project.requestFormationPreview(kind, options, mode);
+        QTRY_VERIFY_WITH_TIMEOUT(project.formationPreviewActive(), 10000);
+        QCOMPARE(state(), before);
+        auto remaining = destinations;
+        for (const auto &value : project.formationPreviewPoints()) {
+            const auto point = value.toMap();
+            const QPointF target(point.value(QStringLiteral("x")).toDouble(), point.value(QStringLiteral("y")).toDouble());
+            const auto it = std::find_if(remaining.begin(), remaining.end(), [&](const auto &v) {
+                return QLineF(v.toPointF(), target).length() < 0.00001;
+            });
+            QVERIFY(it != remaining.end()); remaining.erase(it);
+        }
+        QVERIFY(remaining.isEmpty());
+        QVERIFY(project.commitFormationPreview());
+        QCOMPARE(project.currentShapeCount(), 1);
+        QCOMPARE(project.shapeInfo(0).value(QStringLiteral("memberCount")).toInt(), count);
+        const auto after = state();
+        project.undo(); QCOMPARE(state(), before);
+        project.redo(); QCOMPARE(state(), after);
+        project.requestFormationPreview(kind, options, mode);
+        project.cancelFormationPreview();
+        QTest::qWait(20);
+        QVERIFY(!project.formationPreviewActive()); QVERIFY(!project.formationPreviewBusy());
+        QVERIFY(!project.commitFormationPreview()); QCOMPARE(state(), after);
     }
 
     void formationDistribution()
