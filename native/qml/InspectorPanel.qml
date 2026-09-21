@@ -22,7 +22,7 @@ Frame {
     SplitView.minimumWidth: 220
     SplitView.maximumWidth: 480
     padding: 0
-    background: Rectangle { color: "#121821"; radius: 9; border.color: "#293443" }
+    background: Rectangle { color: MarchCraftTheme.panel; radius: 0; border.color: MarchCraftTheme.divider }
     ScrollView {
         anchors.fill: parent
         contentWidth: availableWidth
@@ -52,7 +52,7 @@ Frame {
             }
 
             RowLayout { Layout.fillWidth: true; Layout.margins: 8
-                Label { text: "CONTEXT INSPECTOR"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
+                Label { text: "INSPECTOR"; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
                 AppToolButton { text: "›"; ToolTip.text: "Collapse inspector"; ToolTip.visible: hovered; onClicked: workspaceSettingsContext.inspectorCollapsed = true }
             }
             ColumnLayout {
@@ -173,7 +173,7 @@ Frame {
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
             RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 Label { text: "DRILL CLINIC"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
-                Label { text: "COPILOT"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 10 }
+                Label { text: "ANALYSIS"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
             }
             Label {
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
@@ -242,7 +242,7 @@ Frame {
                 spacing: 6
                 RowLayout { Layout.fillWidth: true
                     Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
-                    Label { text: "GENERATIVE DRAFTS"; color: "#8b5cf6"; font.bold: true; font.pixelSize: 9 }
+                    Label { text: "SUGGESTIONS"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
                 }
                 Label {
                     text: "Pick a direction, preview it on the field, then keep or discard it. Nothing is committed until you apply it."

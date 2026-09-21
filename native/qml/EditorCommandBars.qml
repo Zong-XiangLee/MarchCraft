@@ -17,22 +17,22 @@ ToolBar {
     required property var workspaceStateContext
 
         visible: workspaceStateContext.workspaceActive
-        height: visible ? 94 : 0
-        background: Rectangle { color: MarchCraftTheme.surface; border.color: MarchCraftTheme.divider }
+        height: visible ? 82 : 0
+        background: Rectangle { color: MarchCraftTheme.panelHeader; border.color: MarchCraftTheme.divider }
         ColumnLayout {
             anchors.fill: parent
             spacing: 0
             RowLayout {
-                Layout.fillWidth: true; Layout.preferredHeight: 52
+                Layout.fillWidth: true; Layout.preferredHeight: 46
                 Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 8
                 AppButton {
                     id: editorHomeButton
                     flat: true
-                    implicitWidth: 126
+                    implicitWidth: 142
                     contentItem: RowLayout {
                         spacing: 8
                         Image { source: "qrc:/branding/marchcraft-logo.png"; sourceSize.width: 26; sourceSize.height: 26; width: 26; height: 26; fillMode: Image.PreserveAspectFit; smooth: true; mipmap: true }
-                        Label { text: "MarchCraft"; color: MarchCraftTheme.textPrimary; font.bold: true }
+                        Label { text: "MARCHCRAFT"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 12; font.letterSpacing: 1.1 }
                     }
                     ToolTip.text: "Return Home"
                     ToolTip.visible: hovered
@@ -41,8 +41,8 @@ ToolBar {
                 Rectangle { width: 1; height: 24; color: MarchCraftTheme.divider; Layout.leftMargin: 2; Layout.rightMargin: 4 }
                 ColumnLayout {
                     spacing: 0; Layout.maximumWidth: 280
-                    Label { text: drillProjectContext.showName; color: MarchCraftTheme.textPrimary; font.bold: true; elide: Text.ElideRight; Layout.fillWidth: true }
-                    Label { text: drillProjectContext.dirty ? "Unsaved changes" : "All changes saved"; color: drillProjectContext.dirty ? MarchCraftTheme.warning : MarchCraftTheme.textMuted; font.pixelSize: 10 }
+                    Label { text: drillProjectContext.showName; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 12; elide: Text.ElideRight; Layout.fillWidth: true }
+                    Label { text: drillProjectContext.dirty ? "MODIFIED" : "SAVED"; color: drillProjectContext.dirty ? MarchCraftTheme.warning : MarchCraftTheme.textMuted; font.pixelSize: 9; font.bold: true; font.letterSpacing: 0.8 }
                 }
                 AppToolButton {
                     ToolTip.text: "Undo"; ToolTip.visible: hovered; enabled: drillProjectContext.canUndo
@@ -55,8 +55,8 @@ ToolBar {
                     onClicked: drillProjectContext.redo()
                 }
                 Item { Layout.fillWidth: true }
-                AppButton { text: "+ Performer"; onClicked: { performerDialogContext.editing = false; performerDialogContext.open() } }
-                AppButton { text: "+ Batch"; onClicked: batchDialogContext.open() }
+                AppButton { text: "Add performer"; onClicked: { performerDialogContext.editing = false; performerDialogContext.open() } }
+                AppButton { text: "Batch add"; onClicked: batchDialogContext.open() }
                 AppToolButton { text: "2D"; checkable: true; checked: !windowContext.threeD; onClicked: windowContext.threeD = false }
                 AppToolButton { text: "3D"; checkable: true; checked: windowContext.threeD; onClicked: windowContext.threeD = true }
                 AppToolButton {
@@ -67,9 +67,9 @@ ToolBar {
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider }
             RowLayout {
-                Layout.fillWidth: true; Layout.preferredHeight: 41
+                Layout.fillWidth: true; Layout.preferredHeight: 34
                 Layout.leftMargin: 12; Layout.rightMargin: 12; spacing: 6
-                Label { text: drillProjectContext.selectedCount > 0 ? drillProjectContext.selectedCount + " selected" : "Select performers to edit formations"; color: drillProjectContext.selectedCount > 0 ? MarchCraftTheme.textSecondary : MarchCraftTheme.textMuted; font.pixelSize: 11; Layout.rightMargin: 6 }
+                Label { text: drillProjectContext.selectedCount > 0 ? drillProjectContext.selectedCount + " SELECTED" : "FORMATION TOOLS"; color: drillProjectContext.selectedCount > 0 ? MarchCraftTheme.textSecondary : MarchCraftTheme.textMuted; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.7; Layout.rightMargin: 6 }
                 AppButton {
                     id: shapesButton
                     text: windowContext.shapeDrawing.length ? "Shape · " + windowContext.shapeDrawing : "Shapes"

@@ -169,9 +169,9 @@ ApplicationWindow {
     function playWholeShow() { transport.playFromSelection() }
 
     palette {
-        window: MarchCraftTheme.surface
+        window: MarchCraftTheme.panelHeader
         windowText: MarchCraftTheme.textPrimary
-        base: "#0f151d"
+        base: MarchCraftTheme.input
         alternateBase: MarchCraftTheme.surfaceRaised
         text: MarchCraftTheme.textPrimary
         button: MarchCraftTheme.surfaceRaised
@@ -365,7 +365,7 @@ ApplicationWindow {
         Component.onCompleted: if (workspaceSettings.horizontalSplitState) restoreState(workspaceSettings.horizontalSplitState)
         onResizingChanged: if (!resizing) workspaceSettings.horizontalSplitState = saveState()
         handle: Rectangle {
-            implicitWidth: 6; color: SplitHandle.pressed ? "#5b8def" : SplitHandle.hovered ? "#3b4b5f" : "#293443"
+            implicitWidth: 5; color: SplitHandle.pressed ? MarchCraftTheme.accent : SplitHandle.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
             TapHandler { onDoubleTapped: {
                 rosterPanel.SplitView.preferredWidth = 220
                 inspectorPanel.SplitView.preferredWidth = 270
@@ -391,7 +391,7 @@ ApplicationWindow {
             Component.onCompleted: if (workspaceSettings.verticalSplitState) restoreState(workspaceSettings.verticalSplitState)
             onResizingChanged: if (!resizing) workspaceSettings.verticalSplitState = saveState()
             handle: Rectangle {
-                implicitHeight: 8; color: SplitHandle.pressed ? "#5b8def" : SplitHandle.hovered ? "#3b4b5f" : "#293443"
+                implicitHeight: 6; color: SplitHandle.pressed ? MarchCraftTheme.accent : SplitHandle.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
                 TapHandler { onDoubleTapped: {
                     timelinePanel.SplitView.preferredHeight = 300
                     workspaceSettings.timelineMaximized = false
@@ -468,13 +468,15 @@ ApplicationWindow {
 
     footer: ToolBar {
         visible: workspaceState.workspaceActive
-        height: visible ? 28 : 0
+        height: visible ? 26 : 0
+        background: Rectangle { color: MarchCraftTheme.panelHeader; border.color: MarchCraftTheme.divider }
         RowLayout {
             anchors.fill: parent
             anchors.leftMargin: 10; anchors.rightMargin: 10
-            Label { text: drillProject.statusMessage; color: "#a5afbc"; font.pixelSize: 11; Layout.fillWidth: true }
-            Label { text: drillProject.selectedCount + " selected"; color: "#a5afbc"; font.pixelSize: 11 }
-            Label { text: window.threeD ? "3D PREVIEW" : "2D EDITOR"; color: "#5b8def"; font.bold: true; font.pixelSize: 10 }
+            Label { text: drillProject.statusMessage; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; Layout.fillWidth: true }
+            Label { text: drillProject.selectedCount + " selected"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
+            Rectangle { width: 1; height: 12; color: MarchCraftTheme.divider }
+            Label { text: window.threeD ? "3D PREVIEW" : "2D EDITOR"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
         }
     }
 

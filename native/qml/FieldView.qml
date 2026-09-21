@@ -111,9 +111,9 @@ Item {
 
     Rectangle {
         anchors.fill: parent
-        color: "#07110d"
-        radius: 10
-        border.color: "#27352f"
+        color: MarchCraftTheme.input
+        radius: 0
+        border.color: MarchCraftTheme.divider
     }
 
     Flickable {
