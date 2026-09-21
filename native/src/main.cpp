@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
-    for (const auto &surface : {QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music")}) {
+    for (const auto &surface : {QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music"), QStringLiteral("formation")}) {
         if (arguments.contains(QStringLiteral("--qa-") + surface) && !engine.rootObjects().isEmpty()) {
             QObject *root = engine.rootObjects().first();
             QTimer::singleShot(350, &application, [root, surface] {

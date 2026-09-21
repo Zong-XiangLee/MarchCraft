@@ -425,6 +425,7 @@ public:
                                             const QString &recognitionMode = QStringLiteral("auto"));
     Q_INVOKABLE bool commitFormationPreview();
     Q_INVOKABLE void cancelFormationPreview();
+    Q_INVOKABLE QVariantMap formationGeometry(const QString &type, const QVariantMap &options = {}) const;
     Q_INVOKABLE void createFormation(const QString &type, const QVariantMap &options = {});
     Q_INVOKABLE void createFreehandFormation(const QVariantList &points,
                                               const QString &movementMode = QStringLiteral("balanced"),
