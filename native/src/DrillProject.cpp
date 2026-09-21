@@ -115,7 +115,7 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
         connect(m_midiWatcher, &QFutureWatcher<MarchCraft::MidiImportResult>::finished, this, [this] {
             const auto result = m_midiWatcher->result();
             if (m_midiImportRevision != m_projectRevision) { emit musicChanged(); return; }
-            if (!result.ok) setStatus(result.error);
+            if (!result.ok) setDiagnostic(QStringLiteral("MIDI import"), QString{}, QStringLiteral("MIDI"), result.error);
             else applyMusicDocument(result.document, QStringLiteral("Import MIDI"));
             emit musicChanged();
         });
@@ -1815,13 +1815,34 @@ void DrillProject::setStatus(const QString &message)
     emit statusMessageChanged();
 }
 
+void DrillProject::setDiagnostic(const QString &operation, const QString &source, const QString &location,
+                                 const QString &message, const QString &severity)
+{
+    m_diagnostics = {QVariantMap{{QStringLiteral("operation"), operation}, {QStringLiteral("source"), source},
+                                 {QStringLiteral("location"), location}, {QStringLiteral("message"), message},
+                                 {QStringLiteral("severity"), severity}}};
+    emit diagnosticsChanged();
+    setStatus(QStringLiteral("%1: %2").arg(operation, message));
+}
+
 void DrillProject::autosave()
 {
-    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+    if (m_projectPath.isEmpty() || !m_dirty) return;
+    const QString root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/recovery");
     QDir().mkpath(root);
+    QFileInfo info(m_projectPath);
+    const QString canonical = info.canonicalFilePath().isEmpty() ? info.absoluteFilePath() : info.canonicalFilePath();
+    const QString key = QString::fromLatin1(QCryptographicHash::hash(canonical.toUtf8(), QCryptographicHash::Sha256).toHex());
+    const QString snapshotPath = root + QLatin1Char('/') + key + QStringLiteral(".marchcraft");
     QString error;
-    if (writeSqliteProject(root + QStringLiteral("/recovery.marchcraft"), toJson(), &error)) {
+    if (writeSqliteProject(snapshotPath, toJson(), &error)) {
+        const QJsonObject metadata{{QStringLiteral("projectPath"), canonical}, {QStringLiteral("snapshotPath"), snapshotPath},
+            {QStringLiteral("showName"), m_showName}, {QStringLiteral("createdUtc"), QDateTime::currentDateTimeUtc().toString(Qt::ISODateWithMs)}};
+        QSaveFile file(root + QLatin1Char('/') + key + QStringLiteral(".json"));
+        if (file.open(QIODevice::WriteOnly)) { file.write(QJsonDocument(metadata).toJson(QJsonDocument::Compact)); file.commit(); }
         setStatus(QStringLiteral("Recovery copy updated"));
+        refreshRecoveryCandidates();
     }
 }
 

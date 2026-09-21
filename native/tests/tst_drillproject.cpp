@@ -1381,6 +1381,66 @@ private slots:
         QVERIFY(!preview.isEmpty());
         QCOMPARE(preview.first().toMap().value(QStringLiteral("counts")).toInt(), 16);
     }
+
+    void historyRecoveryAndStrictImportPreserveWork()
+    {
+        QTemporaryDir temporary;
+        const QString path = temporary.filePath(QStringLiteral("reliable.marchcraft"));
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        QVERIFY(project.saveProject(path));
+        QTest::qWait(5);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        QVERIFY(project.saveProject(path));
+        project.refreshProjectHistory();
+        QCOMPARE(project.projectHistory().size(), 2);
+        QVERIFY(project.restoreHistoryVersion(1));
+        QCOMPARE(project.performerCount(), 1);
+        project.undo();
+        QCOMPARE(project.performerCount(), 2);
+
+        const QString invalid = temporary.filePath(QStringLiteral("invalid.json"));
+        QFile bad(invalid); QVERIFY(bad.open(QIODevice::WriteOnly)); bad.write("{\"performers\":[{}]}"); bad.close();
+        QVERIFY(!project.importCoordinateJson(invalid));
+        QCOMPARE(project.performerCount(), 2);
+        QVERIFY(!project.diagnostics().isEmpty());
+
+        project.selectAll(); project.nudgeSelected(1.0, 0.0);
+        QTest::qWait(1100);
+        project.refreshRecoveryCandidates();
+        int recoveryIndex = -1;
+        for (int i = 0; i < project.recoveryCandidates().size(); ++i)
+            if (project.recoveryCandidates().at(i).toMap().value(QStringLiteral("projectPath")).toString() == QFileInfo(path).absoluteFilePath()) recoveryIndex = i;
+        QVERIFY(recoveryIndex >= 0);
+        DrillProject recovered;
+        recovered.refreshRecoveryCandidates();
+        QVERIFY(recovered.restoreRecovery(recoveryIndex));
+        QCOMPARE(recovered.performerCount(), 2);
+        project.discardRecovery(recoveryIndex);
+    }
+
+    void sampleShowLongEditingSessionSurvivesSaveReopenUndoRedo()
+    {
+        QTemporaryDir temporary;
+        const QString path = temporary.filePath(QStringLiteral("session.marchcraft"));
+        DrillProject project;
+        QVERIFY(project.importCoordinateJson(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath(QStringLiteral("../../data/coordinates.json"))));
+        QCOMPARE(project.performerCount(), 204);
+        for (int i = 0; i < 200; ++i)
+            project.setCurrentSetIndex(i % project.setCount());
+        // Full-document undo snapshots intentionally make this a representative, bounded smoke test.
+        for (int i = 0; i < 8; ++i) {
+            project.selectPerformer(i % project.performerCount(), false);
+            project.nudgeSelected((i % 2 == 0) ? 0.25 : -0.25, 0.0);
+            if (i == 3 || i == 7) QVERIFY(project.saveProject(path));
+        }
+        QVERIFY(project.saveProject(path));
+        DrillProject reopened;
+        QVERIFY(reopened.loadProject(path));
+        QCOMPARE(reopened.performerCount(), 204);
+        reopened.selectPerformer(0, false); reopened.nudgeSelected(0.5, 0.0);
+        QVERIFY(reopened.canUndo()); reopened.undo(); QVERIFY(reopened.canRedo()); reopened.redo();
+    }
 };
 
 QTEST_MAIN(DrillProjectTest)

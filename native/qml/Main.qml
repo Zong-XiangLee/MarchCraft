@@ -117,6 +117,7 @@ ApplicationWindow {
 
     Component.onCompleted: {
         workspaceController.refreshRecentProjects()
+        drillProject.refreshRecoveryCandidates()
         if (!workspaceState.workspaceActive && !qaMode && workspaceController.startupSoundEnabled)
             Qt.callLater(function() { workspaceController.playStartupSound() })
         if (!workspaceState.workspaceActive) homePage.exposedHomeIntro.restart()
@@ -192,6 +193,7 @@ ApplicationWindow {
             Action { text: "Open…"; shortcut: StandardKey.Open; onTriggered: window.requestOpenProject() }
             Action { text: "Save"; shortcut: StandardKey.Save; enabled: workspaceState.hasCurrentProject; onTriggered: window.saveCurrentProject("normal") }
             Action { text: "Save As…"; shortcut: StandardKey.SaveAs; enabled: workspaceState.hasCurrentProject; onTriggered: { window.savePurpose = "normal"; saveDialog.open() } }
+            Action { text: "Restore version…"; enabled: drillProject.projectHistory.length > 0; onTriggered: { drillProject.refreshProjectHistory(); historyDialog.open() } }
             MenuSeparator {}
             Action { text: "Import coordinate JSON…"; onTriggered: importCoordinateDialog.open() }
             Action { text: "Import MIDI…"; onTriggered: midiDialog.open() }
@@ -916,6 +918,45 @@ ApplicationWindow {
             width: 430; wrapMode: Text.Wrap
             text: "MarchCraft production editor preview\n\nA C++20 and Qt 6 drill-writing application. The data model, editor, analytics, 3D preview, and exports are native—there is no HTML or embedded browser.\n\nOpenMarch was used as a public feature reference; this is an independent implementation."
         }
+    }
+
+    Dialog {
+        id: historyDialog
+        title: "Restore saved version"
+        modal: true; anchors.centerIn: Overlay.overlay; width: 520
+        contentItem: ColumnLayout {
+            spacing: 10
+            Label { text: "Restoring a version keeps the current project open and can be undone before saving."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: MarchCraftTheme.textSecondary }
+            ListView {
+                Layout.fillWidth: true; Layout.preferredHeight: 280; clip: true
+                model: drillProject.projectHistory
+                delegate: RowLayout {
+                    required property var modelData
+                    width: ListView.view.width; height: 42
+                    Label { text: modelData.timestamp; Layout.fillWidth: true; color: MarchCraftTheme.textPrimary }
+                    AppButton { text: "Restore"; onClicked: { if (drillProject.restoreHistoryVersion(index)) historyDialog.close() } }
+                }
+            }
+            AppButton { text: "Close"; Layout.alignment: Qt.AlignRight; onClicked: historyDialog.close() }
+        }
+    }
+
+    Dialog {
+        id: diagnosticsDialog
+        title: drillProject.diagnostics.length > 0 ? drillProject.diagnostics[0].operation : "Operation failed"
+        modal: true; anchors.centerIn: Overlay.overlay; width: 520
+        standardButtons: Dialog.Ok
+        contentItem: Label {
+            width: 460; wrapMode: Text.Wrap; color: MarchCraftTheme.textPrimary
+            text: drillProject.diagnostics.length > 0
+                ? drillProject.diagnostics[0].message + "\n\nLocation: " + drillProject.diagnostics[0].location + "\nSource: " + drillProject.diagnostics[0].source
+                : ""
+        }
+    }
+
+    Connections {
+        target: drillProject
+        function onDiagnosticsChanged() { if (drillProject.diagnostics.length > 0 && drillProject.diagnostics[0].severity === "error") diagnosticsDialog.open() }
     }
 
     FileDialog { id: openDialog; title: "Open MarchCraft project"; nameFilters: ["MarchCraft projects (*.marchcraft *.drill)"]; onAccepted: window.openProjectPath(selectedFile) }

@@ -38,6 +38,8 @@ Apply action before project data changes.
 - Native MIDI/MusicXML measure, meter, tempo, and track import; compact music timeline; bundled FluidSynth MIDI playback; anchored rehearsal audio
 - Distance analytics, step-size warnings, spacing/collision checks, and coordinates
 - Transactional `.marchcraft` project files with legacy `.drill` import, automatic recovery, redesigned multi-page PDF coordinate sheets, and CSV export
+- Crash recovery is offered at launch for unsaved edits to saved projects. Each normal save also retains the newest 20 immutable snapshots in a sibling `<project>.marchcraft-history` folder; use **File → Restore version…** to preview and restore one as an undoable edit.
+- Project and coordinate/music imports validate before replacing the current show. Failed imports leave the open project intact and provide an actionable diagnostic.
 - The supplied `data/coordinates.json` is bundled as the default 204-performer, 97-set test show
 
 See [FEATURES.md](FEATURES.md) for the parity inventory and prototype boundaries.
