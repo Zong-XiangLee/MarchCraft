@@ -768,10 +768,10 @@ void DrillProject::setSelectedTransitionPath(const QString &type, const QVariant
 QVariantList DrillProject::transitionPathSamples(int performerRow, int samples) const
 {
     QVariantList result;
-    if (performerRow < 0 || performerRow >= m_performers.size() || m_currentSet <= 0) return result;
+    if (performerRow < 0 || performerRow >= m_performers.size() || playbackSetIndex() <= 0) return result;
     samples = qBound(2, samples, 128);
     for (int i = 0; i <= samples; ++i)
-        result.push_back(pathPosition(performerRow, m_currentSet, double(i) / samples));
+        result.push_back(pathPosition(performerRow, playbackSetIndex(), double(i) / samples));
     return result;
 }
 

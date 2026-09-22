@@ -14,7 +14,7 @@ Item {
     property bool spaceHeld: false
     property bool drawMode: false
     property string shapeDrawMode: ""
-    property var selectionBounds: drillProject.selectedBounds()
+    property var selectionBounds: drillProject.selectedBounds(true)
     property int selectedShapeIndex: drillProject.selectedShapeIndex()
     signal performerActivated(int row)
     signal contextMenuRequested(real screenX, real screenY, int performerRow)
@@ -322,7 +322,7 @@ Item {
                             ctx.lineTo(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y))
                         ctx.stroke()
                     }
-                    if (!root.showPaths || drillProject.currentSetIndex <= 0) return
+                    if (!root.showPaths || drillProject.playbackSetIndex <= 0) return
                     for (let row = 0; row < performerRepeater.count; ++row) {
                         const marcher = performerRepeater.itemAt(row)
                         if (!marcher) continue
@@ -342,6 +342,7 @@ Item {
                     target: drillProject
                     function onShapesChanged() { geometryCanvas.requestPaint() }
                     function onCurrentSetChanged() { geometryCanvas.requestPaint() }
+                    function onPlaybackFrameChanged() { geometryCanvas.requestPaint() }
                     function onProjectChanged() { geometryCanvas.requestPaint() }
                     function onSelectionChanged() { geometryCanvas.requestPaint() }
                 }
@@ -449,6 +450,7 @@ Item {
                         root.contextMenuRequested(p.x, p.y, -1)
                         return
                     }
+                    transport.pause()
                     root.forceActiveFocus()
                     selecting = true
                     lasso = root.drawMode || (root.shapeDrawMode.length === 0 && (mouse.modifiers & Qt.ShiftModifier) !== 0)
@@ -774,7 +776,7 @@ Item {
                                 root.contextMenuRequested(p.x, p.y, marcher.index)
                                 return
                             }
-                            drillProject.playbackActive = false
+                            transport.editSet(drillProject.currentSetIndex)
                             const p = mapToItem(field, mouse.x, mouse.y)
                             pressField = Qt.point(root.toFieldX(p.x), root.toFieldY(p.y))
                             startPosition = Qt.point(marcher.fieldX, marcher.fieldY)
@@ -863,5 +865,5 @@ Item {
             event.accepted = true
         }
     }
-    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds();root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){root.cancelDrawing();refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
+    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds(true);root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){root.cancelDrawing();refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
 }

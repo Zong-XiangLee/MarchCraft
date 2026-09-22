@@ -30,7 +30,7 @@ public:
     bool playing() const { return m_state == QStringLiteral("playing"); }
     qint64 currentTick() const { return m_tick; }
     qint64 durationTick() const;
-    double currentMs() const;
+    double currentMs() const { return m_showMs; }
     double durationMs() const;
     double normalizedPosition() const;
     qint64 loopStartTick() const;
@@ -45,6 +45,16 @@ public:
     Q_INVOKABLE void pause();
     Q_INVOKABLE void stop();
     Q_INVOKABLE void seekTick(qint64 tick);
+    Q_INVOKABLE void navigateToSet(int index, bool extend = false);
+    Q_INVOKABLE void editSet(int index);
+    Q_INVOKABLE void seekMs(double milliseconds);
+    Q_INVOKABLE void beginScrub();
+    Q_INVOKABLE void endScrub();
+    Q_INVOKABLE double showMsAtTick(qint64 tick) const;
+    Q_INVOKABLE qint64 tickAtShowMs(double milliseconds) const;
+    Q_INVOKABLE double setPositionMs(int index) const;
+    Q_INVOKABLE double audioMsAtShowMs(double milliseconds) const;
+    Q_INVOKABLE double showMsAtAudioMs(double milliseconds) const;
     Q_INVOKABLE void seekNormalized(double position);
     Q_INVOKABLE void firstSet();
     Q_INVOKABLE void previousSet();
@@ -60,7 +70,10 @@ signals:
 
 private:
     void startAt(qint64 tick);
-    void startOpeningHold(bool reset = true);
+    void resume();
+    void applyShowMs(double milliseconds);
+    void seekPosition(double milliseconds, bool retargetEditing);
+    void checkLoopForSeek(double milliseconds);
     void updatePosition();
     void applyTick(qint64 tick);
     qint64 setTick(int index) const;
@@ -77,8 +90,13 @@ private:
     QString m_state{QStringLiteral("stopped")};
     qint64 m_tick = 0;
     qint64 m_playEndTick = 0;
-    double m_baseMusicMs = 0.0;
+    double m_baseShowMs = 0.0;
+    double m_showMs = 0.0;
+    bool m_scrubbing = false;
+    bool m_resumeAfterScrub = false;
+    bool m_navigating = false;
+    bool m_sourceRunning = false;
+    QString m_playbackSource;
     QString m_loadedMusicHash;
-    bool m_openingHoldActive = false;
-    double m_openingHoldElapsedMs = 0.0;
+    QString m_loadedAudioMapping;
 };

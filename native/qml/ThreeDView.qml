@@ -398,8 +398,8 @@ Item {
                     travelPathType === "follow" && locomotionMode !== "idle"
                         ? travelHeading : facing
                 readonly property bool markingTime: root.markTimeDuringHolds && locomotionMode === "idle"
-                    && drillProject.playbackActive && drillProject.currentSetIndex > 0
-                    && drillProject.currentSetCounts > 0
+                    && drillProject.playbackActive && drillProject.playbackSetIndex > 0
+                    && drillProject.playbackSetCounts > 0
                 visible: performerVisible
                 position: Qt.vector3d(fieldX - 80, 0, drillProject.fieldDepthSteps / 2 - fieldY)
                 eulerRotation.y: animationFacing
@@ -419,7 +419,7 @@ Item {
                     facingDegrees: performerNode.animationFacing
                     travelHeading: performerNode.travelHeading
                     transitionProgress: drillProject.playhead
-                    countsInMove: drillProject.currentSetCounts
+                    countsInMove: drillProject.playbackSetCounts
                     travelStepsPerCount: performerNode.travelStepsPerCount
                     locomotionMode: performerNode.markingTime ? "mark_time" : performerNode.locomotionMode
                     carriagePose: root.carriagePose

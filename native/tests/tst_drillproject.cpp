@@ -3,11 +3,13 @@
 #include "AssetCatalog.h"
 #include "SceneTypes.h"
 #include "TransportController.h"
+#include "MidiSynthEngine.h"
 #include "WorkspaceController.h"
 #include "ProjectStorage.h"
 #include "TransitionPath.h"
 
 #include <QFile>
+#include <QDataStream>
 #include <QLineF>
 #include <QQmlContext>
 #include <QJSValue>
@@ -70,6 +72,152 @@ class DrillProjectTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void movementSwitchPreservesLoopRangeAndEditingPage()
+    {
+        DrillProject project;
+        project.addSet(QStringLiteral("Second"), 8); project.addSet(QStringLiteral("Third"), 8);
+        project.setPlaybackSource(QStringLiteral("mute"));
+        TransportController transport(&project);
+        transport.navigateToSet(0); transport.navigateToSet(2, true);
+        project.setLoopEnabled(true); transport.navigateToSet(1);
+        QVERIFY(project.loopEnabled());
+        QVERIFY(project.createMovement(QStringLiteral("Ballad")));
+        project.activateMovement(0);
+        QVERIFY(project.loopEnabled()); QCOMPARE(project.currentSetIndex(), 1);
+        QCOMPARE(project.selectedSetStartIndex(), 0); QCOMPARE(project.selectedSetEndIndex(), 2);
+        QCOMPARE(transport.currentMs(), transport.setPositionMs(1));
+        transport.seekMs(transport.setPositionMs(2) - 10); transport.playPause();
+        QTest::qWait(70); QVERIFY(transport.currentMs() < transport.setPositionMs(1));
+        QCOMPARE(project.currentSetIndex(), 1); transport.stop();
+    }
+
+    void movementRosterChangesReachInactivePagesAndUndo()
+    {
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        QVERIFY(project.createMovement(QStringLiteral("Second")));
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 40, 30);
+        project.activateMovement(0);
+        QCOMPARE(project.performerCount(), 2);
+        QCOMPARE(project.data(project.index(1), DrillProject::XRole).toDouble(), 40.0);
+        project.selectPerformer(1, false); project.removeSelectedPerformers();
+        project.activateMovement(1); QCOMPARE(project.performerCount(), 1);
+        project.undo(); QCOMPARE(project.performerCount(), 2);
+        project.activateMovement(1);
+        QCOMPARE(project.data(project.index(1), DrillProject::XRole).toDouble(), 40.0);
+    }
+
+    void movementsKeepIndependentPagesMusicAndHistory()
+    {
+        QTemporaryDir directory;
+        QFile midi(directory.filePath(QStringLiteral("movement.mid")));
+        QVERIFY(midi.open(QIODevice::WriteOnly)); midi.write(midiFixture()); midi.close();
+        DrillProject project;
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.addSet(QStringLiteral("Finale"), 8);
+        project.selectAll(); project.nudgeSelected(12, 0);
+        QVERIFY(project.importMidi(midi.fileName()));
+        project.setMusicSelection(1, 1);
+        project.setAudioOffsetMs(125);
+        QVERIFY(project.renameMovement(0, QStringLiteral("Opener")));
+        TransportController transport(&project);
+        QVERIFY(project.createMovement(QStringLiteral("Ballad")));
+        QCOMPARE(project.movementCount(), 2); QCOMPARE(project.currentMovementIndex(), 1);
+        QCOMPARE(project.setCount(), 1); QVERIFY(!project.musicLoaded());
+        QCOMPARE(project.audioOffsetMs(), 0.0); QCOMPARE(transport.currentMs(), 0.0);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 32.0);
+        project.addSet(QStringLiteral("Ballad end"), 16);
+        project.selectAll(); project.nudgeSelected(10, 0);
+        const QString saved = directory.filePath(QStringLiteral("movements.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        transport.playPause(); project.activateMovement(0);
+        QVERIFY(!transport.playing()); QVERIFY(!project.dirty());
+        QVERIFY(project.musicLoaded()); QCOMPARE(project.audioOffsetMs(), 125.0);
+        QCOMPARE(project.musicSelectionStart(), 1); QCOMPARE(project.setCount(), 2);
+        QCOMPARE(project.currentSetName(), QStringLiteral("Finale"));
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 32.0);
+        project.activateMovement(1); QVERIFY(!project.dirty());
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 42.0);
+        project.undo(); // Switching tabs must not occupy an undo slot.
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 32.0);
+        project.redo(); QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 42.0);
+        DrillProject restored; QVERIFY(restored.loadProject(saved));
+        QCOMPARE(restored.movementCount(), 2); QCOMPARE(restored.currentMovementName(), QStringLiteral("Ballad"));
+        restored.activateMovement(0); QVERIFY(restored.musicLoaded());
+        QCOMPARE(restored.currentMovementName(), QStringLiteral("Opener"));
+        QVERIFY(restored.createMovement(QStringLiteral("Opener copy"), true));
+        QCOMPARE(restored.setCount(), 2); QVERIFY(restored.musicLoaded());
+        restored.moveMovement(2, 0); QCOMPARE(restored.currentMovementIndex(), 0);
+        restored.removeMovement(0); QCOMPARE(restored.movementCount(), 2);
+        restored.undo(); QCOMPARE(restored.movementCount(), 3);
+        QCOMPARE(restored.currentMovementName(), QStringLiteral("Opener copy"));
+        restored.newProject(); QCOMPARE(restored.movementCount(), 1);
+    }
+
+    void legacyShowBecomesOneMovementAndBadMovementDataIsRejected()
+    {
+        QTemporaryDir directory; DrillProject project;
+        project.addSet(QStringLiteral("Legacy end"), 8);
+        const QString path = directory.filePath(QStringLiteral("legacy.marchcraft"));
+        QVERIFY(project.saveProject(path));
+        QJsonObject root; QString error;
+        QVERIFY(MarchCraft::ProjectStorage::readSqliteProject(path, &root, &error));
+        QFile file(path);
+        root.insert(QStringLiteral("version"), 10); root.remove(QStringLiteral("movements"));
+        QVERIFY(file.open(QIODevice::WriteOnly)); file.write(QJsonDocument(root).toJson()); file.close();
+        QVERIFY(project.loadProject(path)); QCOMPARE(project.movementCount(), 1); QCOMPARE(project.setCount(), 2);
+        root.insert(QStringLiteral("version"), 11);
+        QVERIFY(file.open(QIODevice::WriteOnly)); file.write(QJsonDocument(root).toJson()); file.close();
+        QVERIFY(!project.loadProject(path)); QCOMPARE(project.setCount(), 2);
+    }
+
+    void midiContinuesWhileGuiThreadIsBlocked()
+    {
+        QTemporaryDir directory;
+        QFile file(directory.filePath(QStringLiteral("smooth.mid")));
+        QVERIFY(file.open(QIODevice::WriteOnly)); file.write(midiFixture()); file.close();
+        const auto parsed = MarchCraft::parseMidiFile(file.fileName()); QVERIFY(parsed.ok);
+        MidiSynthEngine synth;
+        if (!synth.available()) QSKIP(qPrintable(synth.status()));
+        QVERIFY(synth.load(parsed.document)); synth.play();
+        QTRY_VERIFY_WITH_TIMEOUT(synth.positionMs() > 100, 3000);
+        const double before = synth.positionMs(); const int underruns = synth.underruns();
+        QThread::msleep(500); // Simulate expensive field/QML work without pumping GUI events.
+        QVERIFY2(synth.positionMs() >= before + 350, "Audio must advance independently of GUI events");
+        QCOMPARE(synth.underruns(), underruns);
+        synth.pause(); const double paused = synth.positionMs();
+        QTest::qWait(80); QVERIFY(qAbs(synth.positionMs() - paused) < 30);
+        synth.seekTick(960); synth.play();
+        QTRY_VERIFY_WITH_TIMEOUT(synth.positionMs() > 550, 1500);
+        synth.stop();
+    }
+
+    void musicSeekSelectionUsesVisiblePerformersAndCorrectPage()
+    {
+        DrillProject project;
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 60, 20);
+        project.addSet(QStringLiteral("Second"), 8);
+        project.selectAll(); project.nudgeSelected(40, 0);
+        project.setPlaybackSource(QStringLiteral("mute"));
+        TransportController transport(&project); transport.navigateToSet(0);
+        transport.seekTick(7680);
+        QCOMPARE(project.currentSetIndex(), 1);
+        project.selectInRect(59, 19, 61, 21, false);
+        QVERIFY(project.data(project.index(0), DrillProject::SelectedRole).toBool());
+        QVERIFY(!project.data(project.index(1), DrillProject::SelectedRole).toBool());
+        transport.seekTick(3840);
+        project.selectInPolygon({QPointF(39,19), QPointF(41,19), QPointF(41,21), QPointF(39,21)}, false);
+        QCOMPARE(project.selectedCount(), 1);
+        QVERIFY(project.data(project.index(0), DrillProject::SelectedRole).toBool());
+        QCOMPARE(project.selectedBounds(true).value(QStringLiteral("centerX")).toDouble(), 40.0);
+        transport.seekTick(7680); project.nudgeSelected(2, 0);
+        transport.navigateToSet(0);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 20.0);
+        transport.navigateToSet(1);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 62.0);
+    }
+
     void transportAdvancesWithoutMidiAndStopsOnProjectReset()
     {
         DrillProject project; project.loadDemo();
@@ -82,6 +230,151 @@ private slots:
         QCOMPARE(transport.currentTick(), qint64(0));
         QTest::qWait(50);
         QCOMPARE(project.performerCount(), 0);
+    }
+
+    void pageNavigationKeepsPlaybackAndEditingIndependent()
+    {
+        QTemporaryDir directory;
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 40, 40);
+        project.addSet(QStringLiteral("Second"), 8);
+        project.selectAll(); project.nudgeSelected(8, 0);
+        project.addSet(QStringLiteral("Third"), 8); project.nudgeSelected(8, 0);
+        project.setPlaybackSource(QStringLiteral("mute"));
+        QVERIFY(project.saveProject(directory.filePath(QStringLiteral("navigation.marchcraft"))));
+        TransportController transport(&project);
+        transport.navigateToSet(0); transport.playPause();
+        for (int page : {1, 0, 1, 0, 1}) {
+            transport.navigateToSet(page);
+            QVERIFY(transport.playing());
+            QCOMPARE(project.currentSetIndex(), page);
+            QVERIFY(qAbs(project.data(project.index(0, 0), DrillProject::XRole).toDouble() - (40 + page * 8)) < 0.001);
+            const double target = transport.setPositionMs(page);
+            QVERIFY(qAbs(transport.currentMs() - target) < 0.01);
+            QTest::qWait(35);
+            QVERIFY(transport.currentMs() >= target);
+            QVERIFY(transport.currentMs() < target + 250);
+            QCOMPARE(project.currentSetIndex(), page);
+        }
+        QVERIFY(!project.dirty());
+        transport.editSet(1);
+        QVERIFY(!transport.playing()); QVERIFY(!project.playbackActive());
+        QCOMPARE(project.currentSetIndex(), 1);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 48.0);
+        project.nudgeSelected(1, 0);
+        transport.editSet(2);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 56.0);
+        project.undo(); transport.editSet(1);
+        QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 48.0);
+    }
+
+    void timelineElapsedSeekingAndScrubResume()
+    {
+        DrillProject project; project.newProject();
+        project.addSet(QStringLiteral("Second"), 8); project.addSet(QStringLiteral("Third"), 16);
+        project.setPlaybackSource(QStringLiteral("mute")); project.setOpeningBehavior(QStringLiteral("hold"), 4);
+        project.setTempoRegion(0, 7680, 120, 120, QStringLiteral("Fast"));
+        project.setTempoRegion(7680, 23040, 60, 60, QStringLiteral("Slow"));
+        TransportController transport(&project);
+        for (double fraction : {0.0, 0.03, 0.2, 0.5, 0.8, 1.0}) {
+            transport.seekNormalized(fraction);
+            QVERIFY(qAbs(transport.normalizedPosition() - fraction) < 0.0001);
+        }
+        transport.seekMs(project.openingDurationMs() / 2);
+        QCOMPARE(project.playbackSetIndex(), 0);
+        const double held = transport.currentMs();
+        transport.beginScrub(); transport.seekMs(held); transport.endScrub();
+        QVERIFY(!transport.playing());
+        transport.playPause(); transport.beginScrub(); QVERIFY(!transport.playing());
+        transport.seekMs(transport.setPositionMs(1) + 100);
+        transport.endScrub(); QVERIFY(transport.playing());
+        QTest::qWait(40); QVERIFY(transport.currentMs() >= transport.setPositionMs(1) + 100);
+        transport.stop();
+    }
+
+    void navigationExitsTransitionAndPreservesOrExitsLoop()
+    {
+        DrillProject project; project.newProject();
+        project.addSet(QStringLiteral("Second"), 8); project.addSet(QStringLiteral("Third"), 8);
+        project.addSet(QStringLiteral("Fourth"), 8); project.setPlaybackSource(QStringLiteral("mute"));
+        TransportController transport(&project);
+        transport.editSet(1); transport.playCurrentTransition();
+        transport.navigateToSet(2);
+        QTest::qWait(40); QVERIFY(transport.playing());
+        QVERIFY(transport.currentMs() > transport.setPositionMs(2));
+        transport.stop(); transport.navigateToSet(0); transport.navigateToSet(2, true);
+        transport.toggleLoop(); transport.navigateToSet(1);
+        QVERIFY(project.loopEnabled()); QCOMPARE(project.selectedSetStartIndex(), 0); QCOMPARE(project.selectedSetEndIndex(), 2);
+        transport.seekMs(transport.setPositionMs(2) - 10); transport.playPause();
+        QTest::qWait(65); QVERIFY(transport.currentMs() < transport.setPositionMs(1));
+        transport.navigateToSet(3); QVERIFY(!project.loopEnabled()); transport.stop();
+    }
+
+    void timelineExtendsBeyondImportedMusicAndMapsAudio()
+    {
+        QTemporaryDir directory;
+        QFile midi(directory.filePath(QStringLiteral("score.mid"))); QVERIFY(midi.open(QIODevice::WriteOnly));
+        midi.write(midiFixture()); midi.close();
+        DrillProject project; project.newProject(); QVERIFY(project.importMidi(midi.fileName()));
+        project.addSet(QStringLiteral("Long drill"), 64);
+        TransportController transport(&project);
+        QVERIFY(transport.durationMs() > project.musicDurationMs());
+        transport.seekNormalized(0.9);
+        QVERIFY(transport.currentTick() > 5760);
+        QVERIFY(qAbs(transport.normalizedPosition() - 0.9) < 0.001);
+        project.setAudioOffsetMs(200);
+        QVERIFY(qAbs(transport.audioMsAtShowMs(1200) - 1400) < 0.01);
+        project.addAudioAnchor(1000, 960); project.addAudioAnchor(3000, 2880);
+        for (double audioMs : {1200.0, 2200.0, 4200.0}) {
+            const double show = transport.showMsAtAudioMs(audioMs);
+            QVERIFY(qAbs(transport.audioMsAtShowMs(show) - audioMs) < 2.0);
+        }
+    }
+
+    void rehearsalAudioSeekAndSilentTailWithoutScore()
+    {
+        QTemporaryDir directory;
+        QFile wave(directory.filePath(QStringLiteral("silence.wav")));
+        QVERIFY(wave.open(QIODevice::WriteOnly));
+        QDataStream out(&wave); out.setByteOrder(QDataStream::LittleEndian);
+        const QByteArray samples(16000, char(0)); // One second, mono PCM at 8 kHz.
+        out.writeRawData("RIFF", 4); out << quint32(36 + samples.size()); out.writeRawData("WAVEfmt ", 8);
+        out << quint32(16) << quint16(1) << quint16(1) << quint32(8000) << quint32(16000) << quint16(2) << quint16(16);
+        out.writeRawData("data", 4); out << quint32(samples.size()); out.writeRawData(samples.constData(), samples.size()); wave.close();
+        DrillProject project; project.newProject(); project.addSet(QStringLiteral("End"), 8);
+        project.attachAudio(wave.fileName());
+        TransportController transport(&project);
+        QTRY_VERIFY_WITH_TIMEOUT(project.audioDurationMs() > 900, 5000);
+        QVERIFY(qAbs(project.audioDurationMs() - 1000) < 2);
+        QCOMPARE(project.waveformPeakAtMs(500), 0.0);
+        transport.playPause();
+        for (double target : {700.0, 100.0, 850.0, 200.0}) {
+            transport.seekMs(target);
+            QVERIFY(qAbs(transport.currentMs() - target) < 0.01);
+            QTest::qWait(80);
+            QVERIFY(transport.currentMs() >= target);
+            QVERIFY(transport.currentMs() < target + 350);
+        }
+        transport.seekMs(950); QTest::qWait(250);
+        QVERIFY(transport.playing()); QVERIFY(transport.currentMs() > 1050);
+        transport.stop();
+        project.setAudioOffsetMs(-300);
+        QVERIFY(qAbs(transport.showMsAtAudioMs(0) - 300) < 0.01);
+        transport.seekMs(0); transport.playPause(); QTest::qWait(380);
+        QVERIFY(transport.currentMs() >= 300); transport.stop();
+    }
+
+    void onePageHoldAndEmptyShowAreSeekable()
+    {
+        DrillProject project; project.newProject();
+        TransportController transport(&project);
+        transport.seekNormalized(0.5); QVERIFY(std::isfinite(transport.currentMs()));
+        transport.playPause(); QTest::qWait(35); QVERIFY(!transport.playing());
+        project.setOpeningBehavior(QStringLiteral("hold"), 4);
+        transport.seekNormalized(0.5); QCOMPARE(project.playbackSetIndex(), 0);
+        QVERIFY(qAbs(transport.currentMs() - project.openingDurationMs() / 2) < 0.01);
+        transport.playPause(); transport.navigateToSet(0); QVERIFY(transport.playing());
+        QVERIFY(transport.currentMs() < 1); transport.stop();
     }
 
     void undoReturnsToSavedCleanState()
@@ -557,7 +850,9 @@ private slots:
         project.batchAddPerformers(QStringLiteral("P"), 12, QStringLiteral("Guard"), QStringLiteral("Guard"));
         project.selectAll();
         WorkspaceController workspace;
+        TransportController transport(&project);
         QQuickView view;
+        view.rootContext()->setContextProperty(QStringLiteral("transport"), &transport);
         view.rootContext()->setContextProperty(QStringLiteral("workspaceController"), &workspace);
         view.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
         view.setResizeMode(QQuickView::SizeRootObjectToView);
@@ -1253,7 +1548,7 @@ private slots:
         TransportController transport(&project); project.selectSetRange(0, false); transport.playFromSelection();
         QCOMPARE(project.currentSetIndex(), 0); QCOMPARE(project.playhead(), 1.0); transport.stop();
         project.setOpeningBehavior(QStringLiteral("move"), 8); transport.playFromSelection();
-        QCOMPARE(project.currentSetIndex(), 1); QVERIFY(project.playhead() < 0.01); transport.stop();
+        QCOMPARE(project.playbackSetIndex(), 1); QVERIFY(project.playhead() < 0.01); transport.stop();
 
         project.setOpeningBehavior(QStringLiteral("hold"), 12);
         const QString path = temporary.filePath(QStringLiteral("opening.marchcraft")); QVERIFY(project.saveProject(path));
@@ -1293,11 +1588,11 @@ private slots:
         project.nudgeSelected(8.0, 0.0);
         TransportController transport(&project);
         transport.seekTick(15359);
-        QCOMPARE(project.currentSetIndex(), 1);
+        QCOMPARE(project.playbackSetIndex(), 1);
         QVERIFY(project.playhead() > 0.999);
         QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 40.0);
         transport.seekTick(15360);
-        QCOMPARE(project.currentSetIndex(), 2);
+        QCOMPARE(project.playbackSetIndex(), 2);
         QCOMPARE(project.playhead(), 0.0);
         QCOMPARE(project.data(project.index(0, 0), DrillProject::XRole).toDouble(), 40.0);
         transport.seekTick(30719);

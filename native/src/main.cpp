@@ -66,6 +66,7 @@ int main(int argc, char *argv[])
     const bool qaHome = arguments.contains(QStringLiteral("--qa-home"));
     const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
     const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
+    const bool qaMovements = arguments.contains(QStringLiteral("--qa-movements"));
     const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
@@ -78,7 +79,7 @@ int main(int argc, char *argv[])
     bool startInEditor = false;
     for (const QString &flag : editorFlags)
         startInEditor |= arguments.contains(flag);
-    startInEditor |= qaShapes;
+    startInEditor |= qaShapes || qaMovements;
     startInEditor &= !(qaHome || qaNewProject);
     if (startInEditor)
         project.loadDemo();
@@ -99,6 +100,15 @@ int main(int argc, char *argv[])
     const int midiFlag = arguments.indexOf(QStringLiteral("--midi"));
     if (midiFlag >= 0 && midiFlag + 1 < arguments.size())
         project.importMidi(arguments.at(midiFlag + 1));
+    const int audioFlag = arguments.indexOf(QStringLiteral("--audio"));
+    if (audioFlag >= 0 && audioFlag + 1 < arguments.size())
+        project.attachAudio(arguments.at(audioFlag + 1));
+    if (qaMovements) {
+        project.renameMovement(0, QStringLiteral("Opener — a long movement title for layout QA"));
+        project.createMovement(QStringLiteral("Ballad"));
+        project.createMovement(QStringLiteral("Finale"));
+        project.activateMovement(0);
+    }
     const int qaPdfFlag = arguments.indexOf(QStringLiteral("--qa-coordinate-pdf"));
     if (qaPdfFlag >= 0 && qaPdfFlag + 1 < arguments.size()) {
         project.newProject();
@@ -225,7 +235,7 @@ int main(int argc, char *argv[])
                 return;
             }
             QTimer::singleShot(900, &application, [&project, &application, screenshotRequested] {
-                const bool advancing = project.currentSetIndex() > 0 && project.playhead() > 0.01;
+                const bool advancing = project.playbackSetIndex() > 0 && project.playhead() > 0.01;
                 if (!advancing || !screenshotRequested)
                     application.exit(advancing ? 0 : 3);
             });
@@ -233,10 +243,10 @@ int main(int argc, char *argv[])
     }
     if (arguments.contains(QStringLiteral("--qa-midi-synth"))) {
         transport.playFromSelection();
-        QTimer::singleShot(1200, &application, [&transport, &application] {
-            qInfo().noquote() << QStringLiteral("MIDI synth QA: available=%1 tick=%2 status=%3")
-                .arg(transport.synthAvailable()).arg(transport.currentTick()).arg(transport.audioStatus());
-            application.exit(transport.synthAvailable() && transport.currentTick() > 0 ? 0 : 4);
+        QTimer::singleShot(4000, &application, [&transport, &application] {
+            qInfo().noquote() << QStringLiteral("MIDI synth QA: available=%1 tick=%2 underruns=%3 status=%4")
+                .arg(transport.synthAvailable()).arg(transport.currentTick()).arg(transport.underrunCount()).arg(transport.audioStatus());
+            application.exit(transport.synthAvailable() && transport.currentTick() > 0 && transport.underrunCount() == 0 ? 0 : 4);
         });
     }
     return application.exec();
