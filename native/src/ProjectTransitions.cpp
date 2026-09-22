@@ -32,15 +32,15 @@ Placement DrillProject::placementAt(int performerIndex, int setIndex) const
 
 QPointF DrillProject::interpolatedPosition(int performerIndex) const
 {
-    if (m_currentSet <= 0 || m_playhead >= 1.0) return placementAt(performerIndex, m_currentSet).position;
-    return pathPosition(performerIndex, m_currentSet, m_playhead);
+    if (playbackSetIndex() <= 0 || m_playhead >= 1.0) return placementAt(performerIndex, playbackSetIndex()).position;
+    return pathPosition(performerIndex, playbackSetIndex(), m_playhead);
 }
 
 double DrillProject::interpolatedFacing(int performerIndex) const
 {
-    const double destination = placementAt(performerIndex, m_currentSet).facing;
-    if (m_currentSet <= 0 || m_playhead >= 1.0) return destination;
-    const double start = placementAt(performerIndex, m_currentSet - 1).facing;
+    const double destination = placementAt(performerIndex, playbackSetIndex()).facing;
+    if (playbackSetIndex() <= 0 || m_playhead >= 1.0) return destination;
+    const double start = placementAt(performerIndex, playbackSetIndex() - 1).facing;
     // Turn along the shortest arc so a 350-to-10 degree change passes through
     // front field instead of spinning almost a full revolution.
     const double delta = std::fmod(destination - start + 540.0, 360.0) - 180.0;
@@ -52,35 +52,35 @@ double DrillProject::interpolatedFacing(int performerIndex) const
 AnimationState DrillProject::animationStateAt(int performerIndex) const
 {
     AnimationState state;
-    const int counts = currentSetCounts();
+    const int counts = playbackSetCounts();
     if (counts > 0) {
         state.elapsedCounts = m_playhead * counts;
         // Preserve left/right alternation and step-off weight across consecutive
         // sets, including odd count moves. A stationary hold starts a new phrase.
-        for (int set = m_currentSet - 1; set > 0; --set) {
+        for (int set = playbackSetIndex() - 1; set > 0; --set) {
             if (transitionDistance(performerIndex, set) <= 1e-5) break;
             state.elapsedCounts += m_sets[set].counts;
         }
         state.normalizedTime = std::fmod(state.elapsedCounts / 2.0, 1.0);
         if (state.normalizedTime < 0.0) state.normalizedTime += 1.0;
     }
-    if (!m_playbackActive || m_currentSet <= 0 || counts <= 0) return state;
+    if (!m_playbackActive || playbackSetIndex() <= 0 || counts <= 0) return state;
 
-    const Placement destination = placementAt(performerIndex, m_currentSet);
-    const Placement origin = placementAt(performerIndex, m_currentSet - 1);
-    if (m_currentSet + 1 >= m_sets.size()) {
+    const Placement destination = placementAt(performerIndex, playbackSetIndex());
+    const Placement origin = placementAt(performerIndex, playbackSetIndex() - 1);
+    if (playbackSetIndex() + 1 >= m_sets.size()) {
         state.closesAtDestination = true;
     } else {
-        state.closesAtDestination = transitionDistance(performerIndex, m_currentSet + 1) <= 1e-5;
+        state.closesAtDestination = transitionDistance(performerIndex, playbackSetIndex() + 1) <= 1e-5;
     }
     const double facingDelta = std::abs(std::fmod(destination.facing - origin.facing + 540.0, 360.0) - 180.0);
 
     constexpr double speedSampleRadius = 0.001;
     const double beforeProgress = std::max(0.0, m_playhead - speedSampleRadius);
     const double afterProgress = std::min(1.0, m_playhead + speedSampleRadius);
-    const QPointF before = pathPosition(performerIndex, m_currentSet, beforeProgress);
-    const QPointF current = pathPosition(performerIndex, m_currentSet, m_playhead);
-    const QPointF after = pathPosition(performerIndex, m_currentSet, afterProgress);
+    const QPointF before = pathPosition(performerIndex, playbackSetIndex(), beforeProgress);
+    const QPointF current = pathPosition(performerIndex, playbackSetIndex(), m_playhead);
+    const QPointF after = pathPosition(performerIndex, playbackSetIndex(), afterProgress);
     const QPointF speedDelta = after - before;
     const double sampleProgress = afterProgress - beforeProgress;
     const double sampleDistance = std::hypot(current.x() - before.x(), current.y() - before.y())
@@ -97,8 +97,8 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     const double headingSampleRadius = std::min(0.025, std::max(speedSampleRadius, 0.18 / counts));
     const double headingBeforeProgress = std::max(0.0, m_playhead - headingSampleRadius);
     const double headingAfterProgress = std::min(1.0, m_playhead + headingSampleRadius);
-    const QPointF headingDelta = pathPosition(performerIndex, m_currentSet, headingAfterProgress)
-                               - pathPosition(performerIndex, m_currentSet, headingBeforeProgress);
+    const QPointF headingDelta = pathPosition(performerIndex, playbackSetIndex(), headingAfterProgress)
+                               - pathPosition(performerIndex, playbackSetIndex(), headingBeforeProgress);
     const QPointF directionDelta = std::hypot(headingDelta.x(), headingDelta.y()) > 1e-7
             ? headingDelta : speedDelta;
     // Field Y increases away from the audience: front = -Y, Side 2 = +X.

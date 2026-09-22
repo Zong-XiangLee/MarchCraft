@@ -19,6 +19,10 @@ template<typename T> class QFutureWatcher;
 class DrillProject final : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList movements READ movements NOTIFY movementsChanged)
+    Q_PROPERTY(int currentMovementIndex READ currentMovementIndex NOTIFY movementsChanged)
+    Q_PROPERTY(int movementCount READ movementCount NOTIFY movementsChanged)
+    Q_PROPERTY(QString currentMovementName READ currentMovementName NOTIFY movementsChanged)
     Q_PROPERTY(QString showName READ showName WRITE setShowName NOTIFY projectChanged)
     Q_PROPERTY(int performerCount READ performerCount NOTIFY performerCountChanged)
     Q_PROPERTY(QString fieldPreset READ fieldPreset WRITE setFieldPreset NOTIFY projectChanged)
@@ -77,6 +81,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(int openingCounts READ openingCounts NOTIFY setsChanged)
     Q_PROPERTY(double openingDurationMs READ openingDurationMs NOTIFY timingChanged)
     Q_PROPERTY(double playhead READ playhead WRITE setPlayhead NOTIFY playheadChanged)
+    Q_PROPERTY(int playbackSetIndex READ playbackSetIndex NOTIFY playbackFrameChanged)
+    Q_PROPERTY(int playbackSetCounts READ playbackSetCounts NOTIFY playbackFrameChanged)
+    Q_PROPERTY(double audioDurationMs READ audioDurationMs NOTIFY waveformChanged)
     Q_PROPERTY(bool playbackActive READ playbackActive WRITE setPlaybackActive NOTIFY playbackActiveChanged)
     Q_PROPERTY(bool dirty READ dirty NOTIFY dirtyChanged)
     Q_PROPERTY(QString projectPath READ projectPath NOTIFY projectChanged)
@@ -126,6 +133,15 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
 
 public:
+    QVariantList movements() const;
+    int currentMovementIndex() const { return m_currentMovement; }
+    int movementCount() const { return m_movements.size(); }
+    QString currentMovementName() const;
+    Q_INVOKABLE void activateMovement(int index);
+    Q_INVOKABLE bool createMovement(const QString &name, bool duplicate = false);
+    Q_INVOKABLE bool renameMovement(int index, const QString &name);
+    Q_INVOKABLE void removeMovement(int index);
+    Q_INVOKABLE void moveMovement(int from, int to);
     Q_INVOKABLE void savePerformerDetails(int row, const QString &label, const QString &name,
                                          const QString &instrument, const QString &section,
                                          const QString &notes, const QString &equipmentId);
@@ -243,6 +259,11 @@ public:
     double openingDurationMs() const;
     double playhead() const { return m_playhead; }
     void setPlayhead(double value);
+    int playbackSetIndex() const { return m_playbackActive && m_playbackSet >= 0 ? m_playbackSet : m_currentSet; }
+    int playbackSetCounts() const;
+    void setPlaybackFrame(int destination, double progress);
+    double audioDurationMs() const { return m_audioDurationMs; }
+    Q_INVOKABLE double waveformPeakAtMs(double milliseconds) const;
     bool playbackActive() const { return m_playbackActive; }
     void setPlaybackActive(bool value);
     bool dirty() const { return m_dirty; }
@@ -414,7 +435,7 @@ public:
     Q_INVOKABLE void beginMove(int row, bool additive);
     Q_INVOKABLE void previewMove(double dx, double dy, bool lockX = false, bool lockY = false);
     Q_INVOKABLE void endMove();
-    Q_INVOKABLE QVariantMap selectedBounds() const;
+    Q_INVOKABLE QVariantMap selectedBounds(bool displayed = false) const;
     Q_INVOKABLE int selectedShapeIndex() const;
     Q_INVOKABLE void beginScale();
     Q_INVOKABLE void previewScale(double factor);
@@ -473,11 +494,13 @@ public:
     Q_INVOKABLE void redo();
 
 signals:
+    void movementsChanged();
     void projectChanged();
     void currentSetChanged();
     void setsChanged();
     void playheadChanged();
     void playbackActiveChanged();
+    void playbackFrameChanged();
     void dirtyChanged();
     void statusMessageChanged();
     void selectionChanged();
@@ -567,12 +590,26 @@ private:
     QString m_statusMessage{QStringLiteral("Ready")};
     double m_bpm = 120.0;
     double m_playhead = 0.0;
+    int m_playbackSet = -1;
+    double m_audioDurationMs = 0.0;
+    QVector<double> m_waveformEndMs;
     bool m_playbackActive = false;
     int m_currentSet = 0;
     int m_selectedSetStart = 0;
     int m_selectedSetEnd = 0;
     bool m_dirty = false;
     QVector<MarchCraft::Performer> m_performers;
+    struct Movement {
+        QString id;
+        QString name;
+        QJsonObject state;
+    };
+    QVector<Movement> m_movements;
+    int m_currentMovement = 0;
+    void resetMovements();
+    void synchronizeMovementRoster();
+    static QJsonObject movementState(const QJsonObject &project);
+    static void overlayMovement(QJsonObject &project, const QJsonObject &state);
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;
     mutable QVector<MarchCraft::AnimationState> m_animationStateCache;
@@ -630,6 +667,7 @@ private:
     bool m_formationPreviewBusy = false;
     quint64 m_formationPreviewGeneration = 0;
     bool m_backgroundWorkerClone = false;
+    bool m_restoringSnapshot = false;
     MarchCraft::CapabilityProfile m_capability;
     QVariantList m_clinicIssues;
     QSet<QString> m_dismissedClinicIssues;

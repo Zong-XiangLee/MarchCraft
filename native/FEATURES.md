@@ -20,7 +20,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Sets | Add, edit, delete, duplicate, batch-create, and mark subsets |
 | Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and equal-distance distribution |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
-| Music | Native MIDI/MusicXML timing and track import, compact wheel-scrollable measure timeline with set-range highlighting, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
+| Music | Native MIDI/MusicXML timing and track import, unified time-scaled drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent page/range selection, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
 | 3D | Meter-based Y-up world with grounded, height-scaled rigged human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
@@ -67,3 +67,10 @@ Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all s
 
 - Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
 - The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
+
+### Movement editors and playback reliability
+
+- Independent movement tabs hold their own pages/variants, MIDI or MusicXML, rehearsal audio, tempo/meter map, loop range, and opening behavior; the show shares its roster and field.
+- Creation, duplication, renaming, reordering, and deletion are undoable. Existing shows migrate to a single movement; save/recovery includes all movements.
+- MIDI rendering runs away from GUI/animation work. Volume and loop controls do not restart synthesis.
+- Music measure clicks seek and select the corresponding editing page. Rectangle/lasso tools select the performers at their displayed positions after any timeline seek; field selection pauses playback.

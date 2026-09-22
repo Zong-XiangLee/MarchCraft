@@ -7,16 +7,18 @@
 #include <QLibrary>
 #include <QMutex>
 #include <QObject>
+#include <QThread>
+#include <QTimer>
 #include <atomic>
 
 class QAudioSink;
 
-class MidiSynthEngine final : public QObject
+class MidiSynthWorker final : public QObject
 {
     Q_OBJECT
 public:
-    explicit MidiSynthEngine(QObject *parent = nullptr);
-    ~MidiSynthEngine() override;
+    explicit MidiSynthWorker(QObject *parent = nullptr);
+    ~MidiSynthWorker() override;
 
     bool load(const MarchCraft::MusicDocument &document);
     void updateTracks(const QVector<MarchCraft::MusicTrack> &tracks);
@@ -28,7 +30,7 @@ public:
     double positionMs() const;
     bool available() const { return m_available; }
     QString status() const { return m_status; }
-    int underruns() const { return m_underruns; }
+    int underruns() const { return m_underruns.load(); }
 
 signals:
     void statusChanged();
@@ -36,13 +38,13 @@ signals:
 private:
     class Stream final : public QIODevice {
     public:
-        explicit Stream(MidiSynthEngine *engine) : m_engine(engine) {}
+        explicit Stream(MidiSynthWorker *engine) : m_engine(engine) {}
         bool isSequential() const override { return true; }
         qint64 bytesAvailable() const override { return 32768 + QIODevice::bytesAvailable(); }
         qint64 readData(char *data, qint64 maxSize) override;
         qint64 writeData(const char *, qint64) override { return -1; }
     private:
-        MidiSynthEngine *m_engine;
+        MidiSynthWorker *m_engine;
     };
 
     bool loadLibrary();
@@ -96,5 +98,37 @@ private:
     std::atomic<double> m_positionMs{0.0};
     bool m_available = false;
     QString m_status{QStringLiteral("MIDI synth unavailable")};
-    int m_underruns = 0;
+    std::atomic<int> m_underruns{0};
+    QVector<qint64> m_eventFrames;
+    double m_startMs = 0.0;
+    QTimer m_positionTimer;
+};
+
+// GUI-facing facade. All synthesis and QAudioSink I/O live on m_audioThread.
+class MidiSynthEngine final : public QObject
+{
+    Q_OBJECT
+public:
+    explicit MidiSynthEngine(QObject *parent = nullptr);
+    ~MidiSynthEngine() override;
+    bool load(const MarchCraft::MusicDocument &document);
+    void updateTracks(const QVector<MarchCraft::MusicTrack> &tracks);
+    void play();
+    void pause();
+    void stop();
+    void seekTick(qint64 tick);
+    void setGain(double gain);
+    double positionMs() const;
+    bool available() const;
+    QString status() const { return m_status; }
+    int underruns() const;
+
+signals:
+    void statusChanged();
+
+private:
+    QThread m_audioThread;
+    QObject *m_context = nullptr;
+    MidiSynthWorker *m_worker = nullptr;
+    QString m_status;
 };

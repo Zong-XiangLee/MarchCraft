@@ -4,32 +4,15 @@ import QtQuick.Layouts
 
 Item {
     id: root
+    signal requestAudioImport()
+    signal requestTiming()
     signal requestMidiImport()
     signal requestMusicXmlImport()
-    property int selectionAnchor: Math.max(0, drillProject.musicSelectionStart)
     property var previewSegments: []
     property var mappingRows: []
     property var mappingMeasures: []
-    property int setRangeRevision: 0
-    property int musicRevision: 0
-    readonly property bool compact: height < 210
-    function revealSetRange() {
-        for (let i = 0; i < drillProject.musicMeasureCount; ++i) {
-            if (drillProject.musicMeasureInfo(i).inSetRange) {
-                measureList.positionViewAtIndex(i, ListView.Contain)
-                return
-            }
-        }
-    }
-    Connections {
-        target: drillProject
-        function onMusicChanged() { root.musicRevision++ }
-        function onSetRangeChanged() {
-            root.setRangeRevision++
-            Qt.callLater(root.revealSetRange)
-        }
-    }
-
+    signal revealMeasure(int index)
+    function openMenu() { musicMenu.popup() }
     function refreshPreview() {
         const multiplier = movementMode.currentIndex === 0 ? 1.0
                          : movementMode.currentIndex === 1 ? 0.5
@@ -40,166 +23,49 @@ Item {
             Number(subdivision.currentText), multiplier)
     }
 
-    ColumnLayout {
-        anchors.fill: parent
-        spacing: 5
-
-        Flow {
-            spacing: 6
-            Layout.fillWidth: true
-            Label {
-                width: Math.min(root.width, implicitWidth)
-                wrapMode: Text.Wrap
-                text: drillProject.midiImporting ? "Reading MIDI…"
-                    : drillProject.musicLoaded
-                      ? drillProject.musicMeasureCount + " measures · " + drillProject.musicTrackCount
-                        + " tracks · " + Math.floor(drillProject.musicDurationMs / 60000) + ":"
-                        + String(Math.floor((drillProject.musicDurationMs % 60000) / 1000)).padStart(2, "0")
-                      : "Attach MIDI or MusicXML to build the musical timeline"
-                font.bold: true
-            }
-            Label { text: transport.audioStatus; color: transport.synthAvailable || drillProject.playbackSource !== "midi" ? "#a5afbc" : "#f3c969" }
-            AppButton { text: "MIDI…"; onClicked: root.requestMidiImport() }
-            AppButton { text: "MusicXML…"; onClicked: root.requestMusicXmlImport() }
-            AppButton { text: "Tracks…"; enabled: drillProject.musicTrackCount > 0; onClicked: trackDialog.open() }
-            AppButton { text: "Map sets…"; enabled: drillProject.musicLoaded; onClicked: mappingDialog.open() }
-        }
-
-        Label {
-            Layout.fillWidth: true
-            visible: !root.compact && drillProject.musicDiagnostics.length > 0
-            text: drillProject.musicDiagnostics
-            color: "#d6b66a"; elide: Text.ElideRight; font.pixelSize: 10
-        }
-
-        RowLayout {
-            Layout.fillWidth: true
-            visible: drillProject.musicLoaded
+    Menu {
+        id: musicMenu
+        MenuItem { text: "Import MIDI…"; onTriggered: root.requestMidiImport() }
+        MenuItem { text: "Import MusicXML…"; onTriggered: root.requestMusicXmlImport() }
+        MenuItem { text: "Attach rehearsal audio…"; onTriggered: root.requestAudioImport() }
+        MenuItem { text: "Timing and synchronization…"; onTriggered: root.requestTiming() }
+        MenuSeparator {}
+        MenuItem { text: "Track mixer…"; enabled: drillProject.musicTrackCount > 0; onTriggered: trackDialog.open() }
+        MenuItem { text: "Map pages to music…"; enabled: drillProject.musicLoaded; onTriggered: { transport.editSet(drillProject.currentSetIndex); mappingDialog.open() } }
+        MenuItem { text: "Generate pages from selection…"; enabled: drillProject.musicLoaded; onTriggered: { transport.editSet(drillProject.currentSetIndex); generationOptions.open() } }
+        MenuItem { text: "Group selected measures…"; enabled: drillProject.musicLoaded; onTriggered: groupDialog.open() }
+        MenuItem { text: "Music sections and parts…"; enabled: drillProject.musicLoaded; onTriggered: groupsDialog.open() }
+        MenuItem { text: "Import details…"; enabled: drillProject.musicLoaded; onTriggered: diagnosticsDialog.open() }
+        MenuItem { text: "Audio offset…"; onTriggered: offsetDialog.open() }
+    }
+    Dialog {
+        id: diagnosticsDialog; title: "Music import details"; modal: true; width: 480
+        anchors.centerIn: Overlay.overlay; standardButtons: Dialog.Close
+        contentItem: Label { width: 440; wrapMode: Text.Wrap; text: drillProject.musicDiagnostics || "No import diagnostics." }
+    }
+    Dialog {
+        id: generationOptions; title: "Pages from selected measures"; modal: true
+        width: 440; anchors.centerIn: Overlay.overlay; standardButtons: Dialog.Cancel
+        ColumnLayout {
+            anchors.fill: parent
             Label { text: "Measures " + (Math.min(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1)
-                          + "–" + (Math.max(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1); color: "#b8c8bf" }
-            Button { text: "Group selection…"; onClicked: groupDialog.open() }
-            Button { text: "Groups (" + drillProject.musicSections.length + ")"; onClicked: groupsDialog.open() }
-            ComboBox { id: generationMode; model: ["Subdivide", "One move"]; Layout.preferredWidth: 116 }
-            ComboBox { id: subdivision; model: ["8", "16", "32"]; currentIndex: 1; enabled: generationMode.currentIndex === 0; Layout.preferredWidth: 70 }
-            ComboBox { id: movementMode; model: ["Full time", "Half time", "Double time", "Hold"]; Layout.preferredWidth: 118 }
-            AppButton {
-                text: "Preview sets…"; highlighted: true
-                onClicked: { root.refreshPreview(); generationDialog.open() }
-            }
-            Label { text: "Audio offset"; color: "#a5afbc" }
-            SpinBox {
-                from: -60000; to: 60000; stepSize: 10; editable: true
-                value: Math.round(drillProject.audioOffsetMs)
-                onValueModified: drillProject.audioOffsetMs = value
-                textFromValue: function(value) { return (value / 1000).toFixed(2) + " s" }
-                valueFromText: function(text) { return Math.round(parseFloat(text) * 1000) }
-                Layout.preferredWidth: 92
-            }
+                         + "–" + (Math.max(drillProject.musicSelectionStart, drillProject.musicSelectionEnd) + 1) }
+            ComboBox { id: generationMode; model: ["Subdivide", "One move"]; Layout.fillWidth: true }
+            ComboBox { id: subdivision; model: ["8", "16", "32"]; currentIndex: 1; enabled: generationMode.currentIndex === 0; Layout.fillWidth: true }
+            ComboBox { id: movementMode; model: ["Full time", "Half time", "Double time", "Hold"]; Layout.fillWidth: true }
+            Button { text: "Preview pages…"; onClicked: { root.refreshPreview(); generationOptions.close(); generationDialog.open() } }
         }
-
-        Rectangle {
-            Layout.fillWidth: true
-            Layout.preferredHeight: !root.compact && drillProject.waveformPeakCount > 0 ? 24 : 0
-            visible: height > 0; color: "#0c1217"; radius: 3
-            Canvas {
-                id: waveform
-                anchors.fill: parent
-                onPaint: {
-                    const ctx = getContext("2d"); ctx.reset(); ctx.strokeStyle = "#5ee0a0"; ctx.lineWidth = 1
-                    const count = drillProject.waveformPeakCount
-                    if (count < 1) return
-                    for (let x = 0; x < width; ++x) {
-                        const peak = drillProject.waveformPeak(Math.min(count - 1, Math.floor(x * count / width)))
-                        ctx.beginPath(); ctx.moveTo(x, height / 2 - peak * height / 2); ctx.lineTo(x, height / 2 + peak * height / 2); ctx.stroke()
-                    }
-                }
-                Connections { target: drillProject; function onWaveformChanged() { waveform.requestPaint() } }
-            }
+    }
+    Dialog {
+        id: offsetDialog; title: "Rehearsal audio offset"; modal: true; width: 320
+        anchors.centerIn: Overlay.overlay; standardButtons: Dialog.Close
+        SpinBox {
+            from: -60000; to: 60000; stepSize: 10; editable: true
+            value: Math.round(drillProject.audioOffsetMs)
+            onValueModified: drillProject.audioOffsetMs = value
+            textFromValue: function(value) { return (value / 1000).toFixed(2) + " s" }
+            valueFromText: function(text) { return Math.round(parseFloat(text) * 1000) }
         }
-
-        ListView {
-            id: measureList
-            Layout.fillWidth: true
-            Layout.fillHeight: true
-            Layout.minimumHeight: 54
-            orientation: ListView.Horizontal; clip: true; spacing: 2
-            model: drillProject.musicMeasureCount
-            boundsBehavior: Flickable.StopAtBounds
-            ScrollBar.horizontal: ScrollBar { policy: ScrollBar.AsNeeded }
-            WheelHandler {
-                acceptedDevices: PointerDevice.Mouse | PointerDevice.TouchPad
-                onWheel: function(event) {
-                    const delta = Math.abs(event.angleDelta.x) > Math.abs(event.angleDelta.y)
-                                ? event.angleDelta.x : event.angleDelta.y
-                    measureList.contentX = Math.max(0, Math.min(
-                        Math.max(0, measureList.contentWidth - measureList.width),
-                        measureList.contentX - delta))
-                    event.accepted = true
-                }
-            }
-            delegate: Rectangle {
-                id: measureCard
-                required property int index
-                property var info: { root.setRangeRevision; root.musicRevision; return drillProject.musicMeasureInfo(index) }
-                width: Math.max(92, Math.min(132, measureList.height * 0.65)); height: measureList.height - 10; radius: 4
-                color: info.selected ? "#285f49" : info.inSetRange ? "#203c51" : "#172127"
-                border.width: info.selected ? 3 : info.setIndex >= 0 ? 2 : 1
-                border.color: info.selected ? "#6ee7b7" : info.setIndex >= 0 ? "#f3c969" : "#30414b"
-                Rectangle {
-                    anchors.fill: parent; anchors.margins: measureCard.border.width
-                    radius: 3; color: info.sections && info.sections.length ? info.sections[0].color : "transparent"
-                    opacity: info.selected ? 0.10 : 0.20
-                }
-                Row {
-                    z: 2; anchors.left: parent.left; anchors.right: parent.right; anchors.top: parent.top
-                    height: 5
-                    Repeater {
-                        model: info.sections || []
-                        Rectangle { required property var modelData; width: measureCard.width / Math.max(1, (info.sections || []).length); height: 5; color: modelData.color }
-                    }
-                }
-                Column {
-                    z: 3; anchors.fill: parent; anchors.margins: 7; anchors.topMargin: 9; spacing: 2
-                    Row {
-                        width: parent.width
-                        Label { text: info.number || ""; font.bold: true; color: "#e7f5ed" }
-                        Label { text: "  " + (info.numerator || 4) + "/" + (info.denominator || 4); color: "#a5afbc"; font.pixelSize: 10 }
-                    }
-                    Rectangle { width: parent.width; height: Math.max(3, (info.density || 0) * 25); color: "#5ee0a0"; opacity: 0.65; radius: 2 }
-                    Label { visible: measureCard.height >= 66; text: (info.counts || 0) + " ct · " + Math.round(info.tempo || 0); color: "#a9bbb1"; font.pixelSize: 9 }
-                    Label { visible: info.setIndex >= 0; text: "SET " + (info.setIndex + 1); color: "#f3c969"; font.bold: true; font.pixelSize: 9 }
-                    Label {
-                        visible: measureCard.height >= 82 && info.sections && info.sections.length > 0
-                        text: info.sections && info.sections.length ? info.sections[0].name : ""
-                        color: "#f8fafc"; font.bold: true; font.pixelSize: 9
-                        width: parent.width; elide: Text.ElideRight
-                    }
-                }
-                Rectangle { visible: info.inSetRange; z: 4; anchors.left: parent.left; anchors.right: parent.right; anchors.bottom: parent.bottom; height: 5; color: "#60a5fa" }
-                Label { visible: info.selected; z: 5; anchors.right: parent.right; anchors.bottom: parent.bottom; anchors.margins: 7; text: "SELECTED"; color: "#a7f3d0"; font.bold: true; font.pixelSize: 8 }
-                Rectangle {
-                    visible: transport.currentTick >= info.startTick && transport.currentTick < info.endTick
-                    x: Math.max(1, Math.min(parent.width - 2,
-                        (transport.currentTick - info.startTick) / Math.max(1, info.endTick - info.startTick) * parent.width))
-                    width: 2; height: parent.height; color: "#ffffff"; opacity: 0.9
-                }
-                MouseArea {
-                    anchors.fill: parent
-                    onPressed: function(mouse) {
-                        if (!(mouse.modifiers & Qt.ShiftModifier)) root.selectionAnchor = index
-                        drillProject.setMusicSelection(root.selectionAnchor, index)
-                    }
-                    onPositionChanged: function(mouse) {
-                        if (!pressed) return
-                        const p = mapToItem(measureList.contentItem, mouse.x, mouse.y)
-                        const target = Math.max(0, Math.min(drillProject.musicMeasureCount - 1, Math.floor(p.x / (parent.width + 2))))
-                        drillProject.setMusicSelection(root.selectionAnchor, target)
-                    }
-                    onDoubleClicked: if (info.setIndex >= 0) drillProject.currentSetIndex = info.setIndex
-                }
-            }
-        }
-
     }
 
     Dialog {
@@ -243,7 +109,7 @@ Item {
 
     Dialog {
         id: groupsDialog
-        title: "Show movements and parts"
+        title: "Music sections and parts"
         modal: true; width: 520; height: 430; anchors.centerIn: Overlay.overlay
         standardButtons: Dialog.Close
         contentItem: ListView {
@@ -260,7 +126,7 @@ Item {
                         Label { text: modelData.name; font.bold: true }
                         Label { text: modelData.type.toUpperCase() + " · measures " + modelData.startNumber + "–" + modelData.endNumber; color: "#8fa197"; font.pixelSize: 10 }
                     }
-                    Button { text: "Show"; onClicked: { drillProject.setMusicSelection(modelData.startMeasure, modelData.endMeasure); measureList.positionViewAtIndex(modelData.startMeasure, ListView.Beginning); groupsDialog.close() } }
+                    Button { text: "Show"; onClicked: { drillProject.setMusicSelection(modelData.startMeasure, modelData.endMeasure); root.revealMeasure(modelData.startMeasure); groupsDialog.close() } }
                     ToolButton {
                         id: removeGroupButton
                         text: "×"
