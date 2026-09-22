@@ -67,3 +67,10 @@ Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all s
 
 - Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
 - The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
+
+### Movement editors and playback reliability
+
+- Independent movement tabs hold their own pages/variants, MIDI or MusicXML, rehearsal audio, tempo/meter map, loop range, and opening behavior; the show shares its roster and field.
+- Creation, duplication, renaming, reordering, and deletion are undoable. Existing shows migrate to a single movement; save/recovery includes all movements.
+- MIDI rendering runs away from GUI/animation work. Volume and loop controls do not restart synthesis.
+- Music measure clicks seek and select the corresponding editing page. Rectangle/lasso tools select the performers at their displayed positions after any timeline seek; field selection pauses playback.

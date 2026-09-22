@@ -10,6 +10,7 @@
 #include <QPageSize>
 #include <QPdfWriter>
 #include <QSaveFile>
+#include <QScopedValueRollback>
 #include <QSizeF>
 #include <QSet>
 #include <QTextStream>
@@ -56,14 +57,16 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("startMeasure"), section.startMeasure},
             {QStringLiteral("endMeasure"), section.endMeasure}});
     }
-    return {{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 10},
+    QJsonObject result{{QStringLiteral("format"), QStringLiteral("marchcraft")},
+            {QStringLiteral("version"), 11},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
             {QStringLiteral("audioOffsetMs"), m_audioOffsetMs},
             {QStringLiteral("music"), m_music.toJson()},
             {QStringLiteral("musicSections"), musicSections},
+            {QStringLiteral("musicSelectionStart"), m_musicSelectionStart},
+            {QStringLiteral("musicSelectionEnd"), m_musicSelectionEnd},
             {QStringLiteral("bpm"), m_bpm},
             {QStringLiteral("currentSet"), m_currentSet},
             {QStringLiteral("selectedSetStart"), m_selectedSetStart},
@@ -81,16 +84,51 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("tempoRegions"), tempos},
             {QStringLiteral("venue"), m_venue.toJson()},
             {QStringLiteral("props"), props}};
+    // The active movement stays in the legacy top-level fields. Only inactive
+    // movements have a stored state, so there is never a second active copy.
+    QJsonArray movements;
+    for (int i = 0; i < m_movements.size(); ++i) {
+        QJsonObject entry{{QStringLiteral("id"), m_movements[i].id},
+                          {QStringLiteral("name"), m_movements[i].name}};
+        if (i != m_currentMovement) entry.insert(QStringLiteral("state"), m_movements[i].state);
+        movements.append(entry);
+    }
+    result.insert(QStringLiteral("movements"), movements);
+    result.insert(QStringLiteral("currentMovement"), m_currentMovement);
+    return result;
 }
 
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 10) {
+        || object.value(QStringLiteral("version")).toInt() > 11) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
+    QVector<Movement> movements;
+    int activeMovement = 0;
+    if (object.value(QStringLiteral("version")).toInt() >= 11) {
+        const auto entries = object.value(QStringLiteral("movements")).toArray();
+        activeMovement = object.value(QStringLiteral("currentMovement")).toInt(-1);
+        QSet<QString> ids;
+        if (entries.isEmpty() || activeMovement < 0 || activeMovement >= entries.size()) {
+            setStatus(QStringLiteral("Invalid movement list")); return false;
+        }
+        for (int i = 0; i < entries.size(); ++i) {
+            const auto entry = entries[i].toObject();
+            const QString id = entry.value(QStringLiteral("id")).toString();
+            const QString name = entry.value(QStringLiteral("name")).toString().simplified().left(80);
+            const auto state = entry.value(QStringLiteral("state")).toObject();
+            if (id.isEmpty() || ids.contains(id) || name.isEmpty()
+                || (i != activeMovement && state.value(QStringLiteral("sets")).toArray().isEmpty())) {
+                setStatus(QStringLiteral("Invalid movement data")); return false;
+            }
+            ids.insert(id); movements.push_back({id, name, movementState(state)});
+        }
+    } else movements.push_back({QUuid::createUuid().toString(QUuid::WithoutBraces), QStringLiteral("Movement 1"), {}});
+    QScopedValueRollback<bool> restoring(m_restoringSnapshot, true);
     beginResetModel();
+    m_movements = std::move(movements); m_currentMovement = activeMovement;
     QVector<Performer> performers;
     QVector<DrillSet> sets;
     QVector<DrillSet> archivedSets;
@@ -139,6 +177,8 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_audioSource = object.value(QStringLiteral("audioSource")).toString();
     m_audioOffsetMs = object.value(QStringLiteral("audioOffsetMs")).toDouble();
     m_music = MarchCraft::MusicDocument::fromJson(object.value(QStringLiteral("music")).toObject());
+    m_musicSelectionStart = qBound(-1, object.value(QStringLiteral("musicSelectionStart")).toInt(-1), m_music.measures.size() - 1);
+    m_musicSelectionEnd = qBound(-1, object.value(QStringLiteral("musicSelectionEnd")).toInt(-1), m_music.measures.size() - 1);
     m_musicSections.clear();
     for (auto section : musicSections) {
         if (m_music.measures.isEmpty()) break;
@@ -191,6 +231,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     emit performerCountChanged();
     if (!preservePath) m_projectPath.clear();
     markDirty();
+    emit movementsChanged();
     emit projectChanged(); emit setsChanged(); emit currentSetChanged(); emit selectionChanged();
     emit sceneChanged(); emit propsChanged();
     emit playbackActiveChanged();
@@ -204,6 +245,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 
 void DrillProject::loadDemo()
 {
+    resetMovements();
     m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     m_musicSections.clear();
     if (QFile::exists(QStringLiteral(":/samples/coordinates.json"))) {
@@ -302,6 +344,7 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
     }
 
     beginResetModel();
+    resetMovements();
     // Coordinate sheets begin at a zero-count first set. A written hold is a
     // following set at the same coordinate, with that row's count value.
     m_openingBehavior = QStringLiteral("move");
@@ -714,4 +757,162 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
         QStringLiteral("Written-order timing imported; %1 repeat instruction(s) require review").arg(unsupported));
     applyMusicDocument(std::move(document), QStringLiteral("Import MusicXML"));
     return true;
+}
+
+
+QJsonObject DrillProject::movementState(const QJsonObject &project)
+{
+    static const QStringList keys = {
+        QStringLiteral("sets"), QStringLiteral("archivedSets"), QStringLiteral("currentSet"),
+        QStringLiteral("selectedSetStart"), QStringLiteral("selectedSetEnd"),
+        QStringLiteral("music"), QStringLiteral("musicSections"),
+        QStringLiteral("musicSelectionStart"), QStringLiteral("musicSelectionEnd"),
+        QStringLiteral("audioSource"), QStringLiteral("audioOffsetMs"), QStringLiteral("bpm"),
+        QStringLiteral("meterRegions"), QStringLiteral("tempoRegions"),
+        QStringLiteral("playbackSource"), QStringLiteral("midiMasterVolume"), QStringLiteral("loopEnabled"),
+        QStringLiteral("openingBehavior"), QStringLiteral("openingCounts")};
+    QJsonObject result;
+    for (const auto &key : keys) result.insert(key, project.value(key));
+    return result;
+}
+
+void DrillProject::overlayMovement(QJsonObject &project, const QJsonObject &state)
+{
+    const auto local = movementState(state);
+    const auto previous = movementState(project);
+    for (auto it = previous.begin(); it != previous.end(); ++it) project.remove(it.key());
+    for (auto it = local.begin(); it != local.end(); ++it) project.insert(it.key(), it.value());
+}
+
+void DrillProject::resetMovements()
+{
+    m_movements = {{QUuid::createUuid().toString(QUuid::WithoutBraces), QStringLiteral("Movement 1"), {}}};
+    m_currentMovement = 0;
+    emit movementsChanged();
+}
+
+QVariantList DrillProject::movements() const
+{
+    QVariantList result;
+    for (const auto &movement : m_movements)
+        result.append(QVariantMap{{QStringLiteral("id"), movement.id}, {QStringLiteral("name"), movement.name}});
+    return result;
+}
+
+QString DrillProject::currentMovementName() const
+{
+    return m_currentMovement >= 0 && m_currentMovement < m_movements.size()
+        ? m_movements[m_currentMovement].name : QString();
+}
+
+void DrillProject::activateMovement(int index)
+{
+    if (index < 0 || index >= m_movements.size() || index == m_currentMovement) return;
+    auto snapshot = toJson();
+    auto entries = snapshot.value(QStringLiteral("movements")).toArray();
+    auto leaving = entries[m_currentMovement].toObject();
+    leaving.insert(QStringLiteral("state"), movementState(snapshot)); entries[m_currentMovement] = leaving;
+    overlayMovement(snapshot, entries[index].toObject().value(QStringLiteral("state")).toObject());
+    snapshot.insert(QStringLiteral("movements"), entries);
+    snapshot.insert(QStringLiteral("currentMovement"), index);
+    const bool wasDirty = m_dirty;
+    if (!restoreJson(snapshot)) return;
+    clearSelection(); cancelFormationPreview();
+    // Workspace navigation must not create undo entries or dirty a saved show.
+    if (!wasDirty) { m_dirty = false; m_autosaveTimer.stop(); emit dirtyChanged(); }
+    setStatus(QStringLiteral("Editing %1").arg(currentMovementName()));
+}
+
+bool DrillProject::createMovement(const QString &name, bool duplicate)
+{
+    const QString title = name.simplified().left(80);
+    if (title.isEmpty()) { setStatus(QStringLiteral("Enter a movement name")); return false; }
+    const auto before = toJson();
+    auto next = before;
+    auto entries = before.value(QStringLiteral("movements")).toArray();
+    auto leaving = entries[m_currentMovement].toObject();
+    leaving.insert(QStringLiteral("state"), movementState(before)); entries[m_currentMovement] = leaving;
+    if (!duplicate) {
+        DrillSet first;
+        first.number = QStringLiteral("1"); first.activeVariant().name = QStringLiteral("Set 1");
+        first.counts = 0; first.stepMultiplier = 0.0; first.startTick = 0;
+        if (m_currentSet >= 0 && m_currentSet < m_sets.size())
+            first.activeVariant().placements = m_sets[m_currentSet].activeVariant().placements;
+        QJsonObject fresh{{QStringLiteral("sets"), QJsonArray{first.toJson()}},
+                          {QStringLiteral("bpm"), 120.0},
+                          {QStringLiteral("openingBehavior"), QStringLiteral("move")},
+                          {QStringLiteral("openingCounts"), 8}};
+        overlayMovement(next, fresh);
+    }
+    entries.append(QJsonObject{{QStringLiteral("id"), QUuid::createUuid().toString(QUuid::WithoutBraces)},
+                               {QStringLiteral("name"), title}});
+    next.insert(QStringLiteral("movements"), entries);
+    next.insert(QStringLiteral("currentMovement"), entries.size() - 1);
+    if (!restoreJson(next)) return false;
+    clearSelection(); cancelFormationPreview();
+    commitSnapshot(before, duplicate ? QStringLiteral("Duplicate movement") : QStringLiteral("Create movement"));
+    return true;
+}
+
+bool DrillProject::renameMovement(int index, const QString &name)
+{
+    const QString title = name.simplified().left(80);
+    if (index < 0 || index >= m_movements.size() || title.isEmpty()) return false;
+    if (m_movements[index].name == title) return true;
+    const auto before = toJson();
+    m_movements[index].name = title; emit movementsChanged();
+    commitSnapshot(before, QStringLiteral("Rename movement")); return true;
+}
+
+void DrillProject::removeMovement(int index)
+{
+    if (m_movements.size() <= 1 || index < 0 || index >= m_movements.size()) return;
+    const auto before = toJson();
+    if (index == m_currentMovement) activateMovement(index == 0 ? 1 : index - 1);
+    m_movements.removeAt(index);
+    if (m_currentMovement > index) --m_currentMovement;
+    emit movementsChanged(); commitSnapshot(before, QStringLiteral("Delete movement"));
+}
+
+void DrillProject::moveMovement(int from, int to)
+{
+    if (from < 0 || to < 0 || from >= m_movements.size() || to >= m_movements.size() || from == to) return;
+    const auto before = toJson(); const QString active = m_movements[m_currentMovement].id;
+    m_movements.move(from, to);
+    for (int i = 0; i < m_movements.size(); ++i) if (m_movements[i].id == active) m_currentMovement = i;
+    emit movementsChanged(); commitSnapshot(before, QStringLiteral("Reorder movements"));
+}
+
+
+void DrillProject::synchronizeMovementRoster()
+{
+    QSet<QString> ids;
+    for (const auto &person : m_performers) ids.insert(person.id);
+    for (int i = 0; i < m_movements.size(); ++i) {
+        if (i == m_currentMovement) continue;
+        for (const QString &key : {QStringLiteral("sets"), QStringLiteral("archivedSets")}) {
+            QJsonArray updated;
+            for (const auto &value : m_movements[i].state.value(key).toArray()) {
+                auto set = DrillSet::fromJson(value.toObject());
+                auto synchronize = [&](auto &variant) {
+                    for (auto it = variant.placements.begin(); it != variant.placements.end();) {
+                        if (!ids.contains(it.key())) it = variant.placements.erase(it); else ++it;
+                    }
+                    for (int row = 0; row < m_performers.size(); ++row)
+                        if (!variant.placements.contains(m_performers[row].id))
+                            variant.placements.insert(m_performers[row].id, placementAt(row, m_currentSet));
+                    for (auto &group : variant.groups)
+                        group.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
+                    variant.groups.removeIf([](const auto &group) { return group.performerIds.size() < 2; });
+                    for (auto &shape : variant.shapes)
+                        shape.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
+                    variant.shapes.removeIf([](const auto &shape) { return shape.performerIds.size() < 2; });
+                };
+                for (auto &variant : set.variants) synchronize(variant);
+                for (auto &variant : set.archivedVariants) synchronize(variant);
+                updated.append(set.toJson());
+            }
+            m_movements[i].state.insert(key, updated);
+        }
+    }
 }

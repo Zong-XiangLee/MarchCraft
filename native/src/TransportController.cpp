@@ -12,6 +12,7 @@ TransportController::TransportController(DrillProject *project, QObject *parent)
     : QObject(parent), m_project(project), m_synth(new MidiSynthEngine(this)),
       m_player(new QMediaPlayer(this)), m_audioOutput(new QAudioOutput(this))
 {
+    m_playbackSource = project->m_playbackSource;
     m_player->setAudioOutput(m_audioOutput);
     m_timer.setInterval(16);
     connect(&m_timer, &QTimer::timeout, this, &TransportController::updatePosition);
@@ -20,21 +21,25 @@ TransportController::TransportController(DrillProject *project, QObject *parent)
     connect(project, &DrillProject::waveformChanged, this, &TransportController::positionChanged);
     connect(project, &DrillProject::transportSettingsChanged, this, [this] {
         m_synth->setGain(m_project->m_midiMasterVolume);
-        syncSource();
+        if (m_playbackSource != m_project->m_playbackSource) {
+            m_playbackSource = m_project->m_playbackSource;
+            m_baseShowMs = m_showMs; m_clock.restart();
+            syncSource();
+        }
         emit audioStatusChanged();
         emit loopChanged();
     });
     connect(project, &DrillProject::setRangeChanged, this, [this] {
-        if (!m_navigating) navigateToSet(m_project->m_selectedSetEnd, true);
+        if (!m_navigating && !m_project->m_restoringSnapshot) navigateToSet(m_project->m_selectedSetEnd, true);
         emit loopChanged();
     });
     connect(project, &DrillProject::timingChanged, this, [this] {
         m_playEndTick = 0;
-        seekMs(m_showMs);
+        if (!m_project->m_restoringSnapshot) seekPosition(m_showMs, false);
     });
     connect(project, &DrillProject::setsChanged, this, [this] {
         m_playEndTick = 0;
-        if (!playing() && !m_navigating && !m_project->m_sets.isEmpty())
+        if (!playing() && !m_navigating && !m_project->m_restoringSnapshot && !m_project->m_sets.isEmpty())
             editSet(m_project->m_currentSet);
         emit positionChanged();
     });
@@ -44,6 +49,11 @@ TransportController::TransportController(DrillProject *project, QObject *parent)
         m_playEndTick = 0; m_scrubbing = false; m_resumeAfterScrub = false;
         m_sourceRunning = false; m_clock.invalidate();
         emit stateChanged(); emit positionChanged();
+    });
+    connect(project, &DrillProject::projectChanged, this, [this] {
+        if (!m_project->m_restoringSnapshot) return;
+        seekPosition(setPositionMs(m_project->m_currentSet), false);
+        m_project->setPlaybackActive(false); m_project->setPlayhead(1.0);
     });
     refreshMusic();
 }
@@ -242,13 +252,20 @@ void TransportController::checkLoopForSeek(double ms)
     }
 }
 
-void TransportController::seekMs(double milliseconds)
+void TransportController::seekMs(double milliseconds) { seekPosition(milliseconds, true); }
+
+void TransportController::seekPosition(double milliseconds, bool retargetEditing)
 {
     if (!std::isfinite(milliseconds)) return;
     m_playEndTick = 0;
     const double target = qBound(0.0, milliseconds, durationMs());
-    checkLoopForSeek(target);
+    if (retargetEditing) checkLoopForSeek(target);
     m_synth->pause(); m_player->pause();
+    // Only explicit navigation retargets editing; timer frames never do.
+    int page = 0;
+    const qint64 tick = tickAtShowMs(target);
+    while (page + 1 < m_project->m_sets.size() && setTick(page + 1) <= tick) ++page;
+    if (retargetEditing) m_project->setCurrentSetIndex(page);
     applyShowMs(target); m_baseShowMs = m_showMs; m_clock.restart(); syncSource();
 }
 
@@ -324,7 +341,7 @@ void TransportController::updatePosition()
         }
     }
     const double loopA = showMsAtTick(loopStartTick()), loopB = showMsAtTick(loopEndTick());
-    if (m_project->m_loopEnabled && loopB > loopA && position >= loopB) { seekMs(loopA); return; }
+    if (m_project->m_loopEnabled && loopB > loopA && position >= loopB) { seekPosition(loopA, false); return; }
     const double end = m_playEndTick > 0 ? qMin(showMsAtTick(m_playEndTick), durationMs()) : durationMs();
     if (position >= end) {
         applyShowMs(end);

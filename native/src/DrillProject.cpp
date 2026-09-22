@@ -797,6 +797,7 @@ void DrillProject::setAudioOffsetMs(double value)
 
 void DrillProject::newProject()
 {
+    resetMovements();
     if (m_audioDecoder) m_audioDecoder->stop();
     m_transitionPaths.clear();
     m_analyticsValid = false;
@@ -1407,7 +1408,7 @@ void DrillProject::selectInRect(double x1, double y1, double x2, double y2, bool
                         QPointF(qMax(x1, x2), qMax(y1, y2)));
     for (int row = 0; row < m_performers.size(); ++row) {
         if (m_performers[row].visible && !m_performers[row].locked
-            && bounds.contains(placementAt(row, m_currentSet).position))
+            && bounds.contains(m_playbackActive ? interpolatedPosition(row) : placementAt(row, m_currentSet).position))
             m_performers[row].selected = true;
     }
     emitAllDataChanged();
@@ -1425,7 +1426,7 @@ void DrillProject::selectInPolygon(const QVariantList &points, bool additive)
         for (auto &person : m_performers) person.selected = false;
     for (int row = 0; row < m_performers.size(); ++row) {
         if (m_performers[row].visible && !m_performers[row].locked
-            && polygon.containsPoint(placementAt(row, m_currentSet).position, Qt::OddEvenFill))
+            && polygon.containsPoint(m_playbackActive ? interpolatedPosition(row) : placementAt(row, m_currentSet).position, Qt::OddEvenFill))
             m_performers[row].selected = true;
     }
     emitAllDataChanged();
@@ -1609,11 +1610,11 @@ void DrillProject::endMove()
     m_shapePointStarts.clear(); m_shapeAnchorStarts.clear(); m_shapeRotationStarts.clear(); m_shapeSizeStarts.clear(); emit shapesChanged();
 }
 
-QVariantMap DrillProject::selectedBounds() const
+QVariantMap DrillProject::selectedBounds(bool displayed) const
 {
     bool found = false; double left=0,right=0,top=0,bottom=0;
     for (int row=0; row<m_performers.size(); ++row) if (m_performers[row].selected) {
-        const QPointF p=placementAt(row,m_currentSet).position;
+        const QPointF p=displayed && m_playbackActive ? interpolatedPosition(row) : placementAt(row,m_currentSet).position;
         if(!found){left=right=p.x();top=bottom=p.y();found=true;}
         else { left=qMin(left,p.x()); right=qMax(right,p.x()); top=qMin(top,p.y()); bottom=qMax(bottom,p.y()); }
     }
@@ -1845,6 +1846,9 @@ void DrillProject::redo() { m_undo.redo(); }
 
 void DrillProject::commitSnapshot(const QJsonObject &before, const QString &text)
 {
+    QJsonArray roster;
+    for (const auto &person : m_performers) roster.append(person.toJson());
+    if (before.value(QStringLiteral("performers")).toArray() != roster) synchronizeMovementRoster();
     const auto after = toJson();
     if (before == after)
         return;

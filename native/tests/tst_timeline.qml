@@ -21,6 +21,7 @@ TestCase {
         property int musicEnd: 0
         property int movedFrom: -1
         property int movedTo: -1
+        signal movementsChanged()
         signal setsChanged()
         signal timingChanged()
         signal musicChanged()
@@ -134,6 +135,7 @@ TestCase {
         mouseMove(hit, hit.width * 2.5, 20)
         mouseRelease(hit, hit.width * 2.5, 20)
         compare(mockProject.musicStart, 0); compare(mockProject.musicEnd, 2)
+        compare(mockTransport.currentMs, 0)
         const next = findChild(timeline, "measureHit1")
         mouseDoubleClickSequence(next, 30, 20)
         compare(mockTransport.currentMs, 5000)

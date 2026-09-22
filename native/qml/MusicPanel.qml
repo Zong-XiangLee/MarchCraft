@@ -34,7 +34,7 @@ Item {
         MenuItem { text: "Map pages to music…"; enabled: drillProject.musicLoaded; onTriggered: { transport.editSet(drillProject.currentSetIndex); mappingDialog.open() } }
         MenuItem { text: "Generate pages from selection…"; enabled: drillProject.musicLoaded; onTriggered: { transport.editSet(drillProject.currentSetIndex); generationOptions.open() } }
         MenuItem { text: "Group selected measures…"; enabled: drillProject.musicLoaded; onTriggered: groupDialog.open() }
-        MenuItem { text: "Movements and parts…"; enabled: drillProject.musicLoaded; onTriggered: groupsDialog.open() }
+        MenuItem { text: "Music sections and parts…"; enabled: drillProject.musicLoaded; onTriggered: groupsDialog.open() }
         MenuItem { text: "Import details…"; enabled: drillProject.musicLoaded; onTriggered: diagnosticsDialog.open() }
         MenuItem { text: "Audio offset…"; onTriggered: offsetDialog.open() }
     }
@@ -109,7 +109,7 @@ Item {
 
     Dialog {
         id: groupsDialog
-        title: "Show movements and parts"
+        title: "Music sections and parts"
         modal: true; width: 520; height: 430; anchors.centerIn: Overlay.overlay
         standardButtons: Dialog.Close
         contentItem: ListView {

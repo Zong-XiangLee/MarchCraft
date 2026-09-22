@@ -57,6 +57,7 @@ qt_add_qml_module(marchcraft
         qml/ProjectSettingsDialog.qml
         qml/RosterPanel.qml
         qml/InspectorPanel.qml
+        qml/MovementTabs.qml
         qml/TimelineViewport.qml
         qml/SetTimeline.qml
         qml/FieldView.qml

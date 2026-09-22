@@ -59,7 +59,7 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
 
 ## Controls
 
@@ -78,7 +78,7 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 - Wheel-scroll all lanes together; Ctrl+wheel zooms around the pointer. **Fit show** displays the whole sequence. **Follow** scrolls with playback; manual scrolling disables it until re-enabled.
 - Shift-click pages to select a loop range. Seeking within an enabled loop preserves its range; seeking outside disables looping without adding an undo entry. Navigation exits single-transition preview mode.
 - Drag a page's dotted handle while stopped to reorder it with insertion feedback and undo. This does not trim durations; timing edits remain in the existing dialogs.
-- Use **Music tools** to import MIDI/MusicXML, attach rehearsal audio, adjust offsets/synchronization, map pages, manage movements/parts, and open the MIDI track mixer. Drag or Shift-click musical measures to select them; double-click a measure to seek to its start. Page generation retains its preview and explicit **Create sets** step.
+- Use **Music tools** to import MIDI/MusicXML, attach rehearsal audio, adjust offsets/synchronization, map pages, manage colored music sections/parts, and open the MIDI track mixer. Drag or Shift-click musical measures to select them; click a measure to seek to its start. Explicit seeks retarget editing to the most recently reached drill page; rectangular and lasso selection hit-test the displayed positions. Page generation retains its preview and explicit **Create sets** step.
 - MIDI plays through bundled FluidSynth and the GeneralUser GS bank. The waveform uses decoded audio timestamps and the same offset/anchor mapping as playback. The sequence spans the longest of drill, imported music, and rehearsal audio: final formations hold after drill ends and drill continues silently after audio ends.
 
 ## Licensing note
@@ -124,3 +124,11 @@ positions, carriage, mark time, height scaling, and world-space planted ankles.
 Run `marchcraft_tests samplePerformance -o timings.txt,txt` for repeatable sample-show
 load/save, set-switching, edit, formation-preview, and position-evaluation timings.
 These diagnostics are measurements, not hardware-independent performance thresholds.
+
+### Independent movement editors
+
+The movement bar above the field switches between independent drill and music editors in one show. **+ Movement** starts with the current formation, one opening page, and no imported music or audio. **Manage** offers rename, duplicate, reorder, and undoable deletion. Duplicate copies the active movement's pages, variants, groups, music, timing, and audio mapping.
+
+The roster, field, and scene settings belong to the show. Adding/removing performers updates every movement; their placements remain independent. Switching tabs stops playback, clears performer selection and pending formation previews, restores the movement's editing page and measure range, and scrolls the timeline to its zero origin. Switching does not dirty the show or occupy undo history. Undoing an edit in another movement returns to that movement. PDF/CSV exports and music/coordinate mapping operate on the active movement; full coordinate JSON import still replaces the show.
+
+Project schema 11 stores all movements in the existing `.marchcraft` database. Earlier projects open as Movement 1; older app versions reject schema 11 rather than discard the additional movements. MIDI synthesis and audio delivery run on a dedicated thread with precomputed event sample positions, independently of GUI animation. Playback position uses processed audio time, and gain/loop toggles preserve the active audio stream.

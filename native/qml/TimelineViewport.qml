@@ -60,6 +60,12 @@ Item {
         function onMusicChanged() { root.revision++; drawing.requestPaint() }
         function onSetRangeChanged() { root.revision++ }
         function onWaveformChanged() { drawing.requestPaint() }
+        function onMovementsChanged() {
+            root.selectionAnchor = 0
+            root.cancelDrag()
+            root.scrollTo(0, false)
+            drawing.requestPaint()
+        }
     }
     Connections {
         target: root.transport
@@ -281,21 +287,27 @@ Item {
                 MouseArea {
                     objectName: "measureHit" + measure.index
                     anchors.fill: parent; hoverEnabled: true
+                    property real pressX: 0
+                    property bool rangeDrag: false
                     onPressed: function(mouse) {
+                        pressX = mouse.x; rangeDrag = false
                         if (!(mouse.modifiers & Qt.ShiftModifier)) root.selectionAnchor = measure.index
                         root.project.setMusicSelection(root.selectionAnchor, measure.index)
                     }
                     onPositionChanged: function(mouse) {
                         if (!pressed) return
+                        if (Math.abs(mouse.x - pressX) > 4) rangeDrag = true
                         const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
                         const tick = root.transport.tickAtShowMs(root.xTime(p.x))
                         let target = 0
                         while (target + 1 < root.project.musicMeasureCount && root.project.musicMeasureInfo(target).endTick <= tick) target++
                         root.project.setMusicSelection(root.selectionAnchor, target)
                     }
-                    onDoubleClicked: root.transport.seekTick(measure.info.startTick)
+                    onClicked: function(mouse) {
+                        if (!rangeDrag && !(mouse.modifiers & Qt.ShiftModifier)) root.transport.seekTick(measure.info.startTick)
+                    }
                     ToolTip.visible: containsMouse && !pressed
-                    ToolTip.text: "Measure " + measure.info.number + " · " + measure.info.counts + " counts\nDrag to select measures · Double-click to seek"
+                    ToolTip.text: "Measure " + measure.info.number + " · " + measure.info.counts + " counts\nClick to seek · Drag or Shift-click to select measures"
                 }
             }
         }

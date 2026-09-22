@@ -19,6 +19,10 @@ template<typename T> class QFutureWatcher;
 class DrillProject final : public QAbstractListModel
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList movements READ movements NOTIFY movementsChanged)
+    Q_PROPERTY(int currentMovementIndex READ currentMovementIndex NOTIFY movementsChanged)
+    Q_PROPERTY(int movementCount READ movementCount NOTIFY movementsChanged)
+    Q_PROPERTY(QString currentMovementName READ currentMovementName NOTIFY movementsChanged)
     Q_PROPERTY(QString showName READ showName WRITE setShowName NOTIFY projectChanged)
     Q_PROPERTY(int performerCount READ performerCount NOTIFY performerCountChanged)
     Q_PROPERTY(QString fieldPreset READ fieldPreset WRITE setFieldPreset NOTIFY projectChanged)
@@ -129,6 +133,15 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(bool canRedo READ canRedo NOTIFY historyChanged)
 
 public:
+    QVariantList movements() const;
+    int currentMovementIndex() const { return m_currentMovement; }
+    int movementCount() const { return m_movements.size(); }
+    QString currentMovementName() const;
+    Q_INVOKABLE void activateMovement(int index);
+    Q_INVOKABLE bool createMovement(const QString &name, bool duplicate = false);
+    Q_INVOKABLE bool renameMovement(int index, const QString &name);
+    Q_INVOKABLE void removeMovement(int index);
+    Q_INVOKABLE void moveMovement(int from, int to);
     Q_INVOKABLE void savePerformerDetails(int row, const QString &label, const QString &name,
                                          const QString &instrument, const QString &section,
                                          const QString &notes, const QString &equipmentId);
@@ -422,7 +435,7 @@ public:
     Q_INVOKABLE void beginMove(int row, bool additive);
     Q_INVOKABLE void previewMove(double dx, double dy, bool lockX = false, bool lockY = false);
     Q_INVOKABLE void endMove();
-    Q_INVOKABLE QVariantMap selectedBounds() const;
+    Q_INVOKABLE QVariantMap selectedBounds(bool displayed = false) const;
     Q_INVOKABLE int selectedShapeIndex() const;
     Q_INVOKABLE void beginScale();
     Q_INVOKABLE void previewScale(double factor);
@@ -481,6 +494,7 @@ public:
     Q_INVOKABLE void redo();
 
 signals:
+    void movementsChanged();
     void projectChanged();
     void currentSetChanged();
     void setsChanged();
@@ -585,6 +599,17 @@ private:
     int m_selectedSetEnd = 0;
     bool m_dirty = false;
     QVector<MarchCraft::Performer> m_performers;
+    struct Movement {
+        QString id;
+        QString name;
+        QJsonObject state;
+    };
+    QVector<Movement> m_movements;
+    int m_currentMovement = 0;
+    void resetMovements();
+    void synchronizeMovementRoster();
+    static QJsonObject movementState(const QJsonObject &project);
+    static void overlayMovement(QJsonObject &project, const QJsonObject &state);
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;
     mutable QVector<MarchCraft::AnimationState> m_animationStateCache;
@@ -642,6 +667,7 @@ private:
     bool m_formationPreviewBusy = false;
     quint64 m_formationPreviewGeneration = 0;
     bool m_backgroundWorkerClone = false;
+    bool m_restoringSnapshot = false;
     MarchCraft::CapabilityProfile m_capability;
     QVariantList m_clinicIssues;
     QSet<QString> m_dismissedClinicIssues;

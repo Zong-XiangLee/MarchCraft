@@ -357,6 +357,14 @@ ApplicationWindow {
         workspaceStateContext: workspaceState
     }
 
+    MovementTabs {
+        id: movementTabs
+        project: drillProject
+        anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
+        anchors.margins: 6; height: 32
+        visible: workspaceState.workspaceActive
+    }
+
     SplitView {
         id: horizontalSplit
         enabled: workspaceState.workspaceActive
@@ -369,6 +377,7 @@ ApplicationWindow {
         Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
         anchors.fill: parent
         anchors.margins: 6
+        anchors.topMargin: 44
         orientation: Qt.Horizontal
         Component.onCompleted: if (workspaceSettings.horizontalSplitState) restoreState(workspaceSettings.horizontalSplitState)
         onResizingChanged: if (!resizing) workspaceSettings.horizontalSplitState = saveState()

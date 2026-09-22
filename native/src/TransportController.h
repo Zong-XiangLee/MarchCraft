@@ -72,6 +72,7 @@ private:
     void startAt(qint64 tick);
     void resume();
     void applyShowMs(double milliseconds);
+    void seekPosition(double milliseconds, bool retargetEditing);
     void checkLoopForSeek(double milliseconds);
     void updatePosition();
     void applyTick(qint64 tick);
@@ -95,6 +96,7 @@ private:
     bool m_resumeAfterScrub = false;
     bool m_navigating = false;
     bool m_sourceRunning = false;
+    QString m_playbackSource;
     QString m_loadedMusicHash;
     QString m_loadedAudioMapping;
 };
