@@ -516,7 +516,7 @@ Item {
         }
         onDoubleClicked: root.setCameraPreset("press")
         onWheel: function(event) {
-            const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y * 3 : event.angleDelta.y
+            const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y * 2.5 : event.angleDelta.y
             root.cameraDistance = CameraMotion.zoom(root.cameraDistance, delta)
             root.activeCameraPreset = "custom"
             event.accepted = true

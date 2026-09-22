@@ -3,11 +3,11 @@
 function clamp(value, low, high) { return Math.max(low, Math.min(high, value)) }
 
 function zoom(distance, delta) {
-    return clamp(distance * Math.exp(-delta * 0.0012), 2, 240)
+    return clamp(distance * Math.exp(-delta * 0.0010), 2, 240)
 }
 
 function orbit(pitch, yaw, dx, dy) {
-    return { pitch: clamp(pitch - dy * 0.22, -89.5, -3), yaw: yaw - dx * 0.22 }
+    return { pitch: clamp(pitch - dy * 0.18, -89.5, -3), yaw: yaw - dx * 0.18 }
 }
 
 // Pan on the ground plane in camera-relative axes; scale with distance/FOV.
