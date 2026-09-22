@@ -61,6 +61,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(bool markerFacingVisible READ markerFacingVisible WRITE setMarkerFacingVisible NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString markerFacingColor READ markerFacingColor WRITE setMarkerFacingColor NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString markerWarningColor READ markerWarningColor WRITE setMarkerWarningColor NOTIFY editorSettingsChanged)
+    Q_PROPERTY(QString fieldStyle READ fieldStyle WRITE setFieldStyle NOTIFY editorSettingsChanged)
     Q_PROPERTY(bool showFieldGrid READ showFieldGrid WRITE setShowFieldGrid NOTIFY editorSettingsChanged)
     Q_PROPERTY(double fieldGridInterval READ fieldGridInterval WRITE setFieldGridInterval NOTIFY editorSettingsChanged)
     Q_PROPERTY(QString fieldGridColor READ fieldGridColor WRITE setFieldGridColor NOTIFY editorSettingsChanged)
@@ -237,6 +238,7 @@ public:
     bool markerFacingVisible() const { return m_markerFacingVisible; } void setMarkerFacingVisible(bool value);
     QString markerFacingColor() const { return m_markerFacingColor; } void setMarkerFacingColor(const QString &value);
     QString markerWarningColor() const { return m_markerWarningColor; } void setMarkerWarningColor(const QString &value);
+    QString fieldStyle() const { return m_fieldStyle; } void setFieldStyle(const QString &value);
     bool showFieldGrid() const { return m_showFieldGrid; } void setShowFieldGrid(bool value);
     double fieldGridInterval() const { return m_fieldGridInterval; } void setFieldGridInterval(double value);
     QString fieldGridColor() const { return m_fieldGridColor; } void setFieldGridColor(const QString &value);
@@ -655,6 +657,7 @@ private:
     bool m_markerFacingVisible = true;
     QString m_markerFacingColor{QStringLiteral("#f8fafc")};
     QString m_markerWarningColor{QStringLiteral("#fb7185")};
+    QString m_fieldStyle = QStringLiteral("realistic");
     bool m_showFieldGrid = false;
     double m_fieldGridInterval = 1.0;
     QString m_fieldGridColor{QStringLiteral("#7dd3fc")};

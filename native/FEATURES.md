@@ -68,6 +68,14 @@ Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all s
 - Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
 - The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
 
+### Field presentation
+
+The field-style selector beside 2D/3D switches both views between Realistic field and Editor (8 to 5). This saved editor preference does not modify drill data or undo history. Editor mode uses a neutral graph with one square per 22.5-inch marching step: eight intervals (seven interior lines between boundary lines) per five yards, in both directions. Major horizontal grid lines are anchored at the front sideline. Grid overlays and snapping preferences remain independent; the editor graph always stays at one step.
+
+Realistic mode uses project turf and venue colors, ten-yard end zones, regulation markings, and alternating mowing bands outdoors. High school and bowl venues include tiered seating, a press box, scoreboard and floodlight models in 3D, with seating bands in the 2D plan. Choose the stadium from the 3D venue selector; rehearsal and indoor venues remain available. Editor mode hides venue scenery. These are procedural prototype stadium models.
+
+Screenshot QA accepts `--field-style realistic` or `--field-style editor` in either 2D or 3D.
+
 ### Movement editors and playback reliability
 
 - Independent movement tabs hold their own pages/variants, MIDI or MusicXML, rehearsal audio, tempo/meter map, loop range, and opening behavior; the show shares its roster and field.

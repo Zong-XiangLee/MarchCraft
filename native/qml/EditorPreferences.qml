@@ -74,11 +74,19 @@ Dialog {
             }
             GridLayout {
                 columns: 2
+                Label { text: "Field style (2D + 3D)" }
+                ComboBox {
+                    Layout.fillWidth: true
+                    model: ["Realistic field", "Editor · 8 to 5"]
+                    currentIndex: drillProjectContext.fieldStyle === "editor" ? 1 : 0
+                    onActivated: drillProjectContext.fieldStyle = currentIndex === 1 ? "editor" : "realistic"
+                }
+                Label { Layout.columnSpan: 2; text: "Editor grid: 1 square = 1 step · 8 steps = 5 yards"; color: "#a5afbc" }
                 Label { text: "Field preset" }
                 ComboBox { Layout.fillWidth: true; model: ["hs","college","nfl","indoor"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProjectContext.fieldPreset)); onActivated: drillProjectContext.fieldPreset=currentText }
-                CheckBox { text: "Show field grid"; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid=checked }
+                CheckBox { text: "Overlay grid (realistic)"; enabled: drillProjectContext.fieldStyle !== "editor"; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid=checked }
                 Item {}
-                Label { text: "Grid interval" }
+                Label { text: "Overlay interval" }
                 ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProjectContext.fieldGridInterval.toString())); onActivated: drillProjectContext.fieldGridInterval=Number(currentText) }
                 Label { text: "Grid color" }
                 TextField { Layout.fillWidth: true; text: drillProjectContext.fieldGridColor; onEditingFinished: drillProjectContext.fieldGridColor=text }

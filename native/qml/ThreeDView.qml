@@ -7,6 +7,7 @@ Item {
     id: root
     objectName: "performerView"
     readonly property int insertColumnCount: drillProject.fieldInsertCount
+    readonly property bool editorField: drillProject.fieldStyle === "editor"
     property real cameraZoom: 1.0
     property string carriagePose: "horn.up"
     property bool markTimeDuringHolds: false
@@ -53,7 +54,7 @@ Item {
         anchors.margins: 2
         environment: SceneEnvironment {
             backgroundMode: SceneEnvironment.Color
-            clearColor: drillProject.lightingPreset === "lighting.sunset" ? "#b16d57"
+            clearColor: root.editorField ? "#18212d" : drillProject.lightingPreset === "lighting.sunset" ? "#b16d57"
                         : drillProject.lightingPreset === "lighting.night" ? "#06101d"
                         : drillProject.lightingPreset === "lighting.overcast" ? "#91a0aa"
                         : drillProject.lightingPreset === "lighting.indoor" ? "#3d4650" : "#75a9d1"
@@ -98,6 +99,7 @@ Item {
         DirectionalLight { eulerRotation.x: 35; eulerRotation.y: 145; brightness: drillProject.lightingPreset === "lighting.night" ? 0.25 : 0.45 }
 
         Venue3D {
+            visible: !root.editorField
             venueId: drillProject.venuePreset
             primaryColor: drillProject.venuePrimaryColor
             secondaryColor: drillProject.venueSecondaryColor
@@ -120,7 +122,7 @@ Item {
             // placement caused depth fighting to flash black through the field.
             position: Qt.vector3d(0, -0.62, 0)
             scale: Qt.vector3d(2.08, 0.010, (drillProject.fieldDepthSteps + 16) / 100)
-            materials: PrincipledMaterial { baseColor: "#17201c"; roughness: 1.0 }
+            materials: PrincipledMaterial { baseColor: root.editorField ? "#18212d" : "#17201c"; roughness: 1.0 }
         }
 
         Model {
@@ -128,7 +130,8 @@ Item {
             position: Qt.vector3d(0, -0.50, 0)
             scale: Qt.vector3d(1.6, 0.010, drillProject.fieldDepthSteps / 100)
             materials: PrincipledMaterial {
-                baseColor: drillProject.fieldPreset === "indoor" ? "#a97543" : drillProject.turfColor
+                lighting: root.editorField ? PrincipledMaterial.NoLighting : PrincipledMaterial.FragmentLighting
+                baseColor: root.editorField ? "#18212d" : drillProject.fieldPreset === "indoor" ? "#a97543" : drillProject.turfColor
                 roughness: drillProject.fieldPreset === "indoor" ? 0.68 : 0.96
             }
         }
@@ -142,7 +145,8 @@ Item {
                 position: Qt.vector3d(index === 0 ? -88 : 88, -0.49, 0)
                 scale: Qt.vector3d(0.16, 0.010, drillProject.fieldDepthSteps / 100)
                 materials: PrincipledMaterial {
-                    baseColor: drillProject.fieldPreset === "indoor" ? "#8a5d38" : "#103522"
+                    lighting: root.editorField ? PrincipledMaterial.NoLighting : PrincipledMaterial.FragmentLighting
+                    baseColor: root.editorField ? "#18212d" : drillProject.venuePrimaryColor
                     roughness: 0.96
                 }
             }
@@ -153,7 +157,7 @@ Item {
             delegate: Model {
                 required property int index
                 source: "#Cube"
-                position: Qt.vector3d(index === 0 ? -96 : 96, 0.012, 0)
+                position: Qt.vector3d(index === 0 ? -96 : 96, 0.06, 0)
                 scale: Qt.vector3d(0.0018, 0.0003, drillProject.fieldDepthSteps / 100)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
@@ -163,7 +167,7 @@ Item {
             delegate: Model {
                 required property int index
                 source: "#Cube"
-                position: Qt.vector3d(index < 2 ? -88 : 88, 0.012,
+                position: Qt.vector3d(index < 2 ? -88 : 88, 0.06,
                                       index % 2 === 0 ? drillProject.fieldDepthSteps / 2
                                                       : -drillProject.fieldDepthSteps / 2)
                 scale: Qt.vector3d(0.16, 0.0003, 0.0018)
@@ -172,31 +176,32 @@ Item {
         }
 
         Repeater3D {
-            model: 20
+            model: root.editorField || drillProject.fieldPreset === "indoor" ? 0 : 20
             delegate: Model {
                 required property int index
                 source: "#Cube"
                 position: Qt.vector3d(-76 + index * 8, 0.005, 0)
                 scale: Qt.vector3d(0.08, 0.0001, drillProject.fieldDepthSteps / 100)
                 materials: PrincipledMaterial {
-                    baseColor: index % 2 === 0 ? "#215b3e" : "#194e35"
+                    baseColor: index % 2 === 0 ? Qt.lighter(drillProject.turfColor, 1.08) : drillProject.turfColor
                     roughness: 0.98
                 }
             }
         }
 
         // All grid and five-yard lines share one high-resolution transparent plane.
-        // A single coplanar texture avoids the aliasing and depth fights of thin cubes.
+        // Keep markings above turf and end-zone tops to avoid depth fighting at oblique angles.
         Model {
             source: "#Rectangle"
-            position: Qt.vector3d(0, 0.012, 0)
+            position: Qt.vector3d(0, 0.06, 0)
             eulerRotation.x: -90
-            scale: Qt.vector3d(1.6, drillProject.fieldDepthSteps / 100, 1)
+            scale: Qt.vector3d(root.editorField ? 1.92 : 1.6, drillProject.fieldDepthSteps / 100, 1)
             materials: PrincipledMaterial {
                 alphaMode: PrincipledMaterial.Blend
                 lighting: PrincipledMaterial.NoLighting
                 baseColorMap: Texture {
                     generateMipmaps: true
+                    mipFilter: Texture.Linear
                     minFilter: Texture.Linear
                     magFilter: Texture.Linear
                     sourceItem: Canvas {
@@ -208,27 +213,30 @@ Item {
                             const ctx = getContext("2d")
                             ctx.reset()
                             ctx.clearRect(0, 0, width, height)
+                            const minX = root.editorField ? -16 : 0
+                            const spanX = root.editorField ? 192 : 160
 
-                            if (drillProject.showFieldGrid) {
-                                const interval = Math.max(0.5, drillProject.fieldGridInterval)
-                                ctx.strokeStyle = drillProject.fieldGridColor
-                                ctx.globalAlpha = Math.min(0.36, drillProject.fieldGridOpacity)
-                                ctx.lineWidth = 1
-                                for (let x = 0; x <= 160.001; x += interval) {
-                                    const px = x / 160 * width
+                            if (root.editorField || drillProject.showFieldGrid) {
+                                const interval = root.editorField ? 1 : drillProject.fieldGridInterval
+                                ctx.strokeStyle = root.editorField ? "#8198b5" : drillProject.fieldGridColor
+                                ctx.globalAlpha = root.editorField ? 0.6 : Math.min(0.36, drillProject.fieldGridOpacity)
+                                ctx.lineWidth = root.editorField ? 2 : 1
+                                for (let x = minX; x <= minX + spanX + 0.001; x += interval) {
+                                    const px = (x - minX) / spanX * width
                                     ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                                 }
                                 for (let y = 0; y <= drillProject.fieldDepthSteps + 0.001; y += interval) {
-                                    const py = y / drillProject.fieldDepthSteps * height
+                                    ctx.lineWidth = root.editorField ? (y % 8 === 0 ? 3 : 2) : 1
+                                    const py = height - y / drillProject.fieldDepthSteps * height
                                     ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke()
                                 }
                             }
 
                             ctx.strokeStyle = "#edf4ef"
                             ctx.globalAlpha = 0.96
-                            ctx.lineWidth = 3
+                            ctx.lineWidth = 5
                             for (let step = 0; step <= 160; step += 8) {
-                                const px = step / 160 * width
+                                const px = (step - minX) / spanX * width
                                 ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                             }
 
@@ -242,7 +250,7 @@ Item {
                             ctx.beginPath(); ctx.moveTo(0, height - 2.5); ctx.lineTo(width, height - 2.5); ctx.stroke()
 
                             const markLength = (24.0 / 22.5) / drillProject.fieldDepthSteps * height
-                            for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
+                            for (let column = 0; !root.editorField && column < drillProject.fieldInsertCount; ++column) {
                                 const px = drillProject.fieldInsertStep(column) / 160 * width
                                 ctx.lineWidth = 4
                                 ctx.beginPath(); ctx.moveTo(px, 3); ctx.lineTo(px, 3 + markLength); ctx.stroke()
@@ -269,7 +277,7 @@ Item {
                 required property int index
                 readonly property int yardNumber: index < 5 ? (index + 1) * 10 : (9 - index) * 10
                 source: "#Rectangle"
-                 position: Qt.vector3d(index * 16 - 64, 0.015, drillProject.fieldDepthSteps / 2 - 12.8)
+                 position: Qt.vector3d(index * 16 - 64, 0.08, drillProject.fieldDepthSteps / 2 - 12.8)
                 eulerRotation.x: -90
                 scale: Qt.vector3d(0.050, 0.032, 1)
                 materials: PrincipledMaterial {
@@ -292,7 +300,7 @@ Item {
                 required property int index
                 readonly property int yardNumber: index < 5 ? (index + 1) * 10 : (9 - index) * 10
                 source: "#Rectangle"
-                 position: Qt.vector3d(index * 16 - 64, 0.015, -drillProject.fieldDepthSteps / 2 + 12.8)
+                 position: Qt.vector3d(index * 16 - 64, 0.08, -drillProject.fieldDepthSteps / 2 + 12.8)
                 eulerRotation.x: -90
                 scale: Qt.vector3d(0.050, 0.032, 1)
                 materials: PrincipledMaterial {
@@ -316,7 +324,7 @@ Item {
             delegate: Model {
                 required property int index
                 source: "#Cube"
-                 position: Qt.vector3d(0, 0.012, index === 0
+                 position: Qt.vector3d(0, 0.06, index === 0
                                       ? drillProject.fieldDepthSteps / 2
                                       : -drillProject.fieldDepthSteps / 2)
                 scale: Qt.vector3d(1.6, 0.0003, 0.0018)
@@ -327,7 +335,7 @@ Item {
         // Four short one-yard inserts in every five-yard interval on each hash row.
         // They extend outward, matching the original field geometry.
         Repeater3D {
-            model: root.insertColumnCount * 2
+            model: root.editorField ? 0 : root.insertColumnCount * 2
             delegate: Model {
                 required property int index
                 readonly property int column: index % root.insertColumnCount
@@ -337,7 +345,7 @@ Item {
                                                    - (backHash ? drillProject.backHashSteps
                                                                : drillProject.frontHashSteps)
                 source: "#Cube"
-                 position: Qt.vector3d(root.insertStep(column) - 80, 0.012,
+                 position: Qt.vector3d(root.insertStep(column) - 80, 0.06,
                                       hashZ + (backHash ? -markLength / 2 : markLength / 2))
                 scale: Qt.vector3d(0.0018, 0.0003, markLength / 100)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
@@ -354,7 +362,7 @@ Item {
                 readonly property bool backHash: index >= yardLineCount
                 readonly property real markLength: 24.0 / 22.5
                 source: "#Cube"
-                 position: Qt.vector3d(yardLine * 8 - 80, 0.012,
+                 position: Qt.vector3d(yardLine * 8 - 80, 0.06,
                                       drillProject.fieldDepthSteps / 2
                                       - (backHash ? drillProject.backHashSteps
                                                   : drillProject.frontHashSteps))

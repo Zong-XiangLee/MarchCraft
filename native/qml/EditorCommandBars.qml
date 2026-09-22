@@ -57,6 +57,15 @@ ToolBar {
                 Item { Layout.fillWidth: true }
                 AppButton { text: "Add performer"; onClicked: { performerDialogContext.editing = false; performerDialogContext.open() } }
                 AppButton { text: "Batch add"; onClicked: batchDialogContext.open() }
+                ComboBox {
+                    objectName: "fieldStyleSelector"
+                    Layout.preferredWidth: 150
+                    model: ["Realistic field", "Editor · 8 to 5"]
+                    currentIndex: drillProjectContext.fieldStyle === "editor" ? 1 : 0
+                    onActivated: drillProjectContext.fieldStyle = currentIndex === 1 ? "editor" : "realistic"
+                    ToolTip.visible: hovered
+                    ToolTip.text: "Field style for both 2D and 3D. Editor: one square = one 22.5-inch step; eight steps = five yards."
+                }
                 AppToolButton { text: "2D"; checkable: true; checked: !windowContext.threeD; onClicked: windowContext.threeD = false }
                 AppToolButton { text: "3D"; checkable: true; checked: windowContext.threeD; onClicked: windowContext.threeD = true }
                 AppToolButton {
@@ -83,7 +92,7 @@ ToolBar {
                 Item { Layout.fillWidth: true }
                 AppToolButton { text: "Paths"; checkable: true; checked: drillProjectContext.showTransitionPaths; onToggled: drillProjectContext.showTransitionPaths = checked }
                 AppToolButton { text: "Guides"; checkable: true; checked: drillProjectContext.showShapeGuides; onToggled: drillProjectContext.showShapeGuides = checked }
-                AppToolButton { text: "Grid"; checkable: true; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid = checked }
+                AppToolButton { text: "Grid"; enabled: drillProjectContext.fieldStyle !== "editor"; checkable: true; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid = checked }
             }
         }
 

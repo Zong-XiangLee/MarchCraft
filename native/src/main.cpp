@@ -72,7 +72,7 @@ int main(int argc, char *argv[])
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
-        QStringLiteral("--venue"), QStringLiteral("--lighting"),
+        QStringLiteral("--field-style"), QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"),
         QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
     };
@@ -85,6 +85,9 @@ int main(int argc, char *argv[])
         project.loadDemo();
     if (qaShapes)
         project.selectAll();
+    const int fieldStyleFlag = arguments.indexOf(QStringLiteral("--field-style"));
+    if (fieldStyleFlag >= 0 && fieldStyleFlag + 1 < arguments.size())
+        project.setFieldStyle(arguments.at(fieldStyleFlag + 1));
     const int venueFlag = arguments.indexOf(QStringLiteral("--venue"));
     if (venueFlag >= 0 && venueFlag + 1 < arguments.size())
         project.setVenuePreset(arguments.at(venueFlag + 1));
