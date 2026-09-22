@@ -3,6 +3,7 @@ import QtQuick.Controls
 
 Item {
     id: root
+    readonly property bool editorField: drillProject.fieldStyle === "editor"
     property real zoom: 1.0
     property bool showPaths: true
     property bool showShapeGuides: false
@@ -147,7 +148,7 @@ Item {
                 onPaint: {
                     const ctx = getContext("2d")
                     ctx.reset()
-                    ctx.fillStyle = "#17201c"
+                    ctx.fillStyle = root.editorField ? "#18212d" : "#303c36"
                     ctx.fillRect(0, 0, width, height)
                     ctx.translate((0 - drillProject.canvasMinX) * field.sx,
                                   (drillProject.canvasMaxY - drillProject.fieldDepthSteps) * field.sy)
@@ -155,27 +156,35 @@ Item {
                     const h = drillProject.fieldDepthSteps * field.sy
                     const endZoneSteps = 16
                     const turf = ctx.createLinearGradient(0, 0, 0, h)
-                    turf.addColorStop(0, "#123b2a")
-                    turf.addColorStop(0.5, "#1b5037")
-                    turf.addColorStop(1, "#123b2a")
-                    ctx.fillStyle = turf
+                    turf.addColorStop(0, Qt.darker(drillProject.turfColor, 1.15))
+                    turf.addColorStop(0.5, drillProject.turfColor)
+                    turf.addColorStop(1, Qt.darker(drillProject.turfColor, 1.15))
+                    ctx.fillStyle = root.editorField ? "#18212d" : drillProject.fieldPreset === "indoor" ? "#a97543" : turf
                     ctx.fillRect(0, 0, w, h)
 
                     // Regulation ten-yard end zones sit outside the two goal lines.
-                    ctx.fillStyle = drillProject.fieldPreset === "indoor" ? "#8a5d38" : "#103522"
+                    ctx.fillStyle = root.editorField ? "#18212d" : drillProject.venuePrimaryColor
                     ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
                     ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
-                    ctx.globalAlpha = 0.34
+                    ctx.globalAlpha = root.editorField ? 0 : 0.18
                     ctx.fillStyle = "#79a98a"
                     ctx.fillRect(-endZoneSteps * field.sx, 0, endZoneSteps * field.sx, h)
                     ctx.fillRect(w, 0, endZoneSteps * field.sx, h)
 
                     // Subtle five-yard mowing bands add depth without changing the field geometry.
-                    ctx.globalAlpha = 0.13
+                    ctx.globalAlpha = root.editorField || drillProject.fieldPreset === "indoor" ? 0 : 0.13
                     for (let panel = 0; panel < drillProject.fieldWidthSteps; panel += 8) {
                         if ((panel / 8) % 2 === 0) {
                             ctx.fillStyle = "#5b8d6e"
                             ctx.fillRect(panel * field.sx, 0, 8 * field.sx, h)
+                        }
+                    }
+
+                    if (!root.editorField && (drillProject.venuePreset === "venue.high_school" || drillProject.venuePreset === "venue.bowl")) {
+                        ctx.globalAlpha = 1
+                        for (let row = 0; row < 4; ++row) {
+                            ctx.fillStyle = row % 2 ? drillProject.venueSecondaryColor : drillProject.venuePrimaryColor
+                            ctx.fillRect(0, -(2 + row * 1.4) * field.sy, w, field.sy)
                         }
                     }
 
@@ -200,7 +209,7 @@ Item {
                     const markLengthSteps = 24.0 / 22.5
                     const insertLength = markLengthSteps * field.sy
                     const hashLength = markLengthSteps * field.sx
-                    for (let column = 0; column < drillProject.fieldInsertCount; ++column) {
+                    for (let column = 0; !root.editorField && column < drillProject.fieldInsertCount; ++column) {
                         const x = drillProject.fieldInsertStep(column) * field.sx
                         ctx.lineWidth = Math.max(1, 0.18 * field.sy)
                         const frontHashY = (drillProject.fieldDepthSteps - hashRows[0]) * field.sy
@@ -259,24 +268,29 @@ Item {
                 Connections {
                     target: drillProject
                     function onProjectChanged() { fieldCanvas.requestPaint() }
+                    function onSceneChanged() { fieldCanvas.requestPaint() }
+                    function onEditorSettingsChanged() { fieldCanvas.requestPaint() }
                 }
             }
 
             Canvas {
                 id: gridCanvas
-                anchors.fill: parent; z: 0.5; visible: drillProject.showFieldGrid || root.shapeDrawMode.length > 0
+                objectName: "fieldStepGrid"
+                readonly property real stepInterval: root.editorField ? 1 : drillProject.fieldGridInterval
+                anchors.fill: parent; z: 0.5; visible: root.editorField || drillProject.showFieldGrid || root.shapeDrawMode.length > 0
                 antialiasing: false
                 onPaint: {
                     const ctx = getContext("2d"); ctx.reset()
-                    if (!drillProject.showFieldGrid && root.shapeDrawMode.length === 0) return
-                    ctx.strokeStyle = drillProject.fieldGridColor
-                    ctx.globalAlpha = drillProject.showFieldGrid ? drillProject.fieldGridOpacity : 0.24
+                    if (!root.editorField && !drillProject.showFieldGrid && root.shapeDrawMode.length === 0) return
+                    ctx.strokeStyle = root.editorField ? "#8198b5" : drillProject.fieldGridColor
+                    ctx.globalAlpha = root.editorField ? 0.38 : drillProject.showFieldGrid ? drillProject.fieldGridOpacity : 0.24
                     ctx.lineWidth = 1
-                    const step = drillProject.fieldGridInterval
+                    const step = stepInterval
                     for (let x = Math.ceil(drillProject.canvasMinX / step) * step; x <= drillProject.canvasMaxX; x += step) {
                         const px = root.toCanvasX(x); ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                     }
                     for (let y = Math.ceil(drillProject.canvasMinY / step) * step; y <= drillProject.canvasMaxY; y += step) {
+                        ctx.lineWidth = root.editorField && y % 8 === 0 ? 1.8 : 1
                         const py = root.toCanvasY(y); ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke()
                     }
                 }

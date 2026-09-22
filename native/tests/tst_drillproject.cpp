@@ -483,6 +483,65 @@ private slots:
         QCOMPARE(settingsChanged.size(), modes.size());
     }
 
+    void fieldStylePreference()
+    {
+        QTemporaryDir temporary;
+        const QString organization = QCoreApplication::organizationName();
+        const QString application = QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftFieldStyleTest"));
+        QCoreApplication::setApplicationName(QFileInfo(temporary.path()).fileName());
+        const auto restoreSettings = qScopeGuard([&] {
+            QSettings().clear();
+            QCoreApplication::setOrganizationName(organization);
+            QCoreApplication::setApplicationName(application);
+        });
+        DrillProject project;
+        project.newProject();
+        QCOMPARE(project.fieldStyle(), QStringLiteral("realistic"));
+        const bool dirty = project.dirty();
+        const bool undo = project.canUndo();
+        const double width = project.fieldWidthSteps();
+        QSignalSpy changed(&project, &DrillProject::editorSettingsChanged);
+        project.setFieldStyle(QStringLiteral("editor"));
+        QCOMPARE(changed.size(), 1);
+        QCOMPARE(project.fieldStyle(), QStringLiteral("editor"));
+        QCOMPARE(project.dirty(), dirty);
+        QCOMPARE(project.canUndo(), undo);
+        QCOMPARE(project.fieldWidthSteps(), width);
+        project.setFieldStyle(QStringLiteral("editor"));
+        project.setFieldStyle(QStringLiteral("invalid"));
+        QCOMPARE(changed.size(), 1);
+        DrillProject reopened;
+        QCOMPARE(reopened.fieldStyle(), QStringLiteral("editor"));
+        reopened.newProject();
+        QCOMPARE(reopened.fieldStyle(), QStringLiteral("editor"));
+        project.setFieldStyle(QStringLiteral("realistic"));
+        QCOMPARE(changed.size(), 2);
+        // A hidden optional overlay must not suppress or coarsen the editor graph.
+        project.setShowFieldGrid(false);
+        project.setFieldGridInterval(4);
+        WorkspaceController workspace;
+        QQuickView view;
+        view.rootContext()->setContextProperty(QStringLiteral("workspaceController"), &workspace);
+        view.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
+        view.setSource(QUrl::fromLocalFile(QFINDTESTDATA("../qml/FieldView.qml")));
+        QCOMPARE(view.status(), QQuickView::Ready);
+        auto *grid = view.rootObject()->findChild<QQuickItem *>(QStringLiteral("fieldStepGrid"));
+        QVERIFY(grid);
+        QVERIFY(!grid->isVisible());
+        QCOMPARE(grid->property("stepInterval").toDouble(), 4.0);
+        project.setFieldStyle(QStringLiteral("editor"));
+        QVERIFY(grid->isVisible());
+        QCOMPARE(grid->property("stepInterval").toDouble(), 1.0);
+        QCOMPARE(8 * grid->property("stepInterval").toDouble() * MarchCraft::FieldTransform::MetersPerStep, 5 * 0.9144);
+        project.setFieldStyle(QStringLiteral("realistic"));
+        QVERIFY(!grid->isVisible());
+        QCOMPARE(grid->property("stepInterval").toDouble(), 4.0);
+        QSettings().setValue(QStringLiteral("view/fieldStyle"), QStringLiteral("invalid"));
+        DrillProject invalid;
+        QCOMPARE(invalid.fieldStyle(), QStringLiteral("realistic"));
+    }
+
     void shapeDrawerMouseGestures_data()
     {
         QTest::addColumn<QString>("kind");

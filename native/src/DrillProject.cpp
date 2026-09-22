@@ -104,6 +104,8 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     m_markerFacingVisible = settings.value(QStringLiteral("view/markerFacingVisible"), true).toBool();
     m_markerFacingColor = settings.value(QStringLiteral("view/markerFacingColor"), QStringLiteral("#f8fafc")).toString();
     m_markerWarningColor = settings.value(QStringLiteral("view/markerWarningColor"), QStringLiteral("#fb7185")).toString();
+    m_fieldStyle = settings.value(QStringLiteral("view/fieldStyle"), QStringLiteral("realistic")).toString();
+    if (m_fieldStyle != QStringLiteral("editor")) m_fieldStyle = QStringLiteral("realistic");
     m_showFieldGrid = settings.value(QStringLiteral("view/showFieldGrid"), false).toBool();
     m_fieldGridInterval = settings.value(QStringLiteral("view/fieldGridInterval"), 1.0).toDouble();
     m_fieldGridColor = settings.value(QStringLiteral("view/fieldGridColor"), QStringLiteral("#7dd3fc")).toString();
@@ -240,6 +242,15 @@ void DrillProject::setMarkerGeometry(const QString &value)
 void DrillProject::setMarkerOutlineWidth(int value) { value = qBound(0, value, 5); if (value == m_markerOutlineWidth) return; m_markerOutlineWidth = value; QSettings().setValue(QStringLiteral("view/markerOutlineWidth"), value); emit editorSettingsChanged(); }
 void DrillProject::setMarkerLabelFontSize(int value) { value = qBound(7, value, 32); if (value == m_markerLabelFontSize) return; m_markerLabelFontSize = value; QSettings().setValue(QStringLiteral("view/markerLabelFontSize"), value); emit editorSettingsChanged(); }
 void DrillProject::setMarkerFacingVisible(bool value) { if (value == m_markerFacingVisible) return; m_markerFacingVisible = value; QSettings().setValue(QStringLiteral("view/markerFacingVisible"), value); emit editorSettingsChanged(); }
+void DrillProject::setFieldStyle(const QString &value)
+{
+    if ((value != QStringLiteral("realistic") && value != QStringLiteral("editor")) || value == m_fieldStyle)
+        return;
+    m_fieldStyle = value;
+    QSettings().setValue(QStringLiteral("view/fieldStyle"), value);
+    emit editorSettingsChanged();
+}
+
 void DrillProject::setShowFieldGrid(bool value) { if (value == m_showFieldGrid) return; m_showFieldGrid = value; QSettings().setValue(QStringLiteral("view/showFieldGrid"), value); emit editorSettingsChanged(); }
 void DrillProject::setFieldGridInterval(double value) { static const QVector<double> valid{0.25,0.5,1.0,2.0,4.0}; double next=1.0,best=99; for(double v:valid) if(qAbs(v-value)<best){best=qAbs(v-value);next=v;} if(qFuzzyCompare(next,m_fieldGridInterval))return; m_fieldGridInterval=next; QSettings().setValue(QStringLiteral("view/fieldGridInterval"),next); emit editorSettingsChanged(); }
 void DrillProject::setFieldGridOpacity(double value) { value=qBound(0.02,value,0.8); if(qFuzzyCompare(value,m_fieldGridOpacity))return; m_fieldGridOpacity=value; QSettings().setValue(QStringLiteral("view/fieldGridOpacity"),value); emit editorSettingsChanged(); }
