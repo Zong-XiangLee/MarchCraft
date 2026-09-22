@@ -1,45 +1,43 @@
 import QtQuick
 import QtQuick.Controls
 import QtQuick3D
-import QtQuick3D.Helpers
+import "CameraMotion.js" as CameraMotion
 
 Item {
     id: root
     objectName: "performerView"
     readonly property int insertColumnCount: drillProject.fieldInsertCount
     readonly property bool editorField: drillProject.fieldStyle === "editor"
-    property real cameraZoom: 1.0
     property string carriagePose: "horn.up"
     property bool markTimeDuringHolds: false
-    property real cameraDistance: Math.sqrt(cameraBasePosition.y * cameraBasePosition.y
-                                            + cameraBasePosition.z * cameraBasePosition.z)
-    property vector3d cameraBasePosition: Qt.vector3d(0, 51, 63)
-    property vector3d cameraBaseRotation: Qt.vector3d(-42, 0, 0)
-
-    function applyZoom() {
-        camera.z = cameraDistance * cameraZoom
-    }
+    property real orbitPitch: -42
+    property real orbitYaw: 0
+    property real cameraDistance: 108
+    property real focusX: 0
+    property real focusY: 0
+    property real focusZ: 0
+    property string activeCameraPreset: "press"
+    property bool cameraReady: false
+    readonly property int cameraDuration: cameraReady && workspaceController.systemAnimationsEnabled
+                                         ? (cameraInput.pressed ? 90 : 320) : 0
+    Component.onCompleted: cameraReady = true
 
     function setCameraPreset(preset) {
+        activeCameraPreset = preset
+        focusX = 0; focusZ = 0
+        focusY = preset.indexOf("performer") === 0 ? 0.9 : 0
+        // Take the shortest route back to the audience side after a full orbit.
+        const baseYaw = Math.round(orbitYaw / 360) * 360
+        orbitYaw = baseYaw + (preset === "performer-side" ? 90 : 0)
         if (preset === "performer" || preset === "performer-side") {
-            cameraBasePosition = Qt.vector3d(0, 0, 2.6)
-            cameraBaseRotation = Qt.vector3d(0, preset === "performer-side" ? 90 : 0, 0)
+            orbitPitch = 0; cameraDistance = 2.6
         } else if (preset === "overhead") {
-            cameraBasePosition = Qt.vector3d(0, 86, 0)
-            cameraBaseRotation = Qt.vector3d(-90, 0, 0)
+            orbitPitch = -89.5; cameraDistance = 100
         } else if (preset === "field") {
-            cameraBasePosition = Qt.vector3d(0, 10, 49)
-            cameraBaseRotation = Qt.vector3d(-10, 0, 0)
+            orbitPitch = -10; cameraDistance = 50
         } else {
-            cameraBasePosition = Qt.vector3d(0, 51, 63)
-            cameraBaseRotation = Qt.vector3d(-42, 0, 0)
+            orbitPitch = -42; cameraDistance = 108
         }
-        cameraZoom = 1.0
-        cameraDistance = Math.sqrt(cameraBasePosition.y * cameraBasePosition.y
-                                   + cameraBasePosition.z * cameraBasePosition.z)
-        cameraOrigin.position = Qt.vector3d(0, preset.indexOf("performer") === 0 ? 0.9 : 0, 0)
-        cameraOrigin.eulerRotation = cameraBaseRotation
-        applyZoom()
     }
 
     function insertStep(column) {
@@ -75,15 +73,25 @@ Item {
 
         Node {
             id: cameraOrigin
-            eulerRotation: root.cameraBaseRotation
+            property real pitch: root.orbitPitch
+            property real yaw: root.orbitYaw
+            property real targetX: root.focusX
+            property real targetY: root.focusY
+            property real targetZ: root.focusZ
+            eulerRotation: Qt.vector3d(pitch, yaw, 0)
+            position: Qt.vector3d(targetX, targetY, targetZ)
+            Behavior on pitch { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
+            Behavior on yaw { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
+            Behavior on targetX { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
+            Behavior on targetY { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
+            Behavior on targetZ { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
             PerspectiveCamera {
                 id: camera
                 z: root.cameraDistance
+                fieldOfView: 45
+                clipNear: 0.1
                 clipFar: 2000
-                onZChanged: {
-                    if (root.cameraDistance > 0)
-                        root.cameraZoom = z / root.cameraDistance
-                }
+                Behavior on z { NumberAnimation { duration: root.cameraDuration; easing.type: Easing.OutCubic } }
             }
         }
 
@@ -175,16 +183,55 @@ Item {
             }
         }
 
-        Repeater3D {
-            model: root.editorField || drillProject.fieldPreset === "indoor" ? 0 : 20
-            delegate: Model {
-                required property int index
-                source: "#Cube"
-                position: Qt.vector3d(-76 + index * 8, 0.005, 0)
-                scale: Qt.vector3d(0.08, 0.0001, drillProject.fieldDepthSteps / 100)
-                materials: PrincipledMaterial {
-                    baseColor: index % 2 === 0 ? Qt.lighter(drillProject.turfColor, 1.08) : drillProject.turfColor
-                    roughness: 0.98
+        // Deterministic surface detail is baked once into a mipmapped texture.
+        Model {
+            visible: !root.editorField
+            source: "#Rectangle"; y: 0.018; eulerRotation.x: -90
+            scale: Qt.vector3d(1.6, drillProject.fieldDepthSteps / 100, 1)
+            materials: PrincipledMaterial {
+                roughness: drillProject.fieldPreset === "indoor" ? 0.65 : 0.98
+                baseColorMap: Texture {
+                    generateMipmaps: true; mipFilter: Texture.Linear
+                    sourceItem: Canvas {
+                        id: surfaceTexture
+                        width: 2048; height: 1024
+                        onPaint: {
+                            const ctx = getContext("2d"); ctx.reset()
+                            const indoor = drillProject.fieldPreset === "indoor"
+                            ctx.fillStyle = indoor ? "#b98b58" : drillProject.turfColor
+                            ctx.fillRect(0, 0, width, height)
+                            for (let band = 0; band < 20; ++band) {
+                                ctx.fillStyle = band % 2 ? "#ffffff" : "#000000"
+                                ctx.globalAlpha = indoor ? 0.015 : 0.045
+                                ctx.fillRect(band * width / 20, 0, width / 20, height)
+                            }
+                            let seed = 29
+                            function random() { seed = (seed * 1664525 + 1013904223) >>> 0; return seed / 4294967296 }
+                            for (let i = 0; i < 42000; ++i) {
+                                ctx.globalAlpha = indoor ? 0.07 : 0.10
+                                ctx.fillStyle = i % 2 ? "#ffffff" : "#172d1b"
+                                ctx.fillRect(random() * width, random() * height, indoor ? 14 : 1, indoor ? 1 : 2)
+                            }
+                            if (indoor) {
+                                ctx.globalAlpha = 0.18; ctx.strokeStyle = "#65482b"; ctx.lineWidth = 1
+                                for (let row = 0; row < 80; ++row) {
+                                    const y = row * height / 80
+                                    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
+                                    for (let x = (row % 3) * 85; x < width; x += 256) {
+                                        ctx.beginPath(); ctx.moveTo(x, y); ctx.lineTo(x, y + height / 80); ctx.stroke()
+                                    }
+                                }
+                            }
+                            ctx.globalAlpha = 1
+                        }
+                        Component.onCompleted: requestPaint()
+                        Connections {
+                            target: drillProject
+                            function onEditorSettingsChanged() { surfaceTexture.requestPaint() }
+                            function onProjectChanged() { surfaceTexture.requestPaint() }
+                            function onSceneChanged() { surfaceTexture.requestPaint() }
+                        }
+                    }
                 }
             }
         }
@@ -445,29 +492,47 @@ Item {
         }
     }
 
-    // Keep camera zoom available through the viewport itself so the editor
-    // stays visually quiet while retaining the familiar wheel gesture.
     MouseArea {
+        id: cameraInput
         anchors.fill: view
-        acceptedButtons: Qt.NoButton
+        acceptedButtons: Qt.LeftButton | Qt.MiddleButton | Qt.RightButton
+        property real lastX: 0
+        property real lastY: 0
+        cursorShape: pressed ? Qt.ClosedHandCursor : Qt.OpenHandCursor
+        onPressed: function(mouse) { lastX = mouse.x; lastY = mouse.y }
+        onPositionChanged: function(mouse) {
+            if (!pressed) return
+            const dx = mouse.x - lastX, dy = mouse.y - lastY
+            lastX = mouse.x; lastY = mouse.y
+            root.activeCameraPreset = "custom"
+            if ((pressedButtons & (Qt.MiddleButton | Qt.RightButton)) || (mouse.modifiers & Qt.ShiftModifier)) {
+                const target = CameraMotion.pan(root.focusX, root.focusZ, root.orbitYaw,
+                    root.orbitPitch, root.cameraDistance, height, dx, dy)
+                root.focusX = target.x; root.focusZ = target.z
+            } else {
+                const target = CameraMotion.orbit(root.orbitPitch, root.orbitYaw, dx, dy)
+                root.orbitPitch = target.pitch; root.orbitYaw = target.yaw
+            }
+        }
+        onDoubleClicked: root.setCameraPreset("press")
         onWheel: function(event) {
-            root.cameraZoom = Math.max(0.55, Math.min(1.65,
-                root.cameraZoom * (event.angleDelta.y > 0 ? 0.92 : 1.08)))
-            root.applyZoom()
+            const delta = event.pixelDelta.y !== 0 ? event.pixelDelta.y * 3 : event.angleDelta.y
+            root.cameraDistance = CameraMotion.zoom(root.cameraDistance, delta)
+            root.activeCameraPreset = "custom"
             event.accepted = true
         }
     }
 
-    OrbitCameraController {
-        anchors.fill: view
-        z: 1.5
-        origin: cameraOrigin
-        camera: camera
-        xSpeed: 0.16
-        ySpeed: 0.16
-        xInvert: true
-        yInvert: false
-        panEnabled: true
+    Rectangle {
+        anchors.bottom: parent.bottom; anchors.horizontalCenter: parent.horizontalCenter
+        anchors.bottomMargin: 14
+        width: cameraHelp.implicitWidth + 24; height: 30; radius: 6
+        color: MarchCraftTheme.panel; opacity: 0.92
+        Label {
+            id: cameraHelp; anchors.centerIn: parent
+            text: "Drag to orbit  ·  Shift-drag to pan  ·  Scroll to dolly  ·  Double-click to reset"
+            color: MarchCraftTheme.textSecondary; font.pixelSize: 11
+        }
     }
 
     Row {
@@ -477,9 +542,9 @@ Item {
         anchors.top: parent.top
         anchors.margins: 14
         spacing: 6
-        AppButton { text: "Press box"; onClicked: root.setCameraPreset("press") }
-        AppButton { text: "Overhead"; onClicked: root.setCameraPreset("overhead") }
-        AppButton { text: "Field"; onClicked: root.setCameraPreset("field") }
+        AppButton { text: "Press box"; highlighted: root.activeCameraPreset === "press"; onClicked: root.setCameraPreset("press") }
+        AppButton { text: "Overhead"; highlighted: root.activeCameraPreset === "overhead"; onClicked: root.setCameraPreset("overhead") }
+        AppButton { text: "Field"; highlighted: root.activeCameraPreset === "field"; onClicked: root.setCameraPreset("field") }
     }
 
     Flow {

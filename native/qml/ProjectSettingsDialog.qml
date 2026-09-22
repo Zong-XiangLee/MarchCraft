@@ -26,7 +26,7 @@ Dialog {
         rowSpacing: 10
         Label {
             text: "Set up the rehearsal environment before you start staging."
-            color: "#a5afbc"; wrapMode: Text.Wrap
+            color: MarchCraftTheme.textSecondary; wrapMode: Text.Wrap
             Layout.fillWidth: true; Layout.columnSpan: 2; Layout.bottomMargin: 4
         }
         Label { text: "Project name" }
@@ -47,7 +47,7 @@ Dialog {
         }
         Label {
             text: "Markers, grids, overlays, and 3D quality remain available in Editor preferences."
-            color: "#778392"; wrapMode: Text.Wrap
+            color: MarchCraftTheme.textMuted; wrapMode: Text.Wrap
             Layout.fillWidth: true; Layout.columnSpan: 2; Layout.topMargin: 4
         }
         RowLayout {

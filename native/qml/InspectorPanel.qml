@@ -59,21 +59,21 @@ Frame {
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 visible: drillProjectContext.selectedCount === 1
                 Label { text: inspector.person.label || "No performer selected"; font.pixelSize: 22; font.bold: true }
-                Label { text: inspector.person.instrument || "Select a performer on the field"; color: "#a5afbc" }
+                Label { text: inspector.person.instrument || "Select a performer on the field"; color: MarchCraftTheme.textSecondary }
                 Label { text: inspector.person.coordinate || ""; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true; color: "#b8c8bf"; font.pixelSize: 11 }
                 GridLayout {
                     columns: 2; Layout.fillWidth: true
-                    Label { text: "Incoming"; color: "#a5afbc" }
+                    Label { text: "Incoming"; color: MarchCraftTheme.textSecondary }
                     Label { text: drillProjectContext.formatDistance(inspector.person.incomingDistance || 0); Layout.alignment: Qt.AlignRight }
-                    Label { text: "Steps / count"; color: "#a5afbc" }
+                    Label { text: "Steps / count"; color: MarchCraftTheme.textSecondary }
                     Label { text: Number(inspector.person.stepsPerCount || 0).toFixed(2); Layout.alignment: Qt.AlignRight; color: inspector.person.warning === "critical" ? "#e07178" : inspector.person.warning === "caution" ? "#d6a75d" : "#f2f5f7" }
-                    Label { text: "Outgoing"; color: "#a5afbc" }
+                    Label { text: "Outgoing"; color: MarchCraftTheme.textSecondary }
                     Label { text: drillProjectContext.formatDistance(inspector.person.outgoingDistance || 0); Layout.alignment: Qt.AlignRight }
-                    Label { text: "Direction change"; color: "#a5afbc" }
+                    Label { text: "Direction change"; color: MarchCraftTheme.textSecondary }
                     Label { text: Number(inspector.person.directionChange || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
-                    Label { text: "Incoming path"; color: "#a5afbc" }
+                    Label { text: "Incoming path"; color: MarchCraftTheme.textSecondary }
                     Label { text: inspector.person.pathType || "direct"; Layout.alignment: Qt.AlignRight }
-                    Label { text: "Facing at this set"; color: "#a5afbc" }
+                    Label { text: "Facing at this set"; color: MarchCraftTheme.textSecondary }
                     Label { text: Number(inspector.person.facing || 0).toFixed(0) + " deg"; Layout.alignment: Qt.AlignRight }
                 }
                 RowLayout {
@@ -83,7 +83,7 @@ Frame {
                     AppButton { Layout.minimumWidth: 0; text: "S1"; Layout.fillWidth: true; onClicked: { drillProjectContext.faceSelected(270); inspector.refresh() } }
                     AppButton { Layout.minimumWidth: 0; text: "S2"; Layout.fillWidth: true; onClicked: { drillProjectContext.faceSelected(90); inspector.refresh() } }
                 }
-                Label { text: "Facing is saved independently for each set."; color: "#778392"; font.pixelSize: 10 }
+                Label { text: "Facing is saved independently for each set."; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
                 AppButton { Layout.minimumWidth: 0; text: "Edit performer…"; enabled: windowContext.activePerformer >= 0; Layout.fillWidth: true; onClicked: { performerDialogContext.editing = true; performerDialogContext.open() } }
                 AppButton { Layout.minimumWidth: 0;
                     text: "Marker color…"
@@ -99,12 +99,12 @@ Frame {
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 visible: drillProjectContext.selectedCount === 0
                 Label { text: drillProjectContext.currentSetName; font.pixelSize: 20; font.bold: true }
-                Label { text: drillProjectContext.currentSetIndex > 0 ? drillProjectContext.currentSetCounts + " counts / " + drillProjectContext.effectiveTempoText(drillProjectContext.currentSetIndex) : "Opening formation"; color: "#a5afbc" }
+                Label { text: drillProjectContext.currentSetIndex > 0 ? drillProjectContext.currentSetCounts + " counts / " + drillProjectContext.effectiveTempoText(drillProjectContext.currentSetIndex) : "Opening formation"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.clinicIssueCount ? drillProjectContext.clinicIssueCount + " Clinic issue(s) in view" : "Active transition passes the current profile"; color: drillProjectContext.clinicIssueCount ? "#d6a75d" : "#5ead83"; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
                 AppButton { Layout.minimumWidth: 0; text: "Scan whole show"; Layout.fillWidth: true; onClicked: drillProjectContext.scanShow() }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-            Label { text: "SELECTION"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12; visible: false }
+            Label { text: "SELECTION"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12; visible: false }
             GridLayout {
                 visible: false; columns: 3; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 AppButton { Layout.minimumWidth: 0; text: "←"; onClicked: drillProjectContext.nudgeSelected(-0.25, 0) }
@@ -117,7 +117,7 @@ Frame {
             AppButton { Layout.minimumWidth: 0; text: "Auto-label selection"; visible: false; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: drillProjectContext.autoLabel("P") }
             AppButton { Layout.minimumWidth: 0; text: "Bulk edit selection…"; visible: drillProjectContext.selectedCount > 0; enabled: visible; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: bulkEditDialogContext.open() }
             GridLayout { columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProjectContext.selectedCount > 1
-                Label { text: "Facing at this set"; color: "#a5afbc"; Layout.fillWidth: true; Layout.columnSpan: 2 }
+                Label { text: "Facing at this set"; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true; Layout.columnSpan: 2 }
                 AppButton { Layout.minimumWidth: 0; Layout.fillWidth: true; text: "Front"; onClicked: drillProjectContext.faceSelected(0) }
                 AppButton { Layout.minimumWidth: 0; Layout.fillWidth: true; text: "Back"; onClicked: drillProjectContext.faceSelected(180) }
                 AppButton { Layout.minimumWidth: 0; text: "S1"; onClicked: drillProjectContext.faceSelected(270) }
@@ -127,23 +127,23 @@ Frame {
                 Label { text: drillProjectContext.selectedCount + " performers"; font.pixelSize: 18; font.bold: true; Layout.fillWidth: true; Layout.minimumWidth: 0; elide: Text.ElideRight }
                 AppButton { Layout.minimumWidth: 0; text: "Optimize..."; onClicked: formationDialogContext.open() }
             }
-            Label { text: "FORMATION METRICS"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12; visible: drillProjectContext.selectedCount > 1 }
+            Label { text: "FORMATION METRICS"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12; visible: drillProjectContext.selectedCount > 1 }
             GridLayout {
                 columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 visible: drillProjectContext.selectedCount > 1
                 property var metrics: drillProjectContext.selectionMetrics
-                Label { text: "Formation"; color: "#a5afbc" }
+                Label { text: "Formation"; color: MarchCraftTheme.textSecondary }
                 Label { text: parent.metrics.shapeType ? parent.metrics.shapeType + " / " + parent.metrics.count : parent.metrics.count + " performers"; font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Average spacing"; color: "#a5afbc" }
+                Label { text: "Average spacing"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(parent.metrics.averageSpacing || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Minimum spacing"; color: "#a5afbc" }
+                Label { text: "Minimum spacing"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(parent.metrics.minimumSpacing || 0); color: (parent.metrics.collisionCount || 0) > 0 ? drillProjectContext.markerWarningColor : "#e5eee9"; font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Average move"; color: "#a5afbc" }
+                Label { text: "Average move"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(parent.metrics.averageMove || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Size"; color: "#a5afbc" }
+                Label { text: "Size"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(parent.metrics.width || 0) + " x " + drillProjectContext.formatDistance(parent.metrics.height || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
             }
-            Label { text: "TRANSITION PATH"; visible: drillProjectContext.selectedCount > 0; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12 }
+            Label { text: "TRANSITION PATH"; visible: drillProjectContext.selectedCount > 0; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12 }
             RowLayout {
                 visible: drillProjectContext.selectedCount > 0
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
@@ -154,25 +154,25 @@ Frame {
             RowLayout {
                 visible: drillProjectContext.selectedCount > 0
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                Label { text: drillProjectContext.currentShapeCount + " persistent shape(s)"; color: "#a5afbc"; Layout.fillWidth: true }
+                Label { text: drillProjectContext.currentShapeCount + " persistent shape(s)"; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
                 AppButton { Layout.minimumWidth: 0; text: "Bake last"; enabled: drillProjectContext.currentShapeCount > 0; onClicked: drillProjectContext.removeShape(drillProjectContext.currentShapeCount - 1, true) }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-            Label { text: "SHOW ANALYTICS"; font.bold: true; color: "#a5afbc"; Layout.leftMargin: 12 }
+            Label { text: "SHOW ANALYTICS"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12 }
             GridLayout {
                 columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; rowSpacing: 10
-                Label { text: "Average / performer"; color: "#a5afbc" }
+                Label { text: "Average / performer"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(drillProjectContext.averageDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Ensemble total"; color: "#a5afbc" }
+                Label { text: "Ensemble total"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(drillProjectContext.totalDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Longest move"; color: "#a5afbc" }
+                Label { text: "Longest move"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(drillProjectContext.longestDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
-                Label { text: "Current warnings"; color: "#a5afbc" }
+                Label { text: "Current warnings"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.warningCount; color: drillProjectContext.warningCount ? "#e07178" : "#5ead83"; font.bold: true; Layout.alignment: Qt.AlignRight }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
             RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                Label { text: "DRILL CLINIC"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
+                Label { text: "DRILL CLINIC"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
                 Label { text: "ANALYSIS"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
             }
             Label {
@@ -206,14 +206,14 @@ Frame {
                         anchors.fill: parent
                         RowLayout { Layout.fillWidth: true
                             Label { text: modelData.severity.toUpperCase(); color: modelData.severity === "critical" ? "#e07178" : "#d6a75d"; font.bold: true; font.pixelSize: 10 }
-                            Label { text: "SET " + modelData.setLabel; color: "#a5afbc"; font.pixelSize: 10; Layout.fillWidth: true }
+                            Label { text: "SET " + modelData.setLabel; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; Layout.fillWidth: true }
                             AppToolButton { text: "?"; ToolTip.text: "This is a suggestion, not a required change."; ToolTip.visible: hovered }
                         }
                         Label { text: modelData.title; font.bold: true; font.pixelSize: 15; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
-                        Label { text: modelData.count > 0 ? "First appears around count " + Number(modelData.count).toFixed(1) : "Review the highlighted transition"; color: "#a5afbc"; font.pixelSize: 10 }
+                        Label { text: modelData.count > 0 ? "First appears around count " + Number(modelData.count).toFixed(1) : "Review the highlighted transition"; color: MarchCraftTheme.textSecondary; font.pixelSize: 10 }
                         Label { text: modelData.detail; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true; color: "#d3dfd8"; font.pixelSize: 11 }
                         Label { text: modelData.performers ? "Affected: " + modelData.performers : ""; visible: text.length > 0; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true; color: "#f1f5f9"; font.pixelSize: 10 }
-                        Label { text: modelData.limit > 0 ? "Measured " + Number(modelData.measured).toFixed(2) + " / limit " + Number(modelData.limit).toFixed(2) : "Measured " + Number(modelData.measured).toFixed(2); color: "#a5afbc"; font.pixelSize: 10 }
+                        Label { text: modelData.limit > 0 ? "Measured " + Number(modelData.measured).toFixed(2) + " / limit " + Number(modelData.limit).toFixed(2) : "Measured " + Number(modelData.measured).toFixed(2); color: MarchCraftTheme.textSecondary; font.pixelSize: 10 }
                         ComboBox { id: clinicAction; visible: modelData.actions && modelData.actions.length > 0; Layout.fillWidth: true; model: modelData.actions || []; textRole: "label"; onActivated: selectedSuggestionId = modelData.actions[currentIndex].id }
                         RowLayout { Layout.fillWidth: true
                             AppButton { Layout.minimumWidth: 0; text: "Inspect"; onClicked: drillProjectContext.selectClinicIssue(modelData.id) }
@@ -241,7 +241,7 @@ Frame {
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 spacing: 6
                 RowLayout { Layout.fillWidth: true
-                    Label { text: "NEXT-SET IDEAS"; font.bold: true; color: "#a5afbc"; Layout.fillWidth: true }
+                    Label { text: "NEXT-SET IDEAS"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
                     Label { text: "SUGGESTIONS"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
                 }
                 Label {
@@ -283,8 +283,8 @@ Frame {
                                     Label { text: modelData.label; font.bold: true; font.pixelSize: 14; Layout.fillWidth: true }
                                     Rectangle { implicitWidth: tagLabel.implicitWidth + 12; implicitHeight: 18; radius: 9; color: "#24343a"; Label { id: tagLabel; anchors.centerIn: parent; text: modelData.tag; color: "#a9bbb1"; font.pixelSize: 8; font.bold: true } }
                                 }
-                                Label { text: modelData.detail; color: "#a5afbc"; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
-                                Label { text: "Fit " + Number(modelData.score).toFixed(1) + "  ·  " + modelData.intent; color: "#778392"; font.pixelSize: 10 }
+                                Label { text: modelData.detail; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
+                                Label { text: "Fit " + Number(modelData.score).toFixed(1) + "  ·  " + modelData.intent; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
                             }
                             AppButton { Layout.minimumWidth: 0;
                                 text: drillProjectContext.formationPreviewBusy ? "Optimizing..." : "Preview"

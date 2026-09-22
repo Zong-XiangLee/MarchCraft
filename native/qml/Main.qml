@@ -106,6 +106,7 @@ ApplicationWindow {
 
     Settings {
         id: workspaceSettings
+        property string themeId: "graphite"
         property var horizontalSplitState
         property var verticalSplitState
         property bool rosterCollapsed: false
@@ -115,7 +116,21 @@ ApplicationWindow {
         property var quickShapes: ["line", "rectangle", "circle", "triangle"]
     }
 
+    property bool previewTheme: false
+    function setQaTheme(theme) {
+        if (["graphite", "midnight", "warm"].indexOf(theme) < 0) return
+        previewTheme = true
+        MarchCraftTheme.themeId = theme
+    }
+    Connections {
+        target: MarchCraftTheme
+        function onThemeIdChanged() {
+            if (!window.previewTheme) workspaceSettings.themeId = MarchCraftTheme.themeId
+        }
+    }
+
     Component.onCompleted: {
+        MarchCraftTheme.themeId = workspaceSettings.themeId
         workspaceController.refreshRecentProjects()
         if (!workspaceState.workspaceActive && !qaMode && workspaceController.startupSoundEnabled)
             Qt.callLater(function() { workspaceController.playStartupSound() })
@@ -513,7 +528,7 @@ ApplicationWindow {
             Label { text: "Movement assignment"; font.bold: true }
             ComboBox { id: movementMode; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Rehearsal safe",value:"rehearsalSafe"},{text:"Shortest total",value:"shortest"},{text:"Preserve form order",value:"preserveOrder"},{text:"Even effort",value:"evenEffort"},{text:"Feature move",value:"featureMove"},{text:"Roster order",value:"rosterOrder"}]; currentIndex: 0; onActivated: window.freehandMovementMode=currentValue }
             CheckBox { text: "Create as group"; checked: window.freehandCreateGroup; onToggled: window.freehandCreateGroup=checked }
-            Label { text: "The stroke is smoothed, spaced by equal arc length, expanded if necessary, and shifted locally to avoid unselected performers."; color: "#a5afbc"; wrapMode: Text.Wrap; Layout.fillWidth: true }
+            Label { text: "The stroke is smoothed, spaced by equal arc length, expanded if necessary, and shifted locally to avoid unselected performers."; color: MarchCraftTheme.textSecondary; wrapMode: Text.Wrap; Layout.fillWidth: true }
             AppButton { text: "Start drawing"; highlighted: true; Layout.alignment: Qt.AlignRight; onClicked: { window.shapeDrawing="";window.freehandRecognitionMode=recognitionMode.currentValue;window.freehandMovementMode=movementMode.currentValue;window.freehandDrawing=true;freehandDialog.close() } }
         }
     }
@@ -529,11 +544,11 @@ ApplicationWindow {
             Label { text: drillProject.formationPreviewBusy ? "Finding a safe one-to-one assignment..." : "Review the ghost destinations and proposed paths on the field."; wrapMode: Text.Wrap; Layout.fillWidth: true; color: "#a9bbb1" }
             GridLayout { columns: 2; Layout.fillWidth: true; visible: drillProject.formationPreviewActive
                 property var metrics: drillProject.formationPreviewMetrics
-                Label { text: "Average move"; color: "#a5afbc" }
+                Label { text: "Average move"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProject.formatDistance(parent.metrics.averageMove || 0); Layout.alignment: Qt.AlignRight }
-                Label { text: "Maximum move"; color: "#a5afbc" }
+                Label { text: "Maximum move"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProject.formatDistance(parent.metrics.maximumMove || 0); Layout.alignment: Qt.AlignRight }
-                Label { text: "Maximum steps / count"; color: "#a5afbc" }
+                Label { text: "Maximum steps / count"; color: MarchCraftTheme.textSecondary }
                 Label { text: Number(parent.metrics.maximumStepsPerCount || 0).toFixed(2); Layout.alignment: Qt.AlignRight }
             }
             RowLayout { Layout.alignment: Qt.AlignRight
@@ -675,7 +690,7 @@ ApplicationWindow {
         title: "Bulk edit selected performers"
         modal: true; anchors.centerIn: Overlay.overlay; width: 430
         contentItem: ColumnLayout {
-            Label { text: "Leave text fields blank to preserve mixed values."; color: "#a5afbc" }
+            Label { text: "Leave text fields blank to preserve mixed values."; color: MarchCraftTheme.textSecondary }
             TextField { id: bulkInstrument; placeholderText: "Instrument (unchanged)"; Layout.fillWidth: true }
             TextField { id: bulkSection; placeholderText: "Section (unchanged)"; Layout.fillWidth: true }
             TextField { id: bulkColor; placeholderText: "Color, e.g. #38bdf8 (unchanged)"; Layout.fillWidth: true }
@@ -731,8 +746,8 @@ ApplicationWindow {
             ComboBox { id: openingBehavior; visible: setDialog.editing && drillProject.currentSetIndex === 0; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Hold at Set 1",value:"hold"},{text:"Start moving immediately",value:"move"}] }
             Label { text: setDialog.editing && drillProject.currentSetIndex === 0 ? "Opening hold counts" : "Counts"; visible: !(setDialog.editing && drillProject.currentSetIndex === 0 && openingBehavior.currentValue === "move") }
             SpinBox { id: setCounts; from: 1; to: 2048; editable: true; Layout.fillWidth: true; visible: !(setDialog.editing && drillProject.currentSetIndex === 0 && openingBehavior.currentValue === "move") }
-            Label { visible: !(setDialog.editing && drillProject.currentSetIndex === 0); Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#a5afbc"; text: "For a hold, use two consecutive sets with identical coordinates and enter the hold duration here." }
-            Label { visible: setDialog.editing && drillProject.currentSetIndex === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#a5afbc"; text: openingBehavior.currentValue === "hold" ? "The entire ensemble remains at Set 1 for these counts before the show clock and music begin moving." : "Playback begins the Set 1 to Set 2 transition immediately, with no opening standstill." }
+            Label { visible: !(setDialog.editing && drillProject.currentSetIndex === 0); Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary; text: "For a hold, use two consecutive sets with identical coordinates and enter the hold duration here." }
+            Label { visible: setDialog.editing && drillProject.currentSetIndex === 0; Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary; text: openingBehavior.currentValue === "hold" ? "The entire ensemble remains at Set 1 for these counts before the show clock and music begin moving." : "Playback begins the Set 1 to Set 2 transition immediately, with no opening standstill." }
             CheckBox { id: setSubset; text: "This is a subset" }
             RowLayout {
                 Layout.fillWidth: true
@@ -770,7 +785,7 @@ ApplicationWindow {
             TextField { id: variantCaption; Layout.fillWidth: true; placeholderText: "What is different in this version?" }
             Label {
                 text: "The new variant shares this set's measure, counts, and timing."
-                color: "#a5afbc"; wrapMode: Text.Wrap; Layout.fillWidth: true
+                color: MarchCraftTheme.textSecondary; wrapMode: Text.Wrap; Layout.fillWidth: true
             }
             AppButton {
                 text: "Create and activate"
@@ -795,7 +810,7 @@ ApplicationWindow {
             endTick = drillProject.setInfo(destination).startTick || (startTick + 15360)
         }
         contentItem: ColumnLayout {
-            Label { text: "Applies to the selected transition"; color: "#a5afbc" }
+            Label { text: "Applies to the selected transition"; color: MarchCraftTheme.textSecondary }
             GridLayout {
                 columns: 2; Layout.fillWidth: true
                 Label { text: "Meter" }
@@ -820,7 +835,7 @@ ApplicationWindow {
             }
             Label {
                 text: tempoStart.value === tempoEnd.value ? "Fixed tempo" : (tempoEnd.value > tempoStart.value ? "Accelerando" : "Ritardando")
-                color: "#a5afbc"
+                color: MarchCraftTheme.textSecondary
             }
             AppButton {
                 text: "Apply meter, pulse, and tempo"; highlighted: true; Layout.alignment: Qt.AlignRight
@@ -841,7 +856,7 @@ ApplicationWindow {
         title: "Set archive"
         modal: true; anchors.centerIn: Overlay.overlay; width: 660; height: 520
         contentItem: ColumnLayout {
-            Label { text: "ARCHIVED SETS"; color: "#a5afbc"; font.bold: true }
+            Label { text: "ARCHIVED SETS"; color: MarchCraftTheme.textSecondary; font.bold: true }
             ListView {
                 Layout.fillWidth: true; Layout.preferredHeight: 190; clip: true
                 model: drillProject.archivedSetCount
@@ -853,7 +868,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent
                         Label { text: info.number + " · " + info.name; font.bold: true }
-                        Label { text: info.caption || info.measure; color: "#a5afbc"; Layout.fillWidth: true; elide: Text.ElideRight }
+                        Label { text: info.caption || info.measure; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true; elide: Text.ElideRight }
                         AppButton { text: "Restore"; onClicked: drillProject.restoreArchivedSet(index) }
                         AppButton {
                             text: "Delete permanently"
@@ -866,7 +881,7 @@ ApplicationWindow {
                     }
                 }
             }
-            Label { text: "ARCHIVED VARIANTS IN CURRENT SET"; color: "#a5afbc"; font.bold: true }
+            Label { text: "ARCHIVED VARIANTS IN CURRENT SET"; color: MarchCraftTheme.textSecondary; font.bold: true }
             ListView {
                 Layout.fillWidth: true; Layout.fillHeight: true; clip: true
                 model: drillProject.currentArchivedVariantCount
@@ -878,7 +893,7 @@ ApplicationWindow {
                     RowLayout {
                         anchors.fill: parent
                         Label { text: "Variant " + info.label + " · " + info.name; font.bold: true }
-                        Label { text: info.caption; color: "#a5afbc"; Layout.fillWidth: true; elide: Text.ElideRight }
+                        Label { text: info.caption; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true; elide: Text.ElideRight }
                         AppButton { text: "Restore"; onClicked: drillProject.restoreArchivedVariant(index) }
                         AppButton {
                             text: "Delete permanently"

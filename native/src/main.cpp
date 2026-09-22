@@ -85,6 +85,9 @@ int main(int argc, char *argv[])
         project.loadDemo();
     if (qaShapes)
         project.selectAll();
+    const int fieldPresetFlag = arguments.indexOf(QStringLiteral("--field-preset"));
+    if (fieldPresetFlag >= 0 && fieldPresetFlag + 1 < arguments.size())
+        project.setFieldPreset(arguments.at(fieldPresetFlag + 1));
     const int fieldStyleFlag = arguments.indexOf(QStringLiteral("--field-style"));
     if (fieldStyleFlag >= 0 && fieldStyleFlag + 1 < arguments.size())
         project.setFieldStyle(arguments.at(fieldStyleFlag + 1));
@@ -192,6 +195,11 @@ int main(int argc, char *argv[])
                               ? QStringLiteral("horn.down") : QStringLiteral("horn.up"));
             view->setProperty("markTimeDuringHolds", arguments.contains(QStringLiteral("--qa-human-mark-time")));
         }
+    }
+    const int themeFlag = arguments.indexOf(QStringLiteral("--qa-theme"));
+    if (themeFlag >= 0 && themeFlag + 1 < arguments.size() && !engine.rootObjects().isEmpty()) {
+        QMetaObject::invokeMethod(engine.rootObjects().first(), "setQaTheme",
+                                  Q_ARG(QVariant, arguments.at(themeFlag + 1)));
     }
     const int viewFlag = arguments.indexOf(QStringLiteral("--3d-view"));
     if (viewFlag >= 0 && viewFlag + 1 < arguments.size() && !engine.rootObjects().isEmpty())
