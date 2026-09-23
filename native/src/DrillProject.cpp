@@ -106,9 +106,9 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     m_markerWarningColor = settings.value(QStringLiteral("view/markerWarningColor"), QStringLiteral("#fb7185")).toString();
     m_fieldStyle = settings.value(QStringLiteral("view/fieldStyle"), QStringLiteral("realistic")).toString();
     if (m_fieldStyle != QStringLiteral("editor")) m_fieldStyle = QStringLiteral("realistic");
-    m_showFieldGrid = settings.value(QStringLiteral("view/showFieldGrid"), false).toBool();
+    m_showFieldGrid = settings.value(QStringLiteral("view/showFieldGrid"), true).toBool();
     m_fieldGridInterval = settings.value(QStringLiteral("view/fieldGridInterval"), 1.0).toDouble();
-    m_fieldGridColor = settings.value(QStringLiteral("view/fieldGridColor"), QStringLiteral("#7dd3fc")).toString();
+    m_fieldGridColor = settings.value(QStringLiteral("view/fieldGridColor"), QStringLiteral("#b8b8b8")).toString();
     m_fieldGridOpacity = qBound(0.02, settings.value(QStringLiteral("view/fieldGridOpacity"), 0.18).toDouble(), 0.8);
     m_measurementUnit = settings.value(QStringLiteral("view/measurementUnit"), QStringLiteral("steps")).toString();
     if (!backgroundWorker) {
@@ -353,11 +353,12 @@ QVariantList DrillProject::props() const
 {
     QVariantList result;
     for (const auto &prop : m_props) {
-        const auto world = MarchCraft::FieldTransform::drillToWorld(prop.position, fieldDepthSteps());
+        const QPointF position = m_exportRendering ? propPositionAt(prop, playbackSetIndex(), m_playhead) : prop.position;
+        const auto world = MarchCraft::FieldTransform::drillToWorld(position, fieldDepthSteps());
         const QSizeF footprint = propFootprintSteps(prop);
         result.push_back(QVariantMap{{QStringLiteral("id"), prop.id},
-            {QStringLiteral("definitionId"), prop.definitionId}, {QStringLiteral("fieldX"), prop.position.x()},
-            {QStringLiteral("fieldY"), prop.position.y()}, {QStringLiteral("worldX"), world.x()},
+            {QStringLiteral("definitionId"), prop.definitionId}, {QStringLiteral("fieldX"), position.x()},
+            {QStringLiteral("fieldY"), position.y()}, {QStringLiteral("worldX"), world.x()},
             {QStringLiteral("worldZ"), world.z()}, {QStringLiteral("rotation"), prop.rotation},
             {QStringLiteral("scaleX"), prop.scale.x()}, {QStringLiteral("scaleY"), prop.scale.y()},
             {QStringLiteral("scaleZ"), prop.scale.z()}, {QStringLiteral("appearanceVariant"), prop.appearanceVariant},
@@ -824,6 +825,7 @@ void DrillProject::newProject()
     m_sets[0].startTick = 0;
     m_meterRegions = {MarchCraft::MeterRegion{}};
     m_tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
+    m_exportBranding = {};
     m_showName = QStringLiteral("Untitled Show");
     m_fieldPreset = QStringLiteral("hs");
     m_venue = MarchCraft::VenueConfiguration{};

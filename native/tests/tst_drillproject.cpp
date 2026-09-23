@@ -1,4 +1,5 @@
 #include "DrillProject.h"
+#include "ExportController.h"
 #include "DrillTypes.h"
 #include "AssetCatalog.h"
 #include "SceneTypes.h"
@@ -1619,6 +1620,103 @@ private slots:
         QVERIFY(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong()
             > project.setInfo(1).value(QStringLiteral("startTick")).toLongLong());
         project.undo(); QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(), QStringLiteral("Set 1"));
+    }
+
+    void exportSelectionBrandingAndStateIsolation()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("T01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        project.addSet(QStringLiteral("Second"), 8);
+        project.selectAll();
+        const int current = project.currentSetIndex();
+        ExportController exporter(&project);
+        QImage logo(120,60,QImage::Format_ARGB32); logo.fill(QColor(QStringLiteral("#287d85")));
+        const QString logoPath=temp.filePath(QStringLiteral("company.png")); QVERIFY(logo.save(logoPath));
+        QVERIFY(exporter.setBranding(QStringLiteral("Example Company"), logoPath));
+        QCOMPARE(exporter.branding().value(QStringLiteral("company")).toString(), QStringLiteral("Example Company"));
+        project.undo();
+        QVERIFY(exporter.branding().value(QStringLiteral("company")).toString().isEmpty());
+        project.redo();
+        const QString saved = temp.filePath(QStringLiteral("show.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        DrillProject reopened;
+        QVERIFY(reopened.loadProject(saved));
+        ExportController restored(&reopened);
+        QCOMPARE(restored.branding().value(QStringLiteral("company")).toString(), QStringLiteral("Example Company"));
+        QCOMPARE(restored.branding().value(QStringLiteral("logo")),exporter.branding().value(QStringLiteral("logo")));
+        QVERIFY(!restored.branding().value(QStringLiteral("logo")).toString().isEmpty());
+        project.selectAll();
+        QVariantMap options{{QStringLiteral("sets"), QStringLiteral("1-2")}, {QStringLiteral("format"), QStringLiteral("pdf")}};
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(), 2);
+        QCOMPARE(project.currentSetIndex(), current);
+        QCOMPARE(project.selectedCount(), 1);
+        QVERIFY(!project.dirty());
+        QVERIFY(exporter.start(temp.filePath(QStringLiteral("charts.pdf"))));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(), 15000);
+        QCOMPARE(exporter.progress(), 1.0);
+        QVERIFY(QFileInfo(temp.filePath(QStringLiteral("charts.pdf"))).size()>1000);
+        QVERIFY(!exporter.start(temp.filePath(QStringLiteral("charts.pdf"))));
+        options[QStringLiteral("format")]=QStringLiteral("csv");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.start(temp.filePath(QStringLiteral("analytics.csv"))));
+        QTRY_VERIFY(!exporter.busy());
+        QFile csv(temp.filePath(QStringLiteral("analytics.csv"))); QVERIFY(csv.open(QIODevice::ReadOnly));
+        const auto data=csv.readAll(); QVERIFY(data.contains("T01")); QVERIFY(data.contains("Movement"));
+        options[QStringLiteral("sets")]=QStringLiteral("missing");
+        QVERIFY(!exporter.prepare(options));
+        QVERIFY(!exporter.start(temp.filePath(QStringLiteral("empty.pdf"))));
+        options[QStringLiteral("sets")]=QStringLiteral("2");options[QStringLiteral("format")]=QStringLiteral("png");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        QVERIFY(exporter.start(temp.path()));
+        exporter.cancel();
+        QVERIFY(!QFileInfo::exists(temp.filePath(QStringLiteral("chart-0001.png"))));
+        QCOMPARE(project.gridMidlineSteps(),4.0);
+        QCOMPARE(project.yardLineSteps(),8.0);
+    }
+
+    void exportPaginationVariantsAndMovements()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        QString notes;
+        for(int i=0;i<80;++i)notes += QStringLiteral("Instruction %1: hold, then move.\n").arg(i);
+        project.updateCurrentSet(QStringLiteral("1"), QStringLiteral("Opening"), notes, QStringLiteral("1-4"), 8, false);
+        project.createVariant(QStringLiteral("Alternative"), QStringLiteral("Alternative notes"));
+        ExportController exporter(&project);
+        QVariantMap options{{QStringLiteral("variants"),QStringLiteral("all")}};
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.pages().size()>3);
+        QVERIFY(exporter.pages().join(QStringLiteral(" ")).contains(QStringLiteral("Instructions continued")));
+        options[QStringLiteral("variants")]=QStringLiteral("active");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        project.createMovement(QStringLiteral("Finale"));
+        options[QStringLiteral("split")]=true;
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.plannedFiles(temp.path()).size(),2);
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:exporter.files())QVERIFY(QFileInfo(file).size()>100);
+        options[QStringLiteral("scope")]=QStringLiteral("active");
+        options[QStringLiteral("format")]=QStringLiteral("png");
+        options[QStringLiteral("dpi")]=150;
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QImage image(exporter.files().first());
+        QCOMPARE(image.size(),QSize(1650,1275));
+        QVERIFY(qAbs(image.dotsPerMeterX()-5906)<2);
+        options[QStringLiteral("framing")]=QStringLiteral("custom");
+        options[QStringLiteral("cropWidth")]=0;
+        QVERIFY(!exporter.prepare(options));
     }
 
     void exportsAreCreated()

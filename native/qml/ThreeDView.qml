@@ -5,9 +5,11 @@ import QtQuick3D.Helpers
 
 Item {
     id: root
+    property var projectModel: drillProject
+    property bool exportMode: false
     objectName: "performerView"
-    readonly property int insertColumnCount: drillProject.fieldInsertCount
-    readonly property bool editorField: drillProject.fieldStyle === "editor"
+    readonly property int insertColumnCount: root.projectModel.fieldInsertCount
+    readonly property bool editorField: root.projectModel.fieldStyle === "editor"
     property real cameraZoom: 1.0
     property string carriagePose: "horn.up"
     property bool markTimeDuringHolds: false
@@ -43,7 +45,7 @@ Item {
     }
 
     function insertStep(column) {
-        return drillProject.fieldInsertStep(column)
+        return root.projectModel.fieldInsertStep(column)
     }
 
     Rectangle { anchors.fill: parent; color: MarchCraftTheme.input; radius: 0; border.color: MarchCraftTheme.divider }
@@ -54,23 +56,23 @@ Item {
         anchors.margins: 2
         environment: SceneEnvironment {
             backgroundMode: SceneEnvironment.Color
-            clearColor: root.editorField ? "#18212d" : drillProject.lightingPreset === "lighting.sunset" ? "#b16d57"
-                        : drillProject.lightingPreset === "lighting.night" ? "#06101d"
-                        : drillProject.lightingPreset === "lighting.overcast" ? "#91a0aa"
-                        : drillProject.lightingPreset === "lighting.indoor" ? "#3d4650" : "#75a9d1"
-            antialiasingMode: drillProject.graphicsProfile === "performance" ||
-                              (drillProject.graphicsProfile === "automatic" && drillProject.performerCount > 150)
+            clearColor: root.editorField ? "#18212d" : root.projectModel.lightingPreset === "lighting.sunset" ? "#b16d57"
+                        : root.projectModel.lightingPreset === "lighting.night" ? "#06101d"
+                        : root.projectModel.lightingPreset === "lighting.overcast" ? "#91a0aa"
+                        : root.projectModel.lightingPreset === "lighting.indoor" ? "#3d4650" : "#75a9d1"
+            antialiasingMode: root.projectModel.graphicsProfile === "performance" ||
+                              (root.projectModel.graphicsProfile === "automatic" && root.projectModel.performerCount > 150)
                               ? SceneEnvironment.NoAA : SceneEnvironment.MSAA
-            antialiasingQuality: drillProject.graphicsProfile === "presentation" ? SceneEnvironment.VeryHigh
-                                 : drillProject.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
+            antialiasingQuality: root.projectModel.graphicsProfile === "presentation" ? SceneEnvironment.VeryHigh
+                                 : root.projectModel.performerCount > 150 ? SceneEnvironment.Medium : SceneEnvironment.High
         }
 
         HumanGeometry {
             id: sharedHumanGeometry
-            detailLevel: drillProject.graphicsProfile === "presentation" ? 0
-                       : drillProject.graphicsProfile === "performance" ? 2
-                       : drillProject.graphicsProfile === "automatic"
-                         ? (drillProject.performerCount > 150 ? 2 : 0) : 1
+            detailLevel: root.projectModel.graphicsProfile === "presentation" ? 0
+                       : root.projectModel.graphicsProfile === "performance" ? 2
+                       : root.projectModel.graphicsProfile === "automatic"
+                         ? (root.projectModel.performerCount > 150 ? 2 : 0) : 1
         }
 
         Node {
@@ -90,49 +92,49 @@ Item {
         DirectionalLight {
             eulerRotation.x: -48
             eulerRotation.y: -25
-            brightness: drillProject.lightingPreset === "lighting.night" ? 0.5
-                        : drillProject.lightingPreset === "lighting.overcast" ? 0.9 : 1.35
-            castsShadow: drillProject.graphicsProfile === "presentation" ||
-                         (drillProject.graphicsProfile !== "performance" && drillProject.performerCount <= 150)
+            brightness: root.projectModel.lightingPreset === "lighting.night" ? 0.5
+                        : root.projectModel.lightingPreset === "lighting.overcast" ? 0.9 : 1.35
+            castsShadow: root.projectModel.graphicsProfile === "presentation" ||
+                         (root.projectModel.graphicsProfile !== "performance" && root.projectModel.performerCount <= 150)
             shadowFactor: 45
         }
-        DirectionalLight { eulerRotation.x: 35; eulerRotation.y: 145; brightness: drillProject.lightingPreset === "lighting.night" ? 0.25 : 0.45 }
+        DirectionalLight { eulerRotation.x: 35; eulerRotation.y: 145; brightness: root.projectModel.lightingPreset === "lighting.night" ? 0.25 : 0.45 }
 
         Venue3D {
             visible: !root.editorField
-            venueId: drillProject.venuePreset
-            primaryColor: drillProject.venuePrimaryColor
-            secondaryColor: drillProject.venueSecondaryColor
-            fieldWidthMeters: (drillProject.fieldWidthSteps + 32) * drillProject.metersPerStep
-            fieldDepthMeters: drillProject.fieldDepthSteps * drillProject.metersPerStep
-            crowdDensity: drillProject.crowdDensity
-            scoreboardText: drillProject.scoreboardText
+            venueId: root.projectModel.venuePreset
+            primaryColor: root.projectModel.venuePrimaryColor
+            secondaryColor: root.projectModel.venueSecondaryColor
+            fieldWidthMeters: (root.projectModel.fieldWidthSteps + 32) * root.projectModel.metersPerStep
+            fieldDepthMeters: root.projectModel.fieldDepthSteps * root.projectModel.metersPerStep
+            crowdDensity: root.projectModel.crowdDensity
+            scoreboardText: root.projectModel.scoreboardText
         }
 
         // All drill-space geometry below is authored in marching steps and scaled
         // once here into the renderer's meter-based world.
         Node {
             id: drillWorld
-            scale: Qt.vector3d(drillProject.metersPerStep, drillProject.metersPerStep,
-                               drillProject.metersPerStep)
+            scale: Qt.vector3d(root.projectModel.metersPerStep, root.projectModel.metersPerStep,
+                               root.projectModel.metersPerStep)
 
         Model {
             source: "#Cube"
             // Keep the apron decisively below the turf.  The previous coplanar
             // placement caused depth fighting to flash black through the field.
             position: Qt.vector3d(0, -0.62, 0)
-            scale: Qt.vector3d(2.08, 0.010, (drillProject.fieldDepthSteps + 16) / 100)
+            scale: Qt.vector3d(2.08, 0.010, (root.projectModel.fieldDepthSteps + 16) / 100)
             materials: PrincipledMaterial { baseColor: root.editorField ? "#18212d" : "#17201c"; roughness: 1.0 }
         }
 
         Model {
             source: "#Cube"
             position: Qt.vector3d(0, -0.50, 0)
-            scale: Qt.vector3d(1.6, 0.010, drillProject.fieldDepthSteps / 100)
+            scale: Qt.vector3d(1.6, 0.010, root.projectModel.fieldDepthSteps / 100)
             materials: PrincipledMaterial {
                 lighting: root.editorField ? PrincipledMaterial.NoLighting : PrincipledMaterial.FragmentLighting
-                baseColor: root.editorField ? "#18212d" : drillProject.fieldPreset === "indoor" ? "#a97543" : drillProject.turfColor
-                roughness: drillProject.fieldPreset === "indoor" ? 0.68 : 0.96
+                baseColor: root.editorField ? "#18212d" : root.projectModel.fieldPreset === "indoor" ? "#a97543" : root.projectModel.turfColor
+                roughness: root.projectModel.fieldPreset === "indoor" ? 0.68 : 0.96
             }
         }
 
@@ -143,10 +145,10 @@ Item {
                 required property int index
                 source: "#Cube"
                 position: Qt.vector3d(index === 0 ? -88 : 88, -0.49, 0)
-                scale: Qt.vector3d(0.16, 0.010, drillProject.fieldDepthSteps / 100)
+                scale: Qt.vector3d(0.16, 0.010, root.projectModel.fieldDepthSteps / 100)
                 materials: PrincipledMaterial {
                     lighting: root.editorField ? PrincipledMaterial.NoLighting : PrincipledMaterial.FragmentLighting
-                    baseColor: root.editorField ? "#18212d" : drillProject.venuePrimaryColor
+                    baseColor: root.editorField ? "#18212d" : root.projectModel.venuePrimaryColor
                     roughness: 0.96
                 }
             }
@@ -158,7 +160,7 @@ Item {
                 required property int index
                 source: "#Cube"
                 position: Qt.vector3d(index === 0 ? -96 : 96, 0.06, 0)
-                scale: Qt.vector3d(0.0018, 0.0003, drillProject.fieldDepthSteps / 100)
+                scale: Qt.vector3d(0.0018, 0.0003, root.projectModel.fieldDepthSteps / 100)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
@@ -168,22 +170,22 @@ Item {
                 required property int index
                 source: "#Cube"
                 position: Qt.vector3d(index < 2 ? -88 : 88, 0.06,
-                                      index % 2 === 0 ? drillProject.fieldDepthSteps / 2
-                                                      : -drillProject.fieldDepthSteps / 2)
+                                      index % 2 === 0 ? root.projectModel.fieldDepthSteps / 2
+                                                      : -root.projectModel.fieldDepthSteps / 2)
                 scale: Qt.vector3d(0.16, 0.0003, 0.0018)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
         }
 
         Repeater3D {
-            model: root.editorField || drillProject.fieldPreset === "indoor" ? 0 : 20
+            model: root.editorField || root.projectModel.fieldPreset === "indoor" ? 0 : 20
             delegate: Model {
                 required property int index
                 source: "#Cube"
                 position: Qt.vector3d(-76 + index * 8, 0.005, 0)
-                scale: Qt.vector3d(0.08, 0.0001, drillProject.fieldDepthSteps / 100)
+                scale: Qt.vector3d(0.08, 0.0001, root.projectModel.fieldDepthSteps / 100)
                 materials: PrincipledMaterial {
-                    baseColor: index % 2 === 0 ? Qt.lighter(drillProject.turfColor, 1.08) : drillProject.turfColor
+                    baseColor: index % 2 === 0 ? Qt.lighter(root.projectModel.turfColor, 1.08) : root.projectModel.turfColor
                     roughness: 0.98
                 }
             }
@@ -195,7 +197,7 @@ Item {
             source: "#Rectangle"
             position: Qt.vector3d(0, 0.06, 0)
             eulerRotation.x: -90
-            scale: Qt.vector3d(root.editorField ? 1.92 : 1.6, drillProject.fieldDepthSteps / 100, 1)
+            scale: Qt.vector3d(root.editorField ? 1.92 : 1.6, root.projectModel.fieldDepthSteps / 100, 1)
             materials: PrincipledMaterial {
                 alphaMode: PrincipledMaterial.Blend
                 lighting: PrincipledMaterial.NoLighting
@@ -216,18 +218,25 @@ Item {
                             const minX = root.editorField ? -16 : 0
                             const spanX = root.editorField ? 192 : 160
 
-                            if (root.editorField || drillProject.showFieldGrid) {
-                                const interval = root.editorField ? 1 : drillProject.fieldGridInterval
-                                ctx.strokeStyle = root.editorField ? "#8198b5" : drillProject.fieldGridColor
-                                ctx.globalAlpha = root.editorField ? 0.6 : Math.min(0.36, drillProject.fieldGridOpacity)
+                            if (root.editorField || root.projectModel.showFieldGrid) {
+                                const interval = root.editorField ? 1 : root.projectModel.fieldGridInterval
+                                function gridStroke(position) {
+                                    const mid = Math.abs(position / root.projectModel.gridMidlineSteps - Math.round(position / root.projectModel.gridMidlineSteps)) < 0.001
+                                    ctx.strokeStyle = mid ? "#777777" : root.projectModel.fieldGridColor
+                                    ctx.globalAlpha = mid ? 0.85 : Math.max(0.25, root.projectModel.fieldGridOpacity)
+                                    ctx.lineWidth = mid ? 3 : 1.5
+                                }
+                                ctx.strokeStyle = root.editorField ? "#8198b5" : root.projectModel.fieldGridColor
+                                ctx.globalAlpha = root.editorField ? 0.6 : Math.min(0.36, root.projectModel.fieldGridOpacity)
                                 ctx.lineWidth = root.editorField ? 2 : 1
                                 for (let x = minX; x <= minX + spanX + 0.001; x += interval) {
+                                    gridStroke(x)
                                     const px = (x - minX) / spanX * width
                                     ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                                 }
-                                for (let y = 0; y <= drillProject.fieldDepthSteps + 0.001; y += interval) {
-                                    ctx.lineWidth = root.editorField ? (y % 8 === 0 ? 3 : 2) : 1
-                                    const py = height - y / drillProject.fieldDepthSteps * height
+                                for (let y = 0; y <= root.projectModel.fieldDepthSteps + 0.001; y += interval) {
+                                    gridStroke(y)
+                                    const py = height - y / root.projectModel.fieldDepthSteps * height
                                     ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke()
                                 }
                             }
@@ -249,9 +258,9 @@ Item {
                             ctx.beginPath(); ctx.moveTo(0, 2.5); ctx.lineTo(width, 2.5); ctx.stroke()
                             ctx.beginPath(); ctx.moveTo(0, height - 2.5); ctx.lineTo(width, height - 2.5); ctx.stroke()
 
-                            const markLength = (24.0 / 22.5) / drillProject.fieldDepthSteps * height
-                            for (let column = 0; !root.editorField && column < drillProject.fieldInsertCount; ++column) {
-                                const px = drillProject.fieldInsertStep(column) / 160 * width
+                            const markLength = (24.0 / 22.5) / root.projectModel.fieldDepthSteps * height
+                            for (let column = 0; !root.editorField && column < root.projectModel.fieldInsertCount; ++column) {
+                                const px = root.projectModel.fieldInsertStep(column) / 160 * width
                                 ctx.lineWidth = 4
                                 ctx.beginPath(); ctx.moveTo(px, 3); ctx.lineTo(px, 3 + markLength); ctx.stroke()
                                 ctx.beginPath(); ctx.moveTo(px, height - 3); ctx.lineTo(px, height - 3 - markLength); ctx.stroke()
@@ -259,7 +268,7 @@ Item {
                         }
                         Component.onCompleted: requestPaint()
                         Connections {
-                            target: drillProject
+                            target: root.projectModel
                             function onProjectChanged() { fieldMarkTextureCanvas.requestPaint() }
                             function onEditorSettingsChanged() { fieldMarkTextureCanvas.requestPaint() }
                         }
@@ -277,7 +286,7 @@ Item {
                 required property int index
                 readonly property int yardNumber: index < 5 ? (index + 1) * 10 : (9 - index) * 10
                 source: "#Rectangle"
-                 position: Qt.vector3d(index * 16 - 64, 0.08, drillProject.fieldDepthSteps / 2 - 12.8)
+                 position: Qt.vector3d(index * 16 - 64, 0.08, root.projectModel.fieldDepthSteps / 2 - 12.8)
                 eulerRotation.x: -90
                 scale: Qt.vector3d(0.050, 0.032, 1)
                 materials: PrincipledMaterial {
@@ -300,7 +309,7 @@ Item {
                 required property int index
                 readonly property int yardNumber: index < 5 ? (index + 1) * 10 : (9 - index) * 10
                 source: "#Rectangle"
-                 position: Qt.vector3d(index * 16 - 64, 0.08, -drillProject.fieldDepthSteps / 2 + 12.8)
+                 position: Qt.vector3d(index * 16 - 64, 0.08, -root.projectModel.fieldDepthSteps / 2 + 12.8)
                 eulerRotation.x: -90
                 scale: Qt.vector3d(0.050, 0.032, 1)
                 materials: PrincipledMaterial {
@@ -325,8 +334,8 @@ Item {
                 required property int index
                 source: "#Cube"
                  position: Qt.vector3d(0, 0.06, index === 0
-                                      ? drillProject.fieldDepthSteps / 2
-                                      : -drillProject.fieldDepthSteps / 2)
+                                      ? root.projectModel.fieldDepthSteps / 2
+                                      : -root.projectModel.fieldDepthSteps / 2)
                 scale: Qt.vector3d(1.6, 0.0003, 0.0018)
                 materials: PrincipledMaterial { baseColor: "#f4f7f5"; roughness: 0.88 }
             }
@@ -341,9 +350,9 @@ Item {
                 readonly property int column: index % root.insertColumnCount
                 readonly property bool backHash: index >= root.insertColumnCount
                 readonly property real markLength: 24.0 / 22.5
-                readonly property real hashZ: drillProject.fieldDepthSteps / 2
-                                                   - (backHash ? drillProject.backHashSteps
-                                                               : drillProject.frontHashSteps)
+                readonly property real hashZ: root.projectModel.fieldDepthSteps / 2
+                                                   - (backHash ? root.projectModel.backHashSteps
+                                                               : root.projectModel.frontHashSteps)
                 source: "#Cube"
                  position: Qt.vector3d(root.insertStep(column) - 80, 0.06,
                                       hashZ + (backHash ? -markLength / 2 : markLength / 2))
@@ -354,25 +363,25 @@ Item {
 
         // Two-foot marks parallel to the sidelines on the two regulation hash rows.
         Repeater3D {
-            model: (Math.floor(drillProject.fieldWidthSteps / 8) + 1) * 2
+            model: (Math.floor(root.projectModel.fieldWidthSteps / 8) + 1) * 2
             delegate: Model {
                 required property int index
-                readonly property int yardLineCount: Math.floor(drillProject.fieldWidthSteps / 8) + 1
+                readonly property int yardLineCount: Math.floor(root.projectModel.fieldWidthSteps / 8) + 1
                 readonly property int yardLine: index % yardLineCount
                 readonly property bool backHash: index >= yardLineCount
                 readonly property real markLength: 24.0 / 22.5
                 source: "#Cube"
                  position: Qt.vector3d(yardLine * 8 - 80, 0.06,
-                                      drillProject.fieldDepthSteps / 2
-                                      - (backHash ? drillProject.backHashSteps
-                                                  : drillProject.frontHashSteps))
+                                      root.projectModel.fieldDepthSteps / 2
+                                      - (backHash ? root.projectModel.backHashSteps
+                                                  : root.projectModel.frontHashSteps))
                 scale: Qt.vector3d(markLength / 100, 0.0003, 0.0018)
                 materials: PrincipledMaterial { baseColor: "#eef5f0"; roughness: 0.88 }
             }
         }
 
         Repeater3D {
-            model: drillProject
+            model: root.projectModel
             delegate: Node {
                 id: performerNode
                 required property real fieldX
@@ -398,49 +407,49 @@ Item {
                     travelPathType === "follow" && locomotionMode !== "idle"
                         ? travelHeading : facing
                 readonly property bool markingTime: root.markTimeDuringHolds && locomotionMode === "idle"
-                    && drillProject.playbackActive && drillProject.playbackSetIndex > 0
-                    && drillProject.playbackSetCounts > 0
+                    && root.projectModel.playbackActive && root.projectModel.playbackSetIndex > 0
+                    && root.projectModel.playbackSetCounts > 0
                 visible: performerVisible
-                position: Qt.vector3d(fieldX - 80, 0, drillProject.fieldDepthSteps / 2 - fieldY)
+                position: Qt.vector3d(fieldX - 80, 0, root.projectModel.fieldDepthSteps / 2 - fieldY)
                 eulerRotation.y: animationFacing
                 HumanPerformer3D {
                     geometrySource: sharedHumanGeometry
-                    metersPerStep: drillProject.metersPerStep
+                    metersPerStep: root.projectModel.metersPerStep
                     heightMeters: performerNode.performerHeightMeters
-                    uniformColor: drillProject.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
+                    uniformColor: root.projectModel.performerMarkerStyle === "black" ? "#080b0a" : performerNode.performerColor
                     bodyRigId: performerNode.bodyRigId
                     skinPaletteId: performerNode.skinPaletteId
                     instrumentAssetId: performerNode.instrumentAssetId
                     equipmentAssetId: performerNode.equipmentAssetId
                     selected: performerNode.isSelected
-                    marching: (performerNode.locomotionMode !== "idle" || performerNode.markingTime) && drillProject.playbackActive
+                    marching: (performerNode.locomotionMode !== "idle" || performerNode.markingTime) && root.projectModel.playbackActive
                     gaitPhase: performerNode.gaitPhase
                     gaitElapsedCounts: performerNode.gaitElapsedCounts
                     facingDegrees: performerNode.animationFacing
                     travelHeading: performerNode.travelHeading
-                    transitionProgress: drillProject.playhead
-                    countsInMove: drillProject.playbackSetCounts
+                    transitionProgress: root.projectModel.playhead
+                    countsInMove: root.projectModel.playbackSetCounts
                     travelStepsPerCount: performerNode.travelStepsPerCount
                     locomotionMode: performerNode.markingTime ? "mark_time" : performerNode.locomotionMode
                     carriagePose: root.carriagePose
                     closingTransition: !performerNode.markingTime && performerNode.closingTransition
-                    castBodyShadow: drillProject.graphicsProfile === "presentation" ||
-                                    (drillProject.graphicsProfile !== "performance" &&
-                                     drillProject.performerCount <= 150)
+                    castBodyShadow: root.projectModel.graphicsProfile === "presentation" ||
+                                    (root.projectModel.graphicsProfile !== "performance" &&
+                                     root.projectModel.performerCount <= 150)
                 }
             }
         }
         } // drillWorld
 
         Repeater3D {
-            model: drillProject.props
+            model: root.projectModel.props
             delegate: Prop3D {
                 required property var modelData
                 position: Qt.vector3d(modelData.worldX, 0, modelData.worldZ)
                 eulerRotation.y: -modelData.rotation
                 scale: Qt.vector3d(modelData.scaleX, modelData.scaleY, modelData.scaleZ)
                 definitionId: modelData.definitionId
-                primaryColor: drillProject.venueSecondaryColor
+                primaryColor: root.projectModel.venueSecondaryColor
             }
         }
     }
@@ -459,6 +468,7 @@ Item {
     }
 
     OrbitCameraController {
+        enabled: !root.exportMode
         anchors.fill: view
         z: 1.5
         origin: cameraOrigin
@@ -472,6 +482,7 @@ Item {
 
     Row {
         id: cameraControls
+        visible: !root.exportMode
         z: 2
         anchors.right: parent.right
         anchors.top: parent.top
@@ -483,6 +494,7 @@ Item {
     }
 
     Flow {
+        visible: !root.exportMode
         z: 2
         anchors.left: parent.left
         anchors.right: cameraControls.left
@@ -502,8 +514,8 @@ Item {
                 { text: "School gym", value: "venue.gym" },
                 { text: "Indoor arena", value: "venue.arena" }
             ]
-            Component.onCompleted: currentIndex = indexOfValue(drillProject.venuePreset)
-            onActivated: drillProject.venuePreset = currentValue
+            Component.onCompleted: currentIndex = indexOfValue(root.projectModel.venuePreset)
+            onActivated: root.projectModel.venuePreset = currentValue
         }
         ComboBox {
             width: 130
@@ -515,8 +527,8 @@ Item {
                 { text: "Night game", value: "lighting.night" },
                 { text: "Indoor", value: "lighting.indoor" }
             ]
-            Component.onCompleted: currentIndex = indexOfValue(drillProject.lightingPreset)
-            onActivated: drillProject.lightingPreset = currentValue
+            Component.onCompleted: currentIndex = indexOfValue(root.projectModel.lightingPreset)
+            onActivated: root.projectModel.lightingPreset = currentValue
         }
         ComboBox {
             width: 135
@@ -527,8 +539,8 @@ Item {
                 { text: "Balanced", value: "balanced" },
                 { text: "Presentation", value: "presentation" }
             ]
-            Component.onCompleted: currentIndex = indexOfValue(drillProject.graphicsProfile)
-            onActivated: drillProject.graphicsProfile = currentValue
+            Component.onCompleted: currentIndex = indexOfValue(root.projectModel.graphicsProfile)
+            onActivated: root.projectModel.graphicsProfile = currentValue
         }
         ComboBox {
             width: 135

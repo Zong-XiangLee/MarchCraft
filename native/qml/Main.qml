@@ -18,6 +18,7 @@ ApplicationWindow {
     color: MarchCraftTheme.canvas
 
     function showQaSurface(surface) {
+        if (surface === "export-dialog") { exportDialog.openFor("charts", "pdf"); return }
         if (surface === "preferences") settingsDialog.open()
         else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
@@ -194,8 +195,9 @@ ApplicationWindow {
             Action { text: "Import MusicXML…"; onTriggered: musicXmlDialog.open() }
             Action { text: "Attach audio…"; onTriggered: audioDialog.open() }
             MenuSeparator {}
-            Action { text: "Export analytics CSV…"; onTriggered: csvDialog.open() }
-            Action { text: "Export coordinate sheets PDF…"; onTriggered: pdfDialog.open() }
+            Action { text: "Export analytics CSV…"; onTriggered: exportDialog.openFor("charts", "csv") }
+            Action { text: "Export drill charts, sheets, images or video…"; onTriggered: exportDialog.openFor("charts", "pdf") }
+            Action { text: "Export coordinate sheets PDF…"; onTriggered: exportDialog.openFor("coordinates", "pdf") }
             MenuSeparator {}
             Action { text: "Exit"; shortcut: StandardKey.Quit; onTriggered: workspaceState.request("exit", "", drillProject.dirty) }
         }
@@ -724,7 +726,7 @@ ApplicationWindow {
             Label { text: "Set name (double-click a set card to customize)" }
             TextField { id: setName; Layout.fillWidth: true }
             Label { text: "Caption" }
-            TextField { id: setCaption; Layout.fillWidth: true; placeholderText: "Optional description" }
+            ScrollView { Layout.fillWidth: true; Layout.preferredHeight: 90; TextArea { id: setCaption; placeholderText: "Chart instructions (multiple lines)"; wrapMode: TextEdit.Wrap } }
             Label { text: "Measures" }
             TextField { id: setMeasure; Layout.fillWidth: true; placeholderText: "17–20" }
             Label { text: "Opening behavior"; visible: setDialog.editing && drillProject.currentSetIndex === 0 }
@@ -956,6 +958,8 @@ ApplicationWindow {
     FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMidiAsync(selectedFile) } }
     FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMusicXml(selectedFile) } }
     FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: drillProject.attachAudio(selectedFile) }
+    ExportDialog { id: exportDialog }
+    ExportVideoWindow { }
     FileDialog { id: csvDialog; title: "Export analytics"; fileMode: FileDialog.SaveFile; nameFilters: ["CSV (*.csv)"]; defaultSuffix: "csv"; onAccepted: drillProject.exportCsv(selectedFile) }
     FileDialog { id: pdfDialog; title: "Export coordinate sheets"; fileMode: FileDialog.SaveFile; nameFilters: ["PDF (*.pdf)"]; defaultSuffix: "pdf"; onAccepted: drillProject.exportCoordinatePdf(selectedFile) }
     ColorDialog {

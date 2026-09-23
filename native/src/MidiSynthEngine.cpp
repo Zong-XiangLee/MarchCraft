@@ -10,15 +10,15 @@
 #include <algorithm>
 #include <cstring>
 
-MidiSynthWorker::MidiSynthWorker(QObject *parent) : QObject(parent)
+MidiSynthWorker::MidiSynthWorker(QObject *parent, bool offline) : QObject(parent)
 {
     m_format.setSampleRate(48000);
     m_format.setChannelCount(2);
     m_format.setSampleFormat(QAudioFormat::Float);
     if (!loadLibrary()) return;
     QAudioDevice device = QMediaDevices::defaultAudioOutput();
-    if (device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
-    if (!device.isFormatSupported(m_format)) m_format = device.preferredFormat();
+    if (!offline && device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
+    if (!offline && !device.isFormatSupported(m_format)) m_format = device.preferredFormat();
     if (m_format.sampleFormat() != QAudioFormat::Float || m_format.channelCount() != 2) {
         setStatus(QStringLiteral("Audio device does not support stereo floating-point playback")); return;
     }
@@ -32,6 +32,7 @@ MidiSynthWorker::MidiSynthWorker(QObject *parent) : QObject(parent)
     if (!QFileInfo::exists(font) || p_sfLoad(m_synth, font.toUtf8().constData(), 1) < 0) {
         setStatus(QStringLiteral("Bundled GeneralUser GS SoundFont is missing")); return;
     }
+    if (offline) { m_available = true; setStatus(QStringLiteral("Offline MIDI synth ready")); return; }
     m_sink = new QAudioSink(device, m_format, this);
     // About 100 ms of headroom, serviced independently of GUI/render stalls.
     m_sink->setBufferSize(m_format.bytesForFrames(m_format.sampleRate() / 10));

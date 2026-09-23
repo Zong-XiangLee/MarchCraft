@@ -93,6 +93,7 @@ QJsonObject DrillProject::toJson() const
         if (i != m_currentMovement) entry.insert(QStringLiteral("state"), m_movements[i].state);
         movements.append(entry);
     }
+    result.insert(QStringLiteral("exportBranding"), m_exportBranding);
     result.insert(QStringLiteral("movements"), movements);
     result.insert(QStringLiteral("currentMovement"), m_currentMovement);
     return result;
@@ -172,6 +173,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_performers = std::move(performers);
     m_sets = std::move(sets);
     m_archivedSets = std::move(archivedSets);
+    m_exportBranding = object.value(QStringLiteral("exportBranding")).toObject();
     m_showName = object.value(QStringLiteral("showName")).toString(QStringLiteral("Untitled Show"));
     m_fieldPreset = MarchCraft::fieldGeometry(object.value(QStringLiteral("fieldPreset")).toString()).id;
     m_audioSource = object.value(QStringLiteral("audioSource")).toString();

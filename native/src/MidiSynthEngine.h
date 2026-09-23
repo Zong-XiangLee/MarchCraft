@@ -17,7 +17,8 @@ class MidiSynthWorker final : public QObject
 {
     Q_OBJECT
 public:
-    explicit MidiSynthWorker(QObject *parent = nullptr);
+    explicit MidiSynthWorker(QObject *parent = nullptr, bool offline = false);
+    qint64 renderOffline(char *data, qint64 size) { return render(data, size); }
     ~MidiSynthWorker() override;
 
     bool load(const MarchCraft::MusicDocument &document);

@@ -26,6 +26,8 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QString showName READ showName WRITE setShowName NOTIFY projectChanged)
     Q_PROPERTY(int performerCount READ performerCount NOTIFY performerCountChanged)
     Q_PROPERTY(QString fieldPreset READ fieldPreset WRITE setFieldPreset NOTIFY projectChanged)
+    Q_PROPERTY(double gridMidlineSteps READ gridMidlineSteps CONSTANT)
+    Q_PROPERTY(double yardLineSteps READ yardLineSteps CONSTANT)
     Q_PROPERTY(double fieldWidthSteps READ fieldWidthSteps CONSTANT)
     Q_PROPERTY(double metersPerStep READ metersPerStep CONSTANT)
     Q_PROPERTY(int fieldInsertCount READ fieldInsertCount CONSTANT)
@@ -195,6 +197,8 @@ public:
     void setShowName(const QString &value);
     QString fieldPreset() const { return m_fieldPreset; }
     void setFieldPreset(const QString &value);
+    double gridMidlineSteps() const { return MarchCraft::FieldTransform::GridMidlineSteps; }
+    double yardLineSteps() const { return MarchCraft::FieldTransform::YardLineSteps; }
     double fieldWidthSteps() const { return 160.0; }
     double metersPerStep() const { return MarchCraft::FieldTransform::MetersPerStep; }
     int fieldInsertCount() const { return static_cast<int>(fieldWidthSteps() / 8.0) * 4; }
@@ -522,6 +526,9 @@ signals:
     void clinicChanged();
 
 private:
+    friend class ExportController;
+    QJsonObject m_exportBranding;
+    bool m_exportRendering = false;
     DrillProject(bool backgroundWorker, QObject *parent);
     friend class ProjectStateCommand;
     friend class TransportController;
@@ -660,7 +667,7 @@ private:
     QString m_fieldStyle = QStringLiteral("realistic");
     bool m_showFieldGrid = false;
     double m_fieldGridInterval = 1.0;
-    QString m_fieldGridColor{QStringLiteral("#7dd3fc")};
+    QString m_fieldGridColor{QStringLiteral("#b8b8b8")};
     double m_fieldGridOpacity = 0.18;
     QString m_measurementUnit{QStringLiteral("steps")};
     FormationPreviewState m_formationPreview;

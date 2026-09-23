@@ -12,7 +12,7 @@ set(CMAKE_AUTOMOC ON)
 set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 6.6 REQUIRED COMPONENTS
-    Core Concurrent Gui Quick QuickControls2 Quick3D Multimedia Xml Sql Test)
+    Core Concurrent Gui Widgets PrintSupport Quick QuickControls2 Quick3D Multimedia Xml Sql Test)
 
 set_source_files_properties(qml/MarchCraftTheme.qml PROPERTIES QT_QML_SINGLETON_TYPE TRUE)
 
@@ -38,6 +38,8 @@ qt_add_executable(marchcraft
     src/MidiSynthEngine.h
     src/TransportController.cpp
     src/TransportController.h
+    src/ExportController.cpp
+    src/ExportController.h
     src/WorkspaceController.cpp
     src/WorkspaceController.h
     src/SceneTypes.h
@@ -52,6 +54,8 @@ qt_add_qml_module(marchcraft
         qml/Main.qml
         qml/EditorCommandBars.qml
         qml/WelcomeWorkspace.qml
+        qml/ExportDialog.qml
+        qml/ExportVideoWindow.qml
         qml/EditorPreferences.qml
         qml/PerformerDialog.qml
         qml/ProjectSettingsDialog.qml
@@ -138,6 +142,8 @@ target_link_libraries(marchcraft PRIVATE
     Qt6::Core
     Qt6::Concurrent
     Qt6::Gui
+    Qt6::Widgets
+    Qt6::PrintSupport
     Qt6::Quick
     Qt6::QuickControls2
     Qt6::Quick3D
@@ -212,6 +218,8 @@ if(BUILD_TESTING)
         src/MidiSynthEngine.h
         src/TransportController.cpp
         src/TransportController.h
+        src/ExportController.cpp
+        src/ExportController.h
         src/WorkspaceController.cpp
         src/WorkspaceController.h
         src/SceneTypes.h
@@ -220,7 +228,7 @@ if(BUILD_TESTING)
     )
     target_include_directories(marchcraft_tests PRIVATE src)
     target_link_libraries(marchcraft_tests PRIVATE
-        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Xml Qt6::Sql Qt6::Test)
+        Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::PrintSupport Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Xml Qt6::Sql Qt6::Test)
     qt_add_resources(marchcraft_tests "marchcraft_test_catalog"
         PREFIX "/catalog"
         BASE "${CMAKE_CURRENT_SOURCE_DIR}/assets"
