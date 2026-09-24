@@ -75,16 +75,16 @@ Item {
         }
     }
     onScaleChanged: drawing.requestPaint()
-    Rectangle { anchors.fill: parent; color: "#10171e"; border.color: "#303b48" }
+    Rectangle { anchors.fill: parent; color: MarchCraftTheme.input; border.color: MarchCraftTheme.divider }
     Column {
         y: root.rulerHeight; width: root.labelWidth
         Repeater {
             model: ["DRILL", "MUSIC", "AUDIO"]
             Rectangle {
                 required property string modelData
-                width: root.labelWidth; height: root.laneHeight; color: "#19232e"
-                Label { anchors.centerIn: parent; text: modelData; color: "#9baaba"; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.8 }
-                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: "#303b48" }
+                width: root.labelWidth; height: root.laneHeight; color: MarchCraftTheme.panelHeader
+                Label { anchors.centerIn: parent; text: modelData; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; font.bold: true; font.letterSpacing: 0.8 }
+                Rectangle { anchors.bottom: parent.bottom; width: parent.width; height: 1; color: MarchCraftTheme.divider }
             }
         }
     }
@@ -110,13 +110,17 @@ Item {
         }
         Canvas {
             id: drawing
+            Connections {
+                target: MarchCraftTheme
+                function onThemeIdChanged() { Qt.callLater(function() { drawing.requestPaint() }) }
+            }
             x: viewport.contentX; width: viewport.width; height: viewport.height - 14
             onWidthChanged: requestPaint()
             onHeightChanged: requestPaint()
             onPaint: {
                 const ctx = getContext("2d"); ctx.reset()
-                ctx.fillStyle = "#151f29"; ctx.fillRect(0, 0, width, root.rulerHeight)
-                ctx.strokeStyle = "#2c3946"; ctx.lineWidth = 1
+                ctx.fillStyle = MarchCraftTheme.panel; ctx.fillRect(0, 0, width, root.rulerHeight)
+                ctx.strokeStyle = MarchCraftTheme.divider; ctx.lineWidth = 1
                 for (let row = 0; row < 4; row++) {
                     const y = root.rulerHeight + row * root.laneHeight
                     ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(width, y); ctx.stroke()
@@ -125,7 +129,7 @@ Item {
                 let step = steps[steps.length - 1]
                 for (let i = 0; i < steps.length; i++) if (steps[i] * root.scale >= 65) { step = steps[i]; break }
                 const first = Math.max(0, Math.floor(root.xTime(viewport.contentX) / (step * 1000)))
-                ctx.font = "10px sans-serif"; ctx.fillStyle = "#a8b8c9"
+                ctx.font = "10px sans-serif"; ctx.fillStyle = MarchCraftTheme.textSecondary
                 for (let sec = first * step; root.timeX(sec * 1000) < viewport.contentX + width; sec += step) {
                     const x = root.timeX(sec * 1000) - viewport.contentX
                     ctx.fillText(step < 1 ? sec.toFixed(1) + "s" : root.formatTime(sec * 1000), x + 4, 16)
@@ -185,15 +189,15 @@ Item {
                 Rectangle {
                     anchors.fill: parent; anchors.topMargin: 17; anchors.bottomMargin: 3; anchors.rightMargin: 2
                     visible: page.index > 0; radius: 3
-                    color: page.selected ? "#284e6d" : "#203447"
-                    border.color: page.selected ? "#7fc7ff" : "#44617c"
+                    color: page.selected ? MarchCraftTheme.selection : MarchCraftTheme.surfaceRaised
+                    border.color: page.selected ? MarchCraftTheme.accentHover : MarchCraftTheme.dividerStrong
                     Column {
                         anchors.fill: parent; anchors.margins: 6; spacing: 2; clip: true
-                        Label { width: Math.max(0, parent.width - 14); text: "→ " + page.info.number + " · " + page.info.name; elide: Text.ElideRight; color: "#e0edfa"; font.pixelSize: 11; font.bold: true }
-                        Label { visible: root.laneHeight > 60; width: parent.width; text: page.info.counts + " ct" + (page.info.variantCount > 1 ? " · Variant " + page.info.variantLabel : ""); elide: Text.ElideRight; color: "#99b3cd"; font.pixelSize: 10 }
+                        Label { width: Math.max(0, parent.width - 14); text: "→ " + page.info.number + " · " + page.info.name; elide: Text.ElideRight; color: MarchCraftTheme.textPrimary; font.pixelSize: 11; font.bold: true }
+                        Label { visible: root.laneHeight > 60; width: parent.width; text: page.info.counts + " ct" + (page.info.variantCount > 1 ? " · Variant " + page.info.variantLabel : ""); elide: Text.ElideRight; color: MarchCraftTheme.textSecondary; font.pixelSize: 10 }
                     }
                 }
-                Rectangle { x: page.index === 0 ? 0 : parent.width - 3; y: 3; width: 3; height: parent.height - 6; color: page.selected ? "#a7d9ff" : "#6c94b8" }
+                Rectangle { x: page.index === 0 ? 0 : parent.width - 3; y: 3; width: 3; height: parent.height - 6; color: page.selected ? MarchCraftTheme.accentHover : MarchCraftTheme.textMuted }
 
                 MouseArea {
                     id: pageHit; objectName: "pageHit" + page.index
@@ -209,8 +213,8 @@ Item {
                 Rectangle {
                     id: handle; objectName: "pageHandle" + page.index
                     visible: !root.transport.playing && page.width >= 18
-                    width: 14; height: 18; x: Math.max(0, page.width - width - 4); y: 19; radius: 2; color: "#48637b"
-                    Label { anchors.centerIn: parent; text: "⠿"; color: "#d3e1ec"; font.pixelSize: 12 }
+                    width: 14; height: 18; x: Math.max(0, page.width - width - 4); y: 19; radius: 2; color: MarchCraftTheme.surfaceHover
+                    Label { anchors.centerIn: parent; text: "⠿"; color: MarchCraftTheme.textPrimary; font.pixelSize: 12 }
                     MouseArea {
                         anchors.fill: parent; cursorShape: Qt.SizeHorCursor
                         property real pressX: 0
@@ -239,9 +243,9 @@ Item {
                 x: root.timeX(positionMs) - (index === 0 ? 0 : width / 2)
                 y: root.rulerHeight; width: intervalMs * root.scale / 1000 >= 36 ? 28 : 4
                 height: 14; z: 5; radius: 2
-                color: "#35516b"
+                color: MarchCraftTheme.selection
                 visible: x + width >= viewport.contentX && x <= viewport.contentX + viewport.width
-                Label { anchors.centerIn: parent; visible: parent.width > 4; text: marker.info.number; font.pixelSize: 9; color: "#dceaff" }
+                Label { anchors.centerIn: parent; visible: parent.width > 4; text: marker.info.number; font.pixelSize: 9; color: MarchCraftTheme.textPrimary }
                 MouseArea {
                     objectName: "pageMarker" + marker.index
                     anchors.fill: parent; acceptedButtons: Qt.LeftButton | Qt.RightButton
@@ -311,7 +315,7 @@ Item {
                 }
             }
         }
-        Label { x: viewport.contentX + 24; y: root.rulerHeight + root.laneHeight + 12; visible: root.project.musicMeasureCount === 0; text: "Import MIDI or MusicXML from Music tools"; color: "#697e90"; font.pixelSize: 11 }
+        Label { x: viewport.contentX + 24; y: root.rulerHeight + root.laneHeight + 12; visible: root.project.musicMeasureCount === 0; text: "Import MIDI or MusicXML from Music tools"; color: MarchCraftTheme.textMuted; font.pixelSize: 11 }
         Label {
             x: viewport.contentX + 24; y: root.rulerHeight + root.laneHeight * 2 + 5
             text: root.project.audioSource ? root.project.audioSource.split(/[\\/]/).pop() : "Attach rehearsal audio from Music tools"
@@ -338,7 +342,7 @@ Item {
             visible: root.dragFrom >= 0; z: 21
             x: viewport.contentX + Math.max(0, Math.min(viewport.width - width, root.dragViewportX)); y: root.rulerHeight + root.laneHeight - 20
             text: root.draggedLabel + " → position " + (root.targetIndex() + 1); color: "#ffffff"; padding: 4; font.pixelSize: 10
-            background: Rectangle { color: "#314e69"; radius: 3 }
+            background: Rectangle { color: MarchCraftTheme.selection; radius: 3 }
         }
     }
     Timer {

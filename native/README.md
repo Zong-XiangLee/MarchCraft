@@ -132,3 +132,24 @@ The movement bar above the field switches between independent drill and music ed
 The roster, field, and scene settings belong to the show. Adding/removing performers updates every movement; their placements remain independent. Switching tabs stops playback, clears performer selection and pending formation previews, restores the movement's editing page and measure range, and scrolls the timeline to its zero origin. Switching does not dirty the show or occupy undo history. Undoing an edit in another movement returns to that movement. PDF/CSV exports and music/coordinate mapping operate on the active movement; full coordinate JSON import still replaces the show.
 
 Project schema 11 stores all movements in the existing `.marchcraft` database. Earlier projects open as Movement 1; older app versions reject schema 11 rather than discard the additional movements. MIDI synthesis and audio delivery run on a dedicated thread with precomputed event sample positions, independently of GUI animation. Playback position uses processed audio time, and gain/loop toggles preserve the active audio stream.
+
+### Appearance and camera navigation
+
+Editor preferences → General → Appearance offers Graphite (blue), Midnight (teal),
+and Warm charcoal (amber). The choice applies immediately and is remembered on
+this computer independently of project undo/history. Screenshot QA can use
+`--qa-theme graphite`, `--qa-theme midnight`, or `--qa-theme warm` without changing
+the saved preference. Use `--field-preset indoor` to verify the wood surface.
+
+In 3D, drag to orbit, Shift-drag or right/middle-drag to pan, and scroll to dolly.
+Double-click returns to the press-box view. Preset changes ease between views;
+manual movement uses a shorter settling time. Windows reduced-motion settings
+remove these animations. Orbit elevation and dolly distance are bounded to keep
+normal navigation above the ground; pan speed follows distance and viewport size.
+
+Venues use original procedural Qt geometry: rehearsal fencing and benches,
+track lanes and segmented stadium terraces, press-box glazing, bowl end seating,
+and open-front indoor halls with banners and retractable seating. Turf grain and
+wood planks use deterministic mipmapped textures. The audience-side cutaway keeps
+the drill readable; these remain stylized venues, not photorealistic Blender assets.
+Field coordinates, regulation markings, and performer ground height are unchanged.
