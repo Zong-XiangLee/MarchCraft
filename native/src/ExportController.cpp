@@ -142,6 +142,7 @@ ExportOptions ExportOptions::fromMap(const QVariantMap &m)
     o.subsets = b(QStringLiteral("subsets"));
     o.split = b(QStringLiteral("split"), false);
     o.margin = qBound(5.0, m.value(QStringLiteral("margin"), 10).toDouble(), 35.0);
+    o.performerLabelSize = qBound(4.0, m.value(QStringLiteral("performerLabelSize"), 6).toDouble(), 18.0);
     o.fontSize = qBound(6.0, m.value(QStringLiteral("fontSize"), 9).toDouble(), 18.0);
     o.markerSize = qBound(1.0, m.value(QStringLiteral("markerSize"), 2).toDouble(), 6.0);
     o.dpi = m.value(QStringLiteral("dpi"), 300).toInt();
@@ -159,6 +160,7 @@ ExportOptions ExportOptions::fromMap(const QVariantMap &m)
 ExportController::ExportController(DrillProject *project, QObject *parent)
     : QObject(parent), m_project(project), m_temp(std::make_unique<QTemporaryDir>())
 {
+    m_options = ExportOptions::fromMap({});
     m_timer.setInterval(0);
     connect(&m_timer, &QTimer::timeout, this, &ExportController::tick);
     connect(&m_encoder, &QProcess::readyReadStandardError, this,
@@ -212,8 +214,14 @@ QObject *ExportController::renderProject() const
 {
     return m_activeChart >= 0 ? m_clones[m_charts[m_activeChart].clone].get() : nullptr;
 }
-QVariantMap ExportController::branding() const { return m_project->m_exportBranding.toVariantMap(); }
-void ExportController::refresh() { emit changed(); }
+QVariantMap ExportController::branding() const
+{
+    return m_project->m_exportBranding.toVariantMap();
+}
+void ExportController::refresh()
+{
+    emit changed();
+}
 QString ExportController::ffmpeg() const
 {
     auto p = QSettings().value(QStringLiteral("export/ffmpeg")).toString();
@@ -228,7 +236,8 @@ QString ExportController::lastDestination() const
 {
     return QSettings()
         .value(QStringLiteral("export/destination"),
-               QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation)).filePath(QStringLiteral("MarchCraft.pdf")))
+               QDir(QStandardPaths::writableLocation(QStandardPaths::DocumentsLocation))
+                   .filePath(QStringLiteral("MarchCraft.pdf")))
         .toString();
 }
 QStringList ExportController::presetNames() const
@@ -245,7 +254,10 @@ void ExportController::savePreset(const QString &name, const QVariantMap &option
 }
 QVariantMap ExportController::loadPreset(const QString &name) const
 {
-    return QSettings().value(QStringLiteral("export/presets/") + safeName(name)).toMap();
+    auto preset = QSettings().value(QStringLiteral("export/presets/") + safeName(name)).toMap();
+    if (!preset.contains(QStringLiteral("performerLabelSize")) && preset.contains(QStringLiteral("fontSize")))
+        preset.insert(QStringLiteral("performerLabelSize"), preset.value(QStringLiteral("fontSize")));
+    return preset;
 }
 bool ExportController::setBranding(const QString &name, const QString &logo, bool removeLogo)
 {
@@ -340,6 +352,9 @@ bool ExportController::prepare(const QVariantMap &options)
 {
     if (m_busy)
         return false;
+    ++m_previewRevision;
+    m_tableRows.clear();
+    m_totalFrames = 0;
     m_options = ExportOptions::fromMap(options);
     m_activeChart = -1;
     emit renderProjectChanged();
@@ -349,6 +364,8 @@ bool ExportController::prepare(const QVariantMap &options)
     m_pages.clear();
     m_pageNames.clear();
     m_files.clear();
+    if (!m_previewUrl.isEmpty())
+        QFile::remove(pathOf(m_previewUrl));
     m_previewUrl.clear();
     m_message.clear();
     m_progress = 0;
@@ -366,7 +383,39 @@ bool ExportController::prepare(const QVariantMap &options)
         fail(QStringLiteral("Crop width and height must be between 1 and 1000 steps."));
         return false;
     }
-    const auto snapshot = m_project->toJson();
+    auto snapshot = m_project->toJson();
+    auto branding = m_project->m_exportBranding;
+    if (options.contains(QStringLiteral("brandingCompany")))
+        branding.insert(QStringLiteral("company"),
+                        options.value(QStringLiteral("brandingCompany")).toString().trimmed());
+    if (options.value(QStringLiteral("brandingRemoveLogo")).toBool())
+        branding.remove(QStringLiteral("logo"));
+    else if (!options.value(QStringLiteral("brandingLogoPath")).toString().isEmpty())
+    {
+        QImageReader reader(pathOf(options.value(QStringLiteral("brandingLogoPath")).toString()));
+        reader.setAutoTransform(true);
+        const auto size = reader.size();
+        if (!size.isValid() || size.width() > 16000 || size.height() > 16000 ||
+            !QList<QByteArray>{"png", "jpeg", "jpg"}.contains(reader.format()))
+        {
+            fail(QStringLiteral("Choose a PNG or JPEG logo, at most 16000 pixels per side."));
+            return false;
+        }
+        if (size.width() > 1600 || size.height() > 1600)
+            reader.setScaledSize(size.scaled(1600, 1600, Qt::KeepAspectRatio));
+        const auto image = reader.read();
+        if (image.isNull())
+        {
+            fail(reader.errorString());
+            return false;
+        }
+        QByteArray data;
+        QBuffer buffer(&data);
+        buffer.open(QIODevice::WriteOnly);
+        image.save(&buffer, "PNG");
+        branding.insert(QStringLiteral("logo"), QString::fromLatin1(data.toBase64()));
+    }
+
     const auto moves = snapshot.value(QStringLiteral("movements")).toArray();
     for (int i = 0; i < moves.size(); ++i)
     {
@@ -399,6 +448,7 @@ bool ExportController::prepare(const QVariantMap &options)
                                                              !m_options.sections.contains(p.section));
                                                  }),
                                   clone->m_performers.end());
+        clone->m_exportBranding = branding;
         clone->m_exportRendering = true;
         for (auto &p : clone->m_performers)
             p.selected = false;
@@ -463,8 +513,8 @@ bool ExportController::prepare(const QVariantMap &options)
             lines = lines.mid(continuationLines);
         }
     }
-    if (m_options.content == QStringLiteral("coordinates") && m_options.format != QStringLiteral("csv") &&
-        !m_options.format.startsWith(QStringLiteral("video")))
+    if ((m_options.content == QStringLiteral("coordinates") || m_options.content == QStringLiteral("both")) &&
+        m_options.format != QStringLiteral("csv") && !m_options.format.startsWith(QStringLiteral("video")))
     {
         const int rows = qMax(1, int((size.height() - 2 * margin - 110) / (m_options.fontSize * 3 + 10)));
         for (int clone = 0; clone < int(m_clones.size()); ++clone)
@@ -478,6 +528,39 @@ bool ExportController::prepare(const QVariantMap &options)
                     m_pages.push_back({charts[r], {}, false, person, charts.mid(r, rows)});
             }
     }
+    if (m_options.split && m_options.content == QStringLiteral("both"))
+        std::stable_sort(m_pages.begin(), m_pages.end(), [&](const Page &a, const Page &b)
+                         { return m_charts[a.chart].clone < m_charts[b.chart].clone; });
+    m_frameEnds.clear();
+    m_totalFrames = 0;
+    for (const auto &chart : m_charts)
+    {
+        m_totalFrames += qMax(1, qRound(chart.durationMs * m_options.fps / 1000.0));
+        m_frameEnds << m_totalFrames;
+    }
+    m_tableRows << QVariant(QStringList{
+        QStringLiteral("Movement"), QStringLiteral("Performer"), QStringLiteral("Name"),
+        QStringLiteral("Instrument"), QStringLiteral("Section"), QStringLiteral("Set"),
+        QStringLiteral("Variant"), QStringLiteral("Measure"), QStringLiteral("Counts"),
+        QStringLiteral("Coordinate"), QStringLiteral("Move steps"), QStringLiteral("Instructions")});
+    if (m_options.format == QStringLiteral("csv"))
+        for (int c = 0; c < m_charts.size(); ++c)
+        {
+            activateChart(c);
+            auto &p = *m_clones[m_charts[c].clone];
+            const auto &set = p.m_sets[m_charts[c].set];
+            for (int r = 0; r < p.m_performers.size(); ++r)
+            {
+                const auto &person = p.m_performers[r];
+                m_tableRows << QVariant(QStringList{
+                    p.m_movements[0].name, person.label, person.name, person.instrument, person.section,
+                    set.number, set.activeVariant().label, set.measure,
+                    QString::number(p.setInfo(m_charts[c].set).value(QStringLiteral("counts")).toInt()),
+                    p.coordinateFor(r, m_charts[c].set),
+                    QString::number(p.transitionDistance(r, m_charts[c].set), 'f', 2),
+                    set.activeVariant().caption});
+            }
+        }
     for (const auto &page : m_pages)
     {
         activateChart(page.chart);
@@ -489,11 +572,20 @@ bool ExportController::prepare(const QVariantMap &options)
             title += QStringLiteral(" / Instructions continued");
         if (page.performer >= 0)
             title += QStringLiteral(" / ") + p.m_performers[page.performer].label;
-        m_pageNames << title;
+        m_pageNames << (page.performer >= 0 ? QStringLiteral("Coordinates / ")
+                                            : QStringLiteral("Diagram / ")) +
+                           title;
     }
     m_activeChart = -1;
     emit renderProjectChanged();
     m_message = QStringLiteral("%1 pages, %2 selected set variants").arg(m_pages.size()).arg(m_charts.size());
+    if (m_options.format == QStringLiteral("csv"))
+        m_message = QStringLiteral("%1 data rows, 12 columns").arg(m_tableRows.size() - 1);
+    else if (m_options.format.startsWith(QStringLiteral("video")))
+        m_message = QStringLiteral("%1 seconds · %2 frames · %3 fps")
+                        .arg(duration(), 0, 'f', 2)
+                        .arg(m_totalFrames)
+                        .arg(m_options.fps);
     if (m_options.framing == QStringLiteral("custom"))
     {
         bool clipped = false;
@@ -507,7 +599,10 @@ bool ExportController::prepare(const QVariantMap &options)
         if (clipped)
             m_message += QStringLiteral(". Warning: custom crop excludes performers.");
     }
-    preview(0);
+    if (m_options.format.startsWith(QStringLiteral("video")))
+        previewTime(0);
+    else
+        preview(0);
     emit changed();
     return true;
 }
@@ -550,7 +645,23 @@ void ExportController::drawHeader(QPainter &p, const QRectF &r, DrillProject &pr
     if (m_options.companyLogo)
         logo(QImage::fromData(QByteArray::fromBase64(b.value(QStringLiteral("logo")).toString().toLatin1())));
     if (m_options.marchcraftLogo)
-        logo(grayscale(QImage(QStringLiteral(":/branding/marchcraft-logo.png"))));
+    {
+        // Export-only vector monogram and wordmark. No raster scaling or gray
+        // background.
+        p.save();
+        p.translate(x, r.top() + 3);
+        p.setPen(Qt::NoPen);
+        p.setBrush(Qt::black);
+        QPolygonF mark{QPointF(0, 28),  QPointF(0, 0),   QPointF(6, 0),   QPointF(14, 13),
+                       QPointF(22, 0),  QPointF(28, 0),  QPointF(28, 28), QPointF(22, 28),
+                       QPointF(22, 11), QPointF(14, 23), QPointF(6, 11),  QPointF(6, 28)};
+        p.drawPolygon(mark);
+        p.setPen(Qt::black);
+        p.setFont(font(7, true));
+        p.drawText(QRectF(33, 2, 59, 24), Qt::AlignVCenter, QStringLiteral("MARCH\nCRAFT"));
+        p.restore();
+        x += 100;
+    }
     p.setPen(Qt::black);
     p.setFont(font(13, true));
     if (m_options.headings)
@@ -665,7 +776,7 @@ void ExportController::drawChart(QPainter &p, const QRectF &area, DrillProject &
             p.drawRect(QRectF(-w / 2, -h / 2, w, h));
             p.restore();
         }
-    p.setFont(font(m_options.fontSize));
+    p.setFont(font(m_options.performerLabelSize));
     QVector<QRectF> occupied;
     for (const auto &pt : points)
     {
@@ -685,7 +796,8 @@ void ExportController::drawChart(QPainter &p, const QRectF &area, DrillProject &
             p.drawEllipse(pos, m_options.markerSize, m_options.markerSize);
         if (!m_options.labels)
             continue;
-        const QSizeF labelSize(p.fontMetrics().horizontalAdvance(person.label) + 2, m_options.fontSize + 2);
+        const QSizeF labelSize(p.fontMetrics().horizontalAdvance(person.label) + 2,
+                               m_options.performerLabelSize + 2);
         QRectF label(pos + QPointF(3, -labelSize.height() / 2), labelSize);
         bool placed = false;
         for (int ring = 0; ring < 10 && !placed; ++ring)
@@ -760,7 +872,7 @@ void ExportController::drawPage(QPainter &p, const QRectF &target, int index, bo
             p.drawText(QRectF(body.left(), y, body.width(), rowHeight / 2), Qt::AlignLeft,
                        QStringLiteral("Set %1 %2 | %3 | Measures %4 | %5 counts")
                            .arg(s.number, s.activeVariant().label, s.activeVariant().name, s.measure)
-                           .arg(s.counts));
+                           .arg(pr.setInfo(m_charts[c].set).value(QStringLiteral("counts")).toInt()));
             p.setFont(font(m_options.fontSize));
             p.drawText(QRectF(body.left(), y + rowHeight / 2, body.width(), rowHeight / 2), Qt::AlignLeft,
                        pr.coordinateFor(page.performer, m_charts[c].set) +
@@ -802,11 +914,18 @@ void ExportController::drawPage(QPainter &p, const QRectF &target, int index, bo
             y += m_options.fontSize + 3;
         }
     }
+    int documentFirst = index, documentLast = index;
+    while (documentFirst > 0 && documentForPage(documentFirst - 1) == documentForPage(index))
+        --documentFirst;
+    while (documentLast + 1 < m_pages.size() && documentForPage(documentLast + 1) == documentForPage(index))
+        ++documentLast;
     if (m_options.numbers)
     {
         p.setFont(font(7));
         p.drawText(QRectF(body.left(), body.bottom() - 10, body.width(), 12), Qt::AlignRight,
-                   QStringLiteral("Page %1 of %2").arg(index + 1).arg(m_pages.size()));
+                   QStringLiteral("Page %1 of %2")
+                       .arg(index - documentFirst + 1)
+                       .arg(documentLast - documentFirst + 1));
     }
     p.restore();
 }
@@ -821,9 +940,11 @@ void ExportController::preview(int page)
     painter.setRenderHint(QPainter::Antialiasing);
     drawPage(painter, QRectF(QPointF(), image.size()), page);
     painter.end();
-    const QString path = m_temp->filePath(
-        QStringLiteral("preview-%1-%2.png").arg(page).arg(QDateTime::currentMSecsSinceEpoch()));
+    const QString path =
+        m_temp->filePath(QStringLiteral("preview-%1-%2.png").arg(page).arg(++m_previewRevision));
     image.save(path);
+    if (!m_previewUrl.isEmpty() && pathOf(m_previewUrl) != path)
+        QFile::remove(pathOf(m_previewUrl));
     m_previewUrl = QUrl::fromLocalFile(path).toString();
     emit changed();
 }
@@ -837,13 +958,24 @@ QStringList ExportController::plannedFiles(const QString &destination) const
         for (int i = 0; i < m_pages.size(); ++i)
             files << QDir(path).filePath(m_options.basename +
                                          QStringLiteral("-%1.png").arg(i + 1, 4, 10, QLatin1Char('0')));
-    else if (m_options.split && m_options.format == QStringLiteral("pdf"))
+    else if ((m_options.split || m_options.content == QStringLiteral("both")) &&
+             m_options.format == QStringLiteral("pdf"))
     {
-        for (int i = 0; i < int(m_clones.size()); ++i)
-            if (std::any_of(m_charts.cbegin(), m_charts.cend(), [&](const auto &c) { return c.clone == i; }))
-                files << QDir(path).filePath(QStringLiteral("%1-%2.pdf")
-                                                 .arg(i + 1, 2, 10, QLatin1Char('0'))
-                                                 .arg(safeName(m_clones[i]->m_movements[0].name)));
+        for (int page = 0; page < m_pages.size(); ++page)
+        {
+            if (page > 0 && documentForPage(page) == documentForPage(page - 1))
+                continue;
+            const auto &p = *m_clones[m_charts[m_pages[page].chart].clone];
+            QString name = m_options.basename;
+            if (m_options.split)
+                name += QStringLiteral(" - %1-%2")
+                            .arg(m_charts[m_pages[page].chart].clone + 1)
+                            .arg(safeName(p.m_movements[0].name));
+            if (m_options.content == QStringLiteral("both"))
+                name += m_pages[page].performer >= 0 ? QStringLiteral(" - Coordinates")
+                                                     : QStringLiteral(" - Drill Charts");
+            files << QDir(path).filePath(name + QStringLiteral(".pdf"));
+        }
     }
     else
     {
@@ -891,8 +1023,8 @@ bool ExportController::start(const QString &destination, bool overwrite)
         m_printer->setPageSize(QPageSize(pageSize(), QPageSize::Point));
         m_printer->setFullPage(true);
         QPrintDialog dialog(m_printer.get());
-        dialog.setMinMax(1,m_pages.size());
-        dialog.setOption(QAbstractPrintDialog::PrintPageRange,true);
+        dialog.setMinMax(1, m_pages.size());
+        dialog.setOption(QAbstractPrintDialog::PrintPageRange, true);
         if (dialog.exec() != QDialog::Accepted)
         {
             m_printer.reset();
@@ -911,12 +1043,14 @@ bool ExportController::start(const QString &destination, bool overwrite)
     m_busy = true;
     m_cancel = false;
     m_progress = 0;
-    m_nextPage = m_printer ? qMax(0,m_printer->fromPage()-1) : 0;
+    m_nextPage = m_printer ? qMax(0, m_printer->fromPage() - 1) : 0;
     m_frame = 0;
     m_audioChart = -1;
     m_muxing = false;
     m_message = QStringLiteral("Exporting...");
-    if(m_options.format!=QStringLiteral("print"))QSettings().setValue(QStringLiteral("export/destination"),QFileInfo(pathOf(destination)).absoluteFilePath());
+    if (m_options.format != QStringLiteral("print"))
+        QSettings().setValue(QStringLiteral("export/destination"),
+                             QFileInfo(pathOf(destination)).absoluteFilePath());
     emit changed();
     if (m_options.format.startsWith(QStringLiteral("video")))
         beginVideo();
@@ -944,30 +1078,10 @@ void ExportController::tick()
             m_encoder.closeWriteChannel();
             return;
         }
-        int c = 0;
-        while (c < m_frameEnds.size() - 1 && m_frame >= m_frameEnds[c])
-            ++c;
-        if (m_activeChart != c)
-            activateChart(c);
+        positionFrame(m_frame);
+        const int c = m_activeChart;
         auto &project = *m_clones[m_charts[c].clone];
-        const int first = c == 0 ? 0 : m_frameEnds[c - 1];
-        const double elapsed = (m_frame - first) * 1000.0 / m_options.fps;
         const auto &chart = m_charts[c];
-        const double startTick = project.m_sets[qMax(0, chart.set - 1)].startTick;
-        const double endTick = project.m_sets[chart.set].startTick;
-        double lo = startTick, hi = endTick;
-        for (int iteration = 0; iteration < 40; ++iteration)
-        {
-            const double mid = (lo + hi) / 2;
-            if (project.millisecondsBetween(qint64(startTick), qint64(mid)) < elapsed)
-                lo = mid;
-            else
-                hi = mid;
-        }
-        const double phase =
-            endTick > startTick ? qBound(0.0, ((lo + hi) / 2 - startTick) / (endTick - startTick), 1.0) : 1.0;
-        project.setPlaybackFrame(chart.set, phase);
-        emit project.propsChanged();
         if (m_options.audio == QStringLiteral("midi"))
         {
             if (m_audioChart != c)
@@ -1032,32 +1146,12 @@ void ExportController::tick()
             return;
         }
         QTextStream out(&file);
-        out << QStringLiteral("Movement,Performer,Name,Instrument,Section,Set,Variant,Measure,Counts,"
-                              "Coordinate,Move steps,Instructions\n");
-        for (int c = 0; c < m_charts.size(); ++c)
+        for (const auto &value : m_tableRows)
         {
-            activateChart(c);
-            auto &p = *m_clones[m_charts[c].clone];
-            const auto &s = p.m_sets[m_charts[c].set];
-            for (int r = 0; r < p.m_performers.size(); ++r)
-            {
-                const auto &person = p.m_performers[r];
-                QStringList row{p.m_movements[0].name,
-                                person.label,
-                                person.name,
-                                person.instrument,
-                                person.section,
-                                s.number,
-                                s.activeVariant().label,
-                                s.measure,
-                                QString::number(s.counts),
-                                p.coordinateFor(r, m_charts[c].set),
-                                QString::number(p.transitionDistance(r, m_charts[c].set), 'f', 2),
-                                s.activeVariant().caption};
-                for (auto &cell : row)
-                    cell = csv(cell);
-                out << row.join(QLatin1Char(',')) << QLatin1Char('\n');
-            }
+            auto row = value.toStringList();
+            for (auto &cell : row)
+                cell = csv(cell);
+            out << row.join(QLatin1Char(',')) << QLatin1Char('\n');
         }
         out.flush();
         if (file.error() != QFile::NoError)
@@ -1069,7 +1163,8 @@ void ExportController::tick()
         finish();
         return;
     }
-    if (m_nextPage >= m_pages.size() || (m_printer && m_printer->toPage()>0 && m_nextPage>=m_printer->toPage()))
+    if (m_nextPage >= m_pages.size() ||
+        (m_printer && m_printer->toPage() > 0 && m_nextPage >= m_printer->toPage()))
     {
         finish();
         return;
@@ -1097,20 +1192,16 @@ void ExportController::tick()
     }
     else
     {
-        const bool newDocument = !m_painter || (m_options.split && m_nextPage > 0 &&
-                                                m_charts[m_pages[m_nextPage].chart].clone !=
-                                                    m_charts[m_pages[m_nextPage - 1].chart].clone);
+        const bool newDocument =
+            !m_painter || (m_nextPage > 0 && documentForPage(m_nextPage) != documentForPage(m_nextPage - 1));
         if (newDocument && m_options.format == QStringLiteral("pdf"))
         {
             m_painter.reset();
             m_pdf.reset();
             int output = 0;
-            if (m_options.split)
-            {
-                for (int p = 1; p <= m_nextPage; ++p)
-                    if (m_charts[m_pages[p].chart].clone != m_charts[m_pages[p - 1].chart].clone)
-                        ++output;
-            }
+            for (int p = 1; p <= m_nextPage; ++p)
+                if (documentForPage(p) != documentForPage(p - 1))
+                    ++output;
             m_pdf = std::make_unique<QPdfWriter>(m_staged[output]);
             m_pdf->setPageSize(QPageSize(pageSize(), QPageSize::Point));
             m_pdf->setPageMargins(QMarginsF(0, 0, 0, 0));
@@ -1123,7 +1214,7 @@ void ExportController::tick()
                 return;
             }
         }
-        else if (m_nextPage > 0 && (!m_printer || m_nextPage>qMax(0,m_printer->fromPage()-1)))
+        else if (m_nextPage > 0 && (!m_printer || m_nextPage > qMax(0, m_printer->fromPage() - 1)))
         {
             bool ok = m_printer ? m_printer->newPage() : m_pdf->newPage();
             if (!ok)
@@ -1150,11 +1241,10 @@ bool ExportController::publish()
         QSaveFile target(m_files[i]);
         if (!source.open(QIODevice::ReadOnly) || !target.open(QIODevice::WriteOnly))
         {
-            m_message =
-                QStringLiteral(
-                    "Could not publish %1. %2 earlier files were published; remaining files are unchanged.")
-                    .arg(m_files[i])
-                    .arg(i);
+            m_message = QStringLiteral("Could not publish %1. %2 earlier files were "
+                                       "published; remaining files are unchanged.")
+                            .arg(m_files[i])
+                            .arg(i);
             return false;
         }
         while (!source.atEnd())
@@ -1428,4 +1518,138 @@ void ExportController::beginMux()
          << QStringLiteral("aac") << QStringLiteral("-shortest") << QStringLiteral("-movflags")
          << QStringLiteral("+faststart") << m_staged[0];
     m_encoder.start(ffmpeg(), args);
+}
+
+int ExportController::documentForPage(int page) const
+{
+    return (m_options.split ? m_charts[m_pages[page].chart].clone * 2 : 0) +
+           (m_options.content == QStringLiteral("both") && m_pages[page].performer >= 0 ? 1 : 0);
+}
+double ExportController::duration() const
+{
+    return double(m_totalFrames) / m_options.fps;
+}
+void ExportController::positionFrame(int frame)
+{
+    int c = 0;
+    while (c < m_frameEnds.size() - 1 && frame >= m_frameEnds[c])
+        ++c;
+    if (m_activeChart != c)
+        activateChart(c);
+    auto &project = *m_clones[m_charts[c].clone];
+    const int first = c == 0 ? 0 : m_frameEnds[c - 1];
+    const double elapsed = (frame - first) * 1000.0 / m_options.fps;
+    const auto &chart = m_charts[c];
+    const double startTick = project.m_sets[qMax(0, chart.set - 1)].startTick;
+    const double endTick = project.m_sets[chart.set].startTick;
+    double lo = startTick, hi = endTick;
+    for (int iteration = 0; iteration < 40; ++iteration)
+    {
+        const double mid = (lo + hi) / 2;
+        if (project.millisecondsBetween(qint64(startTick), qint64(mid)) < elapsed)
+            lo = mid;
+        else
+            hi = mid;
+    }
+    const double phase =
+        endTick > startTick ? qBound(0.0, ((lo + hi) / 2 - startTick) / (endTick - startTick), 1.0) : 1.0;
+    project.setPlaybackFrame(chart.set, phase);
+    emit project.propsChanged();
+}
+void ExportController::previewTime(double seconds)
+{
+    if (m_busy || m_charts.isEmpty())
+        return;
+    positionFrame(qBound(0, qRound(seconds * m_options.fps), m_totalFrames - 1));
+    if (m_options.format == QStringLiteral("video3d"))
+    {
+        QImage header(QSize(960, qRound(64 * 960.0 / 792)), QImage::Format_RGB32);
+        header.fill(Qt::white);
+        QPainter painter(&header);
+        painter.setRenderHint(QPainter::Antialiasing);
+        painter.scale(960.0 / 792, 960.0 / 792);
+        drawHeader(painter, QRectF(12, 6, 768, 52), *m_clones[m_charts[m_activeChart].clone]);
+        painter.end();
+        const auto path = m_temp->filePath(QStringLiteral("header-%1.png").arg(++m_previewRevision));
+        header.save(path);
+        if (!m_previewOverlay.isEmpty())
+            QFile::remove(pathOf(m_previewOverlay));
+        m_previewOverlay = QUrl::fromLocalFile(path).toString();
+        emit changed();
+        return;
+    }
+    QImage image(QSize(960, 540), QImage::Format_RGB32);
+    image.fill(Qt::white);
+    QPainter painter(&image);
+    painter.setRenderHint(QPainter::Antialiasing);
+    int page = 0;
+    while (page + 1 < m_pages.size() && m_pages[page].chart != m_activeChart)
+        ++page;
+    drawPage(painter, QRectF(0, 0, 960, 540), page, true);
+    painter.end();
+    const QString path = m_temp->filePath(QStringLiteral("video-preview-%1.png").arg(++m_previewRevision));
+    const auto previous = pathOf(m_previewUrl);
+    image.save(path);
+    m_previewUrl = QUrl::fromLocalFile(path).toString();
+    if (!previous.isEmpty() && previous != path)
+        QFile::remove(previous);
+    emit changed();
+}
+QString ExportController::suggestedName(const QString &content, const QString &format) const
+{
+    QString name = safeName(m_project->showName().trimmed());
+    if (name.isEmpty())
+        name = QStringLiteral("MarchCraft");
+    if (content == QStringLiteral("both"))
+        return name;
+    name += format == QStringLiteral("csv")              ? QStringLiteral(" - Analytics")
+            : format.startsWith(QStringLiteral("video")) ? QStringLiteral(" - Animation")
+            : content == QStringLiteral("coordinates")   ? QStringLiteral(" - Coordinates")
+                                                         : QStringLiteral(" - Drill Charts");
+    return name + QLatin1Char('.') +
+           (format.startsWith(QStringLiteral("video")) ? QStringLiteral("mp4")
+            : format == QStringLiteral("print")        ? QStringLiteral("pdf")
+                                                       : format);
+}
+QString ExportController::destinationFolder() const
+{
+    const QFileInfo info(pathOf(lastDestination()));
+    return info.isDir() ? info.absoluteFilePath() : info.absolutePath();
+}
+QString ExportController::localPath(const QString &url) const
+{
+    return pathOf(url);
+}
+QString ExportController::fileUrl(const QString &path) const
+{
+    return QUrl::fromLocalFile(pathOf(path)).toString();
+}
+bool ExportController::fileExists(const QString &path) const
+{
+    return QFileInfo::exists(pathOf(path));
+}
+
+void ExportController::setBasename(const QString &name)
+{
+    if (m_busy)
+        return;
+    m_options.basename = safeName(name.trimmed());
+    if (m_options.basename.isEmpty())
+        m_options.basename = QStringLiteral("MarchCraft");
+    emit changed();
+}
+
+int ExportController::firstPageForFile(int file) const
+{
+    if (m_options.format == QStringLiteral("png"))
+        return qBound(0, file, qMax(0, int(m_pages.size()) - 1));
+    int document = 0;
+    for (int page = 0; page < m_pages.size(); ++page)
+    {
+        if (page > 0 && documentForPage(page) != documentForPage(page - 1))
+            ++document;
+        if (document == file)
+            return page;
+    }
+    return 0;
 }

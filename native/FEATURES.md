@@ -86,3 +86,5 @@ Screenshot QA accepts `--field-style realistic` or `--field-style editor` in eit
 ### Drill chart and animation export
 
 The native export workspace adds full-field vector PDF charts, configurable coordinate sheets, PNG pages, analytics CSV, Windows printing, and deterministic 2D/3D MP4 capture. It supports movement/set/variant/performer selection, embedded company branding plus optional monochrome MarchCraft branding, instruction continuation pages, paper/crop/layer controls, preview, local presets, and staged output publication. Video encoding uses an external user-selected FFmpeg; audio can be silent, an attached recording, or offline FluidSynth MIDI. This implements drill playback video export; cinematic camera sequencing remains outside the prototype.
+
+The Export tab stays alongside Editor and provides automatic format-specific previews, show-based filenames, built-in and saved presets, paired chart/coordinate PDFs, independent performer label sizing, and an export-only black-and-white vector mark. Export jobs use immutable snapshots; progress remains visible while editing.

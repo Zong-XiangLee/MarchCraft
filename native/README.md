@@ -135,13 +135,13 @@ Project schema 11 stores all movements in the existing `.marchcraft` database. E
 
 ## Export workspace
 
-Use **File > Export drill charts, sheets, images or video**. The coordinate-sheet and CSV shortcuts open the same workspace with their output type selected.
+Use the persistent **Editor / Export** tabs or **File > Export drill charts, sheets, images or video**. Switching tabs keeps the editor mounted and preserves its selection, zoom and movement. The coordinate-sheet and CSV shortcuts open the same workspace with their output type selected.
 
 1. Choose PDF, PNG pages, analytics CSV, native printing, 2D MP4, or 3D MP4. Select the entire show, active movement, or individual movements. Set numbers accept comma-separated entries and inclusive ranges (for example `1-8, 12, 14A`); blank includes every set. Choose active/all/individual variants, include or exclude subsets, and optionally filter performer labels or sections.
 2. Choose paper size, orientation, margins, marker/text sizes, grid/label/symbol/prop/instruction layers, color or monochrome, and full-field/fit/custom framing. Custom crops report excluded performers. Charts preserve director perspective and the eight-to-five coordinate system. Instructions use each variant's multiline caption and continue onto additional pages when needed.
-3. Import a PNG/JPEG company logo and enter the company name. **Save branding to show** stores normalized image data in the project, supports undo/redo, and travels with the project. The optional monochrome MarchCraft logo sits beside the company logo. Update preview also saves pending branding edits.
-4. Review the preview and page list. Choose an output file, or a folder for PNG pages/separate movement PDFs. PNG filename prefixes and 150/300/600 DPI are configurable. Existing outputs require **Replace existing files**. Reusable export presets and recent destinations are local application preferences.
-5. Export, monitor progress, or cancel. Files are staged before publication; each destination is replaced atomically. A multi-file publication error reports the files already published. Open the result or destination folder after success. Printing opens the Windows printer dialog.
+3. Import a PNG/JPEG company logo and enter the company name. **Save branding to show** stores normalized image data in the project, supports undo/redo, and travels with the project. The optional monochrome MarchCraft logo sits beside the company logo. The export-only vector MarchCraft mark uses solid black and white; application branding is unchanged. Automatic previews use draft branding without changing the project.
+4. Preview updates automatically after changes. PDF/PNG/print show pages with zoom and navigation; CSV shows the exact exported table; 2D/3D video supports silent visual playback and scrubbing with the selected camera. Performer labels default to 6 pt (adjustable 4–18 pt), independently of page text. Review the preview and page list. Choose an output file, or a folder for PNG pages/separate movement PDFs. The Location and Filename controls suggest a show-based name and seed Browse with a complete filename. PNG filename prefixes and 150/300/600 DPI are configurable. Built-in presets include drill diagrams, performer coordinates, paired diagrams + coordinates, PNG, 2D video and 3D video. The paired preset publishes two PDFs (or two per movement when split), with independent page numbering. Existing outputs require **Replace existing files**. Reusable export presets and recent destinations are local application preferences.
+5. Export, monitor progress, or cancel. You can return to Editor during export; the header continues showing job progress, and edits do not affect the job snapshot. Files are staged before publication; each destination is replaced atomically. A multi-file publication error reports the files already published. Open the result or destination folder after success. Printing opens the Windows printer dialog.
 
 Export works on an isolated snapshot. It does not change the editor's current movement, selection, playback position, or undo history. Changing show branding is a separate undoable project edit. Archived sets and archived variants are not exported.
 
@@ -157,6 +157,8 @@ The standard editor grid has one-step squares, darker gray four-step midlines, a
 
 - `--qa-export charts.pdf`: export the first two sample sets and exit with status 0 on success.
 - `--export-format pdf|png|csv|video2d|video3d`: select the QA output; PNG destination is a folder.
+- `--export-content charts|coordinates|both`: select document content; `both` uses a destination folder.
+- `--qa-export-preset "Coordinates + drill diagrams" --screenshot packet.png`: inspect a built-in preset; `csv` selects the table preview.
 - `--qa-export-fixture`: use a small deterministic two-set fixture.
 - `--export-audio silent|recording|midi`, `--midi score.mid`, `--audio recording.wav`, and `--ffmpeg path`: exercise video/audio integration.
 - `--qa-export-dialog --screenshot export-dialog.png`: inspect the export workspace.

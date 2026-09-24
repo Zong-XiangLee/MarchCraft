@@ -219,11 +219,19 @@ int main(int argc, char *argv[])
             });
         }
     }
+    const int presetFlag = arguments.indexOf(QStringLiteral("--qa-export-preset"));
+    if(presetFlag>=0 && presetFlag+1<arguments.size() && !engine.rootObjects().isEmpty()) {
+        auto *root=engine.rootObjects().first();
+        const auto preset=arguments[presetFlag+1];
+        QTimer::singleShot(400,&application,[root,preset] {QMetaObject::invokeMethod(root,"showQaExport",Q_ARG(QVariant,preset));});
+    }
     const int exportFlag = arguments.indexOf(QStringLiteral("--qa-export"));
     if (exportFlag >= 0 && exportFlag + 1 < arguments.size()) {
         QVariantMap options{{QStringLiteral("format"), QStringLiteral("pdf")}, {QStringLiteral("scope"), QStringLiteral("active")}, {QStringLiteral("sets"), QStringLiteral("1-2")}};
         const int formatFlag = arguments.indexOf(QStringLiteral("--export-format"));
         if (formatFlag >= 0 && formatFlag + 1 < arguments.size()) options[QStringLiteral("format")] = arguments[formatFlag + 1];
+        const int contentFlag=arguments.indexOf(QStringLiteral("--export-content"));
+        if(contentFlag>=0 && contentFlag+1<arguments.size())options[QStringLiteral("content")]=arguments[contentFlag+1];
         const int soundFlag = arguments.indexOf(QStringLiteral("--export-audio"));
         if (soundFlag >= 0 && soundFlag + 1 < arguments.size()) options[QStringLiteral("audio")] = arguments[soundFlag + 1];
         const int encoderFlag = arguments.indexOf(QStringLiteral("--ffmpeg"));

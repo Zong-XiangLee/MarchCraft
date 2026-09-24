@@ -1719,6 +1719,76 @@ private slots:
         QVERIFY(!exporter.prepare(options));
     }
 
+    void exportWorkspacePairedDocumentsAndPreview()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        project.setOpeningBehavior(QStringLiteral("hold"),2);
+        project.addSet(QStringLiteral("Second"),8);
+        ExportController exporter(&project);
+        QCOMPARE(ExportOptions::fromMap({}).performerLabelSize,6.0);
+        QCOMPARE(ExportOptions::fromMap({{QStringLiteral("performerLabelSize"),2}}).performerLabelSize,4.0);
+        const auto organization=QCoreApplication::organizationName();
+        const auto application=QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftExportTests"));
+        QCoreApplication::setApplicationName(QFileInfo(temp.path()).fileName());
+        const auto cleanup=qScopeGuard([&] {QSettings().clear();QCoreApplication::setOrganizationName(organization);QCoreApplication::setApplicationName(application);});
+        exporter.savePreset(QStringLiteral("QA legacy label"),{{QStringLiteral("fontSize"),12}});
+        QCOMPARE(exporter.loadPreset(QStringLiteral("QA legacy label")).value(QStringLiteral("performerLabelSize")).toInt(),12);
+        QSettings().remove(QStringLiteral("export/presets/QA legacy label"));
+        QVariantMap options{{QStringLiteral("content"),QStringLiteral("both")}, {QStringLiteral("basename"),QStringLiteral("Packet")}, {QStringLiteral("brandingCompany"),QStringLiteral("Preview only")}};
+        const auto branding=exporter.branding();
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.branding(),branding);
+        QCOMPARE(exporter.pages().size(),3);
+        auto files=exporter.plannedFiles(temp.path());
+        QCOMPARE(files.size(),2);
+        QCOMPARE(exporter.firstPageForFile(0),0);
+        QCOMPARE(exporter.firstPageForFile(1),2);
+        QVERIFY(files[0].endsWith(QStringLiteral("Packet - Drill Charts.pdf")));
+        QVERIFY(files[1].endsWith(QStringLiteral("Packet - Coordinates.pdf")));
+        const int revision=exporter.previewRevision();
+        QVERIFY(exporter.start(temp.path()));
+        QVERIFY(!exporter.prepare({}));
+        QCOMPARE(exporter.previewRevision(),revision);
+        project.addSet(QStringLiteral("Later edit"),8);
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:files)QVERIFY(QFileInfo(file).size()>1000);
+        project.createMovement(QStringLiteral("Finale"));
+        options[QStringLiteral("split")]=true;
+        QVERIFY(exporter.prepare(options));
+        files=exporter.plannedFiles(temp.path());
+        QCOMPARE(files.size(),4);
+        QVERIFY(files[0].contains(QStringLiteral("Drill Charts")));
+        QVERIFY(files[1].contains(QStringLiteral("Coordinates")));
+        QVERIFY(files[2].contains(QStringLiteral("Drill Charts")));
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:files)QVERIFY(QFileInfo(file).size()>1000);
+        options[QStringLiteral("format")]=QStringLiteral("csv");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.tableRows().size()>1);
+        QCOMPARE(exporter.tableRows()[0].toStringList().size(),12);
+        QCOMPARE(exporter.tableRows()[1].toStringList()[1],QStringLiteral("P01"));
+        QCOMPARE(exporter.tableRows()[1].toStringList()[8],QStringLiteral("2"));
+        QVERIFY(exporter.suggestedName(QStringLiteral("charts"),QStringLiteral("pdf")).endsWith(QStringLiteral(" - Drill Charts.pdf")));
+        options[QStringLiteral("format")]=QStringLiteral("video2d");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.duration()>0);
+        exporter.previewTime(exporter.duration()/2);
+        const QString preview=exporter.localPath(exporter.previewUrl());
+        QVERIFY(QFileInfo::exists(preview));
+        exporter.previewTime(0);
+        QVERIFY(!QFileInfo::exists(preview));
+        options[QStringLiteral("sets")]=QStringLiteral("missing");
+        QVERIFY(!exporter.prepare(options));
+        QVERIFY(exporter.previewUrl().isEmpty());
+    }
+
     void exportsAreCreated()
     {
         QTemporaryDir temporary;

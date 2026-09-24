@@ -23,7 +23,7 @@ struct ExportOptions
     QStringList movements, sets, performers, sections, variantIds;
     bool landscape, monochrome, grid, labels, symbols, props, notes, headings, numbers, companyLogo,
         marchcraftLogo, subsets, split;
-    double margin, fontSize, markerSize;
+    double margin, fontSize, performerLabelSize, markerSize;
     int dpi, fps, height;
     QRectF crop;
     static ExportOptions fromMap(const QVariantMap &map);
@@ -32,9 +32,13 @@ struct ExportOptions
 class ExportController final : public QObject
 {
     Q_OBJECT
+    Q_PROPERTY(QVariantList tableRows READ tableRows NOTIFY changed)
+    Q_PROPERTY(double duration READ duration NOTIFY changed)
+    Q_PROPERTY(int previewRevision READ previewRevision NOTIFY changed)
     Q_PROPERTY(bool busy READ busy NOTIFY changed)
     Q_PROPERTY(double progress READ progress NOTIFY changed)
     Q_PROPERTY(QString message READ message NOTIFY changed)
+    Q_PROPERTY(QString previewOverlay READ previewOverlay NOTIFY changed)
     Q_PROPERTY(QString previewUrl READ previewUrl NOTIFY changed)
     Q_PROPERTY(QStringList pages READ pages NOTIFY changed)
     Q_PROPERTY(QStringList files READ files NOTIFY changed)
@@ -52,6 +56,7 @@ class ExportController final : public QObject
     bool busy() const { return m_busy; }
     double progress() const { return m_progress; }
     QString message() const { return m_message; }
+    QString previewOverlay() const { return m_previewOverlay; }
     QString previewUrl() const { return m_previewUrl; }
     QStringList pages() const { return m_pageNames; }
     QStringList files() const { return m_files; }
@@ -64,6 +69,16 @@ class ExportController final : public QObject
     int videoWidth() const { return m_options.height * 16 / 9; }
     int videoHeight() const { return m_options.height; }
     QString camera() const { return m_options.camera; }
+    QVariantList tableRows() const { return m_tableRows; }
+    double duration() const;
+    int previewRevision() const { return m_previewRevision; }
+    Q_INVOKABLE void previewTime(double seconds);
+    Q_INVOKABLE QString suggestedName(const QString &content, const QString &format) const;
+    Q_INVOKABLE QString destinationFolder() const;
+    Q_INVOKABLE QString localPath(const QString &url) const;
+    Q_INVOKABLE QString fileUrl(const QString &path) const;
+    Q_INVOKABLE bool fileExists(const QString &path) const;
+    Q_INVOKABLE void setBasename(const QString &name);
     Q_INVOKABLE void refresh();
     Q_INVOKABLE bool setBranding(const QString &name, const QString &logo, bool removeLogo = false);
     Q_INVOKABLE void savePreset(const QString &name, const QVariantMap &options);
@@ -71,6 +86,7 @@ class ExportController final : public QObject
     Q_INVOKABLE QString lastDestination() const;
     Q_INVOKABLE bool prepare(const QVariantMap &options);
     Q_INVOKABLE void preview(int page);
+    Q_INVOKABLE int firstPageForFile(int file) const;
     Q_INVOKABLE QStringList plannedFiles(const QString &destination) const;
     Q_INVOKABLE bool start(const QString &destination, bool overwrite = false);
     Q_INVOKABLE void cancel();
@@ -105,6 +121,8 @@ class ExportController final : public QObject
     void activateChart(int chart);
     QSizeF pageSize() const;
     void tick();
+    void positionFrame(int frame);
+    int documentForPage(int page) const;
     void fail(const QString &message);
     void finish();
     void beginVideo();
@@ -118,7 +136,7 @@ class ExportController final : public QObject
     QVector<QStringList> m_originalVariants;
     QVector<Page> m_pages;
     QStringList m_pageNames, m_files, m_staged;
-    QString m_message, m_previewUrl;
+    QString m_message, m_previewUrl, m_previewOverlay;
     std::unique_ptr<QTemporaryDir> m_temp;
     std::unique_ptr<QPdfWriter> m_pdf;
     std::unique_ptr<QPainter> m_painter;
@@ -133,4 +151,6 @@ class ExportController final : public QObject
     int m_nextPage = 0, m_activeChart = -1, m_frame = 0, m_totalFrames = 0, m_audioChart = -1;
     QVector<int> m_frameEnds;
     QString m_encoderError;
+    QVariantList m_tableRows;
+    int m_previewRevision = 0;
 };

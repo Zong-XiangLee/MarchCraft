@@ -54,7 +54,7 @@ qt_add_qml_module(marchcraft
         qml/Main.qml
         qml/EditorCommandBars.qml
         qml/WelcomeWorkspace.qml
-        qml/ExportDialog.qml
+        qml/ExportWorkspace.qml
         qml/ExportVideoWindow.qml
         qml/EditorPreferences.qml
         qml/PerformerDialog.qml
