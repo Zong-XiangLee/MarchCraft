@@ -27,6 +27,18 @@ Dialog {
                 Layout.fillHeight: true
                 spacing: 12
                 Label { text: "Workspace"; font.pixelSize: 18; font.bold: true; color: MarchCraftTheme.textPrimary }
+                Label { text: "Appearance"; color: MarchCraftTheme.textSecondary }
+                ComboBox {
+                    Layout.fillWidth: true
+                    model: MarchCraftTheme.themes
+                    textRole: "text"; valueRole: "value"
+                    currentIndex: Math.max(0, indexOfValue(MarchCraftTheme.themeId))
+                    onActivated: MarchCraftTheme.themeId = currentValue
+                }
+                Label {
+                    text: "Themes apply immediately and are remembered on this computer."
+                    color: MarchCraftTheme.textMuted
+                }
                 CheckBox {
                     text: "Play the MarchCraft startup sound"
                     checked: workspaceControllerContext.startupSoundEnabled
@@ -65,7 +77,7 @@ Dialog {
                 RowLayout {
                     Layout.fillWidth: true
                     Slider { id: labelSizeSlider; Layout.fillWidth: true; from: 7; to: 32; stepSize: 1; value: drillProjectContext.markerLabelFontSize; onMoved: drillProjectContext.markerLabelFontSize = Math.round(value) }
-                    Label { text: Math.round(labelSizeSlider.value) + " px"; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignRight; color: "#a5afbc" }
+                    Label { text: Math.round(labelSizeSlider.value) + " px"; Layout.preferredWidth: 48; horizontalAlignment: Text.AlignRight; color: MarchCraftTheme.textSecondary }
                 }
                 Label { text: "Warning color" }
                 TextField { Layout.fillWidth: true; text: drillProjectContext.markerWarningColor; onEditingFinished: drillProjectContext.markerWarningColor=text }
@@ -81,7 +93,7 @@ Dialog {
                     currentIndex: drillProjectContext.fieldStyle === "editor" ? 1 : 0
                     onActivated: drillProjectContext.fieldStyle = currentIndex === 1 ? "editor" : "realistic"
                 }
-                Label { Layout.columnSpan: 2; text: "Editor grid: 1 square = 1 step · 8 steps = 5 yards"; color: "#a5afbc" }
+                Label { Layout.columnSpan: 2; text: "Editor grid: 1 square = 1 step · 8 steps = 5 yards"; color: MarchCraftTheme.textSecondary }
                 Label { text: "Field preset" }
                 ComboBox { Layout.fillWidth: true; model: ["hs","college","nfl","indoor"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProjectContext.fieldPreset)); onActivated: drillProjectContext.fieldPreset=currentText }
                 CheckBox { text: "Overlay grid (realistic)"; enabled: drillProjectContext.fieldStyle !== "editor"; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid=checked }
@@ -107,12 +119,12 @@ Dialog {
             ColumnLayout {
                 Label { text: "Formation placement"; font.bold: true }
                 ComboBox { id: placementMode; Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Selection centered",value:"selection"},{text:"Nearest open space",value:"openSpace"},{text:"Field centered",value:"fieldCenter"}]; onActivated: drillProjectContext.shapePlacementMode=currentValue }
-                Label { text: "Default spacing: four marching steps"; color: "#a5afbc" }
+                Label { text: "Default spacing: four marching steps"; color: MarchCraftTheme.textSecondary }
                 Item { Layout.fillHeight: true }
             }
             ColumnLayout {
                 Label { text: "Shape quick actions"; font.bold: true; font.pixelSize: 16 }
-                Label { text: "Check a shape to show its icon beside the Shapes button in the field toolbar."; color: "#a5afbc"; wrapMode: Text.Wrap; Layout.fillWidth: true }
+                Label { text: "Check a shape to show its icon beside the Shapes button in the field toolbar."; color: MarchCraftTheme.textSecondary; wrapMode: Text.Wrap; Layout.fillWidth: true }
                 Repeater {
                     model: [{text: "Line", kind: "line"}, {text: "Circle", kind: "circle"},
                             {text: "Arc", kind: "arc"}, {text: "Ellipse", kind: "ellipse"},
@@ -127,7 +139,7 @@ Dialog {
                         onClicked: windowContext.toggleQuickShape(modelData.kind)
                     }
                 }
-                Label { text: "Tip: use Ctrl+, to reopen project setup quickly."; color: "#778392"; font.pixelSize: 11; Layout.topMargin: 8 }
+                Label { text: "Tip: use Ctrl+, to reopen project setup quickly."; color: MarchCraftTheme.textMuted; font.pixelSize: 11; Layout.topMargin: 8 }
                 Item { Layout.fillHeight: true }
             }
             GridLayout {
@@ -141,7 +153,7 @@ Dialog {
                 Label { text: "Direction-change warning" }
                 SpinBox { from: 15; to: 180; stepSize: 5; value: Math.round(drillProjectContext.directionChangeDegrees); editable: true; onValueModified: drillProjectContext.directionChangeDegrees=value }
                 Label { text: "Caution threshold" }
-                Label { text: "85% of the configured limit"; color: "#a5afbc" }
+                Label { text: "85% of the configured limit"; color: MarchCraftTheme.textSecondary }
                 Item { Layout.columnSpan: 2; Layout.fillHeight: true }
             }
         }

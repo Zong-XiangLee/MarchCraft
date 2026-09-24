@@ -66,6 +66,7 @@ qt_add_qml_module(marchcraft
         qml/SetTimeline.qml
         qml/FieldView.qml
         qml/ThreeDView.qml
+        qml/CameraMotion.js
         qml/PerformerMarker3D.qml
         qml/HumanPerformer3D.qml
         qml/HumanGait.js

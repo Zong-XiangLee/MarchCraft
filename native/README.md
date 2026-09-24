@@ -164,3 +164,24 @@ The standard editor grid has one-step squares, darker gray four-step midlines, a
 - `--qa-export-dialog --screenshot export-dialog.png`: inspect the export workspace.
 
 The export template is configurable, not a freeform page designer. Pyware project import/export is not implemented. Extremely dense formations may still need smaller labels, a larger paper size, or a focused crop for rehearsal readability.
+
+### Appearance and camera navigation
+
+Editor preferences → General → Appearance offers Graphite (blue), Midnight (teal),
+and Warm charcoal (amber). The choice applies immediately and is remembered on
+this computer independently of project undo/history. Screenshot QA can use
+`--qa-theme graphite`, `--qa-theme midnight`, or `--qa-theme warm` without changing
+the saved preference. Use `--field-preset indoor` to verify the wood surface.
+
+In 3D, drag to orbit, Shift-drag or right/middle-drag to pan, and scroll to dolly.
+Double-click returns to the press-box view. Preset changes ease between views;
+manual movement uses a shorter settling time. Windows reduced-motion settings
+remove these animations. Orbit elevation and dolly distance are bounded to keep
+normal navigation above the ground; pan speed follows distance and viewport size.
+
+Venues use original procedural Qt geometry: rehearsal fencing and benches,
+track lanes and segmented stadium terraces, press-box glazing, bowl end seating,
+and open-front indoor halls with banners and retractable seating. Turf grain and
+wood planks use deterministic mipmapped textures. The audience-side cutaway keeps
+the drill readable; these remain stylized venues, not photorealistic Blender assets.
+Field coordinates, regulation markings, and performer ground height are unchanged.

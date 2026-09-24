@@ -82,7 +82,7 @@ MovableDialog {
                     Layout.fillWidth: true
                     text: "Placement: " + (drillProject.shapePlacementMode === "openSpace" ? "Nearest open space" :
                           drillProject.shapePlacementMode === "fieldCenter" ? "Field center" : "Selection centered")
-                    color: "#a5afbc"
+                    color: MarchCraftTheme.textSecondary
                 }
                 AppButton { text: "Settings…"; flat: true; onClicked: dialog.settingsRequested() }
             }
@@ -121,7 +121,7 @@ MovableDialog {
                 Label { text: "Direction"; visible: kind.currentValue === "spiral" }
                 ComboBox { id: spiralDirection; objectName: "spiralDirection"; Layout.fillWidth: true; visible: kind.currentValue === "spiral"; model: ["Counterclockwise", "Clockwise"] }
                 Label { text: "Core radius"; visible: kind.currentValue === "spiral" }
-                Label { text: spiralStyle.currentValue === "golden" ? "Golden ratio derived" : spiralStyle.currentValue === "galaxy" ? "Two arms; extra turns limited by radius" : "Automatic tight core"; color: "#a5afbc"; visible: kind.currentValue === "spiral" }
+                Label { text: spiralStyle.currentValue === "golden" ? "Golden ratio derived" : spiralStyle.currentValue === "galaxy" ? "Two arms; extra turns limited by radius" : "Automatic tight core"; color: MarchCraftTheme.textSecondary; visible: kind.currentValue === "spiral" }
                 Label { text: "Outer radius"; visible: kind.currentValue === "spiral" }
                 SpinBox { id: outerRadius; objectName: "outerRadius"; from: 1; to: 78; editable: true; Layout.fillWidth: true; visible: kind.currentValue === "spiral" }
                 Label { text: "Rows"; visible: kind.currentValue === "block" }
@@ -160,20 +160,20 @@ MovableDialog {
                 GridLayout {
                     anchors.fill: parent; columns: 2
                     property var metrics: drillProject.formationPreviewActive ? drillProject.formationPreviewMetrics : dialog.estimate
-                    Label { text: drillProject.formationPreviewActive ? "Preview average move" : "Estimated equal spacing"; color: "#a5afbc" }
+                    Label { text: drillProject.formationPreviewActive ? "Preview average move" : "Estimated equal spacing"; color: MarchCraftTheme.textSecondary }
                     Label { text: drillProject.formatDistance(drillProject.formationPreviewActive ? (parent.metrics.averageMove || 0) : (parent.metrics.estimatedSpacing || 0)); font.bold: true; Layout.alignment: Qt.AlignRight }
-                    Label { text: "Maximum move"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Maximum move"; color: MarchCraftTheme.textSecondary; visible: drillProject.formationPreviewActive }
                     Label { text: drillProject.formatDistance(parent.metrics.maximumMove || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Max steps / count"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Max steps / count"; color: MarchCraftTheme.textSecondary; visible: drillProject.formationPreviewActive }
                     Label { text: Number(parent.metrics.maximumStepsPerCount || 0).toFixed(2); color: (parent.metrics.maximumStepsPerCount || 0) > drillProject.maximumStepsPerCount ? drillProject.markerWarningColor : "#5ead83"; font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Crossings / collisions"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Crossings / collisions"; color: MarchCraftTheme.textSecondary; visible: drillProject.formationPreviewActive }
                     Label { text: (parent.metrics.crossings || 0) + " / " + (parent.metrics.predictedCollisions || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
-                    Label { text: "Minimum spacing"; color: "#a5afbc"; visible: drillProject.formationPreviewActive }
+                    Label { text: "Minimum spacing"; color: MarchCraftTheme.textSecondary; visible: drillProject.formationPreviewActive }
                     Label { text: drillProject.formatDistance(parent.metrics.minimumSpacing || 0); font.bold: true; Layout.alignment: Qt.AlignRight; visible: drillProject.formationPreviewActive }
                 }
             }
             Label {
-                Layout.fillWidth: true; wrapMode: Text.Wrap; color: "#a5afbc"
+                Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary
                 text: "The entire formation is fitted onto the field before performers are placed, so points never collapse at a sideline or corner."
             }
             RowLayout {

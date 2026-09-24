@@ -188,6 +188,28 @@ Item {
                         }
                     }
 
+                    // Low-contrast grain gives the surface depth without obscuring drill marks.
+                    if (!root.editorField) {
+                        let seed = 29
+                        const indoor = drillProject.fieldPreset === "indoor"
+                        for (let i = 0; i < 3200; ++i) {
+                            seed = (seed * 1664525 + 1013904223) >>> 0
+                            const px = seed / 4294967296 * w
+                            seed = (seed * 1664525 + 1013904223) >>> 0
+                            const py = seed / 4294967296 * h
+                            ctx.globalAlpha = 0.055
+                            ctx.fillStyle = i % 2 ? "#ffffff" : "#172d1b"
+                            ctx.fillRect(px, py, indoor ? 6 : 1, 1)
+                        }
+                        if (indoor) {
+                            ctx.globalAlpha = 0.12; ctx.strokeStyle = "#65482b"; ctx.lineWidth = 0.6
+                            for (let row = 0; row < 60; ++row) {
+                                const y = row * h / 60
+                                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke()
+                            }
+                        }
+                    }
+
                     // Regulation four-inch yard lines at five-yard intervals.
                     ctx.strokeStyle = "#edf4ef"
                     ctx.globalAlpha = 0.82
