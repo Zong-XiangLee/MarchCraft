@@ -308,12 +308,17 @@ Item {
                     ctx.globalAlpha = root.editorField ? 0.38 : drillProject.showFieldGrid ? drillProject.fieldGridOpacity : 0.24
                     ctx.lineWidth = 1
                     const step = stepInterval
+                    function lineStyle(position) {
+                        const middle = Math.abs(position / drillProject.gridMidlineSteps - Math.round(position / drillProject.gridMidlineSteps)) < 0.001
+                        ctx.strokeStyle = middle ? "#777777" : drillProject.fieldGridColor
+                        ctx.globalAlpha = middle ? 0.85 : Math.max(0.25, drillProject.fieldGridOpacity)
+                        ctx.lineWidth = middle ? 1.5 : 1
+                    }
                     for (let x = Math.ceil(drillProject.canvasMinX / step) * step; x <= drillProject.canvasMaxX; x += step) {
-                        const px = root.toCanvasX(x); ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
+                        lineStyle(x); const px = root.toCanvasX(x); ctx.beginPath(); ctx.moveTo(px, 0); ctx.lineTo(px, height); ctx.stroke()
                     }
                     for (let y = Math.ceil(drillProject.canvasMinY / step) * step; y <= drillProject.canvasMaxY; y += step) {
-                        ctx.lineWidth = root.editorField && y % 8 === 0 ? 1.8 : 1
-                        const py = root.toCanvasY(y); ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke()
+                        lineStyle(y); const py = root.toCanvasY(y); ctx.beginPath(); ctx.moveTo(0, py); ctx.lineTo(width, py); ctx.stroke()
                     }
                 }
                 Connections { target: drillProject; function onEditorSettingsChanged() { gridCanvas.requestPaint() } function onProjectChanged() { gridCanvas.requestPaint() } }

@@ -3,7 +3,8 @@
 #include "TransportController.h"
 #include "WorkspaceController.h"
 
-#include <QGuiApplication>
+#include <QApplication>
+#include "ExportController.h"
 #include <QColor>
 #include <QDateTime>
 #include <QFile>
@@ -31,7 +32,7 @@ void writeApplicationLog(QtMsgType type, const QMessageLogContext &, const QStri
 
 int main(int argc, char *argv[])
 {
-    QGuiApplication application(argc, argv);
+    QApplication application(argc, argv);
     application.setOrganizationName(QStringLiteral("MarchCraft"));
     application.setOrganizationDomain(QStringLiteral("marchcraft.local"));
     application.setApplicationName(QStringLiteral("MarchCraft"));
@@ -60,6 +61,7 @@ int main(int argc, char *argv[])
 
     DrillProject project;
     TransportController transport(&project);
+    ExportController exportController(&project);
     AssetCatalog assetCatalog;
     WorkspaceController workspaceController;
     const QStringList arguments = application.arguments();
@@ -71,7 +73,7 @@ int main(int argc, char *argv[])
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
-        QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"),
+        QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"), QStringLiteral("--qa-export"),
         QStringLiteral("--field-style"), QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"),
         QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
@@ -100,6 +102,14 @@ int main(int argc, char *argv[])
     const int qualityFlag = arguments.indexOf(QStringLiteral("--graphics-profile"));
     if (qualityFlag >= 0 && qualityFlag + 1 < arguments.size())
         project.setGraphicsProfile(arguments.at(qualityFlag + 1));
+    if (arguments.contains(QStringLiteral("--qa-export-fixture"))) {
+        project.newProject();
+        project.setShowName(QStringLiteral("Export Verification"));
+        project.addPerformer(QStringLiteral("T01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 72, 42);
+        project.setOpeningBehavior(QStringLiteral("hold"), 2);
+        project.selectAll();project.addSet(QStringLiteral("Move"), 4);project.nudgeSelected(8, 0);
+        project.clearSelection();
+    }
     const int midiFlag = arguments.indexOf(QStringLiteral("--midi"));
     if (midiFlag >= 0 && midiFlag + 1 < arguments.size())
         project.importMidi(arguments.at(midiFlag + 1));
@@ -156,6 +166,7 @@ int main(int argc, char *argv[])
     }
 
     QQmlApplicationEngine engine;
+    engine.rootContext()->setContextProperty(QStringLiteral("exportController"), &exportController);
     engine.rootContext()->setContextProperty(QStringLiteral("drillProject"), &project);
     engine.rootContext()->setContextProperty(QStringLiteral("transport"), &transport);
     engine.rootContext()->setContextProperty(QStringLiteral("assetCatalog"), &assetCatalog);
@@ -208,13 +219,35 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
-    for (const auto &surface : {QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music"), QStringLiteral("formation")}) {
+    for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music"), QStringLiteral("formation")}) {
         if (arguments.contains(QStringLiteral("--qa-") + surface) && !engine.rootObjects().isEmpty()) {
             QObject *root = engine.rootObjects().first();
             QTimer::singleShot(350, &application, [root, surface] {
                 QMetaObject::invokeMethod(root, "showQaSurface", Q_ARG(QVariant, surface));
             });
         }
+    }
+    const int presetFlag = arguments.indexOf(QStringLiteral("--qa-export-preset"));
+    if(presetFlag>=0 && presetFlag+1<arguments.size() && !engine.rootObjects().isEmpty()) {
+        auto *root=engine.rootObjects().first();
+        const auto preset=arguments[presetFlag+1];
+        QTimer::singleShot(400,&application,[root,preset] {QMetaObject::invokeMethod(root,"showQaExport",Q_ARG(QVariant,preset));});
+    }
+    const int exportFlag = arguments.indexOf(QStringLiteral("--qa-export"));
+    if (exportFlag >= 0 && exportFlag + 1 < arguments.size()) {
+        QVariantMap options{{QStringLiteral("format"), QStringLiteral("pdf")}, {QStringLiteral("scope"), QStringLiteral("active")}, {QStringLiteral("sets"), QStringLiteral("1-2")}};
+        const int formatFlag = arguments.indexOf(QStringLiteral("--export-format"));
+        if (formatFlag >= 0 && formatFlag + 1 < arguments.size()) options[QStringLiteral("format")] = arguments[formatFlag + 1];
+        const int contentFlag=arguments.indexOf(QStringLiteral("--export-content"));
+        if(contentFlag>=0 && contentFlag+1<arguments.size())options[QStringLiteral("content")]=arguments[contentFlag+1];
+        const int soundFlag = arguments.indexOf(QStringLiteral("--export-audio"));
+        if (soundFlag >= 0 && soundFlag + 1 < arguments.size()) options[QStringLiteral("audio")] = arguments[soundFlag + 1];
+        const int encoderFlag = arguments.indexOf(QStringLiteral("--ffmpeg"));
+        if (encoderFlag >= 0 && encoderFlag + 1 < arguments.size()) exportController.setFfmpeg(arguments[encoderFlag + 1]);
+        QObject::connect(&exportController, &ExportController::finished, &application, [&application](bool ok) { application.exit(ok ? 0 : 5); });
+        QTimer::singleShot(700, &application, [&exportController, &application, options, arguments, exportFlag] {
+            if (!exportController.prepare(options) || !exportController.start(arguments[exportFlag + 1], true)) application.exit(5);
+        });
     }
     const int screenshotFlag = arguments.indexOf(QStringLiteral("--screenshot"));
     const bool screenshotRequested = screenshotFlag >= 0 && screenshotFlag + 1 < arguments.size();

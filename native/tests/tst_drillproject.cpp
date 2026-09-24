@@ -1,4 +1,5 @@
 #include "DrillProject.h"
+#include "ExportController.h"
 #include "DrillTypes.h"
 #include "AssetCatalog.h"
 #include "SceneTypes.h"
@@ -1619,6 +1620,226 @@ private slots:
         QVERIFY(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong()
             > project.setInfo(1).value(QStringLiteral("startTick")).toLongLong());
         project.undo(); QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(), QStringLiteral("Set 1"));
+    }
+
+    void exportSelectionBrandingAndStateIsolation()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("T01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        project.addSet(QStringLiteral("Second"), 8);
+        project.selectAll();
+        const int current = project.currentSetIndex();
+        ExportController exporter(&project);
+        QImage logo(120,60,QImage::Format_ARGB32); logo.fill(QColor(QStringLiteral("#287d85")));
+        const QString logoPath=temp.filePath(QStringLiteral("company.png")); QVERIFY(logo.save(logoPath));
+        QVERIFY(exporter.setBranding(QStringLiteral("Example Company"), logoPath));
+        QCOMPARE(exporter.branding().value(QStringLiteral("company")).toString(), QStringLiteral("Example Company"));
+        project.undo();
+        QVERIFY(exporter.branding().value(QStringLiteral("company")).toString().isEmpty());
+        project.redo();
+        const QString saved = temp.filePath(QStringLiteral("show.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        DrillProject reopened;
+        QVERIFY(reopened.loadProject(saved));
+        ExportController restored(&reopened);
+        QCOMPARE(restored.branding().value(QStringLiteral("company")).toString(), QStringLiteral("Example Company"));
+        QCOMPARE(restored.branding().value(QStringLiteral("logo")),exporter.branding().value(QStringLiteral("logo")));
+        QVERIFY(!restored.branding().value(QStringLiteral("logo")).toString().isEmpty());
+        project.selectAll();
+        QVariantMap options{{QStringLiteral("sets"), QStringLiteral("1-2")}, {QStringLiteral("format"), QStringLiteral("pdf")}};
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(), 2);
+        QCOMPARE(project.currentSetIndex(), current);
+        QCOMPARE(project.selectedCount(), 1);
+        QVERIFY(!project.dirty());
+        QVERIFY(exporter.start(temp.filePath(QStringLiteral("charts.pdf"))));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(), 15000);
+        QCOMPARE(exporter.progress(), 1.0);
+        QVERIFY(QFileInfo(temp.filePath(QStringLiteral("charts.pdf"))).size()>1000);
+        QVERIFY(!exporter.start(temp.filePath(QStringLiteral("charts.pdf"))));
+        options[QStringLiteral("format")]=QStringLiteral("csv");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.start(temp.filePath(QStringLiteral("analytics.csv"))));
+        QTRY_VERIFY(!exporter.busy());
+        QFile csv(temp.filePath(QStringLiteral("analytics.csv"))); QVERIFY(csv.open(QIODevice::ReadOnly));
+        const auto data=csv.readAll(); QVERIFY(data.contains("T01")); QVERIFY(data.contains("Movement"));
+        options[QStringLiteral("sets")]=QStringLiteral("missing");
+        QVERIFY(!exporter.prepare(options));
+        QVERIFY(!exporter.start(temp.filePath(QStringLiteral("empty.pdf"))));
+        options[QStringLiteral("sets")]=QStringLiteral("2");options[QStringLiteral("format")]=QStringLiteral("png");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        QVERIFY(exporter.start(temp.path()));
+        exporter.cancel();
+        QVERIFY(!QFileInfo::exists(temp.filePath(QStringLiteral("chart-0001.png"))));
+        QCOMPARE(project.gridMidlineSteps(),4.0);
+        QCOMPARE(project.yardLineSteps(),8.0);
+    }
+
+    void exportPaginationVariantsAndMovements()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        QString notes;
+        for(int i=0;i<80;++i)notes += QStringLiteral("Instruction %1: hold, then move.\n").arg(i);
+        project.updateCurrentSet(QStringLiteral("1"), QStringLiteral("Opening"), notes, QStringLiteral("1-4"), 8, false);
+        project.createVariant(QStringLiteral("Alternative"), QStringLiteral("Alternative notes"));
+        ExportController exporter(&project);
+        QVariantMap options{{QStringLiteral("variants"),QStringLiteral("all")}};
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.pages().size()>3);
+        QVERIFY(exporter.pages().join(QStringLiteral(" ")).contains(QStringLiteral("Instructions continued")));
+        options[QStringLiteral("variants")]=QStringLiteral("active");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        project.createMovement(QStringLiteral("Finale"));
+        options[QStringLiteral("split")]=true;
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.plannedFiles(temp.path()).size(),2);
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:exporter.files())QVERIFY(QFileInfo(file).size()>100);
+        options[QStringLiteral("scope")]=QStringLiteral("active");
+        options[QStringLiteral("format")]=QStringLiteral("png");
+        options[QStringLiteral("dpi")]=150;
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(),1);
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QImage image(exporter.files().first());
+        QCOMPARE(image.size(),QSize(1650,1275));
+        QVERIFY(qAbs(image.dotsPerMeterX()-5906)<2);
+        options[QStringLiteral("framing")]=QStringLiteral("custom");
+        options[QStringLiteral("cropWidth")]=0;
+        QVERIFY(!exporter.prepare(options));
+    }
+
+    void exportMidiUsesEditedTempoAndCutPreroll()
+    {
+        QTemporaryDir directory;
+        // Imported 120 BPM: note starts at one second. Edited timeline: first
+        // beat at 60 BPM, then a 120->240 ramp; note starts at 1 + log(1.5) s.
+        QByteArray track=QByteArray::fromHex("00ff510307a12000c013");
+        appendVlq(track,960);track+=QByteArray::fromHex("903c64");
+        appendVlq(track,960);track+=QByteArray::fromHex("803c00");
+        track+=QByteArray::fromHex("00ff2f00");
+        QByteArray midi("MThd",4);append32(midi,6);append16(midi,0);append16(midi,1);append16(midi,480);
+        midi+=QByteArrayLiteral("MTrk");append32(midi,track.size());midi+=track;
+        QFile file(directory.filePath(QStringLiteral("tempo.mid")));
+        QVERIFY(file.open(QIODevice::WriteOnly));file.write(midi);file.close();
+        DrillProject project;project.newProject();
+        project.addPerformer(QStringLiteral("T01"),QStringLiteral("Trumpet"),QStringLiteral("Brass"),80,42);
+        QVERIFY(project.importMidi(file.fileName()));
+        project.addSet(QStringLiteral("First beat"),1);
+        project.addSet(QStringLiteral("Ramp"),2);
+        project.setTempoRegion(0,960,60,60,QStringLiteral("Slow"));
+        project.setTempoRegion(960,2880,120,240,QStringLiteral("Ramp"));
+        const QString saved=directory.filePath(QStringLiteral("edited.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        DrillProject reopened;QVERIFY(reopened.loadProject(saved));
+        QCOMPARE(reopened.tempoRegionInfo(0).value(QStringLiteral("startBpm")).toDouble(),60.0);
+        ExportController exporter(&project);
+        QVERIFY(exporter.prepare({{QStringLiteral("format"),QStringLiteral("video2d")},
+                                  {QStringLiteral("sets"),QStringLiteral("2-3")}}));
+        QCOMPARE(exporter.m_charts.size(),2);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(),qint64(960));
+        QCOMPARE(exporter.m_charts[0].durationMs,1000.0);
+        QVERIFY(qAbs(exporter.m_charts[1].durationMs-1000*std::log(2.0))<0.01);
+        QVERIFY2(exporter.prepareMidiChart(0),qPrintable(exporter.message()));
+        QCOMPARE(exporter.m_prerollFrames,0);
+        // Sample the PCM itself: rendering at the original tempo would already
+        // contain a note in the first block, and fail this silence assertion.
+        auto peak=[&](int frames) {
+            QVector<float> pcm(frames*2);
+            exporter.m_synth->renderOffline(reinterpret_cast<char *>(pcm.data()),frames*8);
+            float value=0;for(float sample:pcm)value=qMax(value,qAbs(sample));return value;
+        };
+        QVERIFY(peak(64800)<0.000001f); // 1.35 seconds, before retimed note-on
+        QVERIFY(peak(7200)>0.0001f);   // reaches 1.5 seconds, after retimed note-on
+        QVERIFY2(exporter.prepareMidiChart(1),qPrintable(exporter.message()));
+        QCOMPARE(exporter.m_prerollFrames,qint64(48000)); // edited beat, not imported 24000
+        peak(int(exporter.m_prerollFrames));
+        QVERIFY(peak(16800)<0.000001f);
+        QVERIFY(peak(7200)>0.0001f);
+        // Live project edits cannot change the immutable export clock.
+        project.setTempoRegion(0,960,240,240,QStringLiteral("Later edit"));
+        QVERIFY(exporter.prepareMidiChart(1));
+        QCOMPARE(exporter.m_prerollFrames,qint64(48000));
+    }
+
+    void exportWorkspacePairedDocumentsAndPreview()
+    {
+        QTemporaryDir temp;
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 80, 42);
+        project.setOpeningBehavior(QStringLiteral("hold"),2);
+        project.addSet(QStringLiteral("Second"),8);
+        ExportController exporter(&project);
+        QCOMPARE(ExportOptions::fromMap({}).performerLabelSize,6.0);
+        QCOMPARE(ExportOptions::fromMap({{QStringLiteral("performerLabelSize"),2}}).performerLabelSize,4.0);
+        const auto organization=QCoreApplication::organizationName();
+        const auto application=QCoreApplication::applicationName();
+        QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftExportTests"));
+        QCoreApplication::setApplicationName(QFileInfo(temp.path()).fileName());
+        const auto cleanup=qScopeGuard([&] {QSettings().clear();QCoreApplication::setOrganizationName(organization);QCoreApplication::setApplicationName(application);});
+        exporter.savePreset(QStringLiteral("QA legacy label"),{{QStringLiteral("fontSize"),12}});
+        QCOMPARE(exporter.loadPreset(QStringLiteral("QA legacy label")).value(QStringLiteral("performerLabelSize")).toInt(),12);
+        QSettings().remove(QStringLiteral("export/presets/QA legacy label"));
+        QVariantMap options{{QStringLiteral("content"),QStringLiteral("both")}, {QStringLiteral("basename"),QStringLiteral("Packet")}, {QStringLiteral("brandingCompany"),QStringLiteral("Preview only")}};
+        const auto branding=exporter.branding();
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.branding(),branding);
+        QCOMPARE(exporter.pages().size(),3);
+        auto files=exporter.plannedFiles(temp.path());
+        QCOMPARE(files.size(),2);
+        QCOMPARE(exporter.firstPageForFile(0),0);
+        QCOMPARE(exporter.firstPageForFile(1),2);
+        QVERIFY(files[0].endsWith(QStringLiteral("Packet - Drill Charts.pdf")));
+        QVERIFY(files[1].endsWith(QStringLiteral("Packet - Coordinates.pdf")));
+        const int revision=exporter.previewRevision();
+        QVERIFY(exporter.start(temp.path()));
+        QVERIFY(!exporter.prepare({}));
+        QCOMPARE(exporter.previewRevision(),revision);
+        project.addSet(QStringLiteral("Later edit"),8);
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:files)QVERIFY(QFileInfo(file).size()>1000);
+        project.createMovement(QStringLiteral("Finale"));
+        options[QStringLiteral("split")]=true;
+        QVERIFY(exporter.prepare(options));
+        files=exporter.plannedFiles(temp.path());
+        QCOMPARE(files.size(),4);
+        QVERIFY(files[0].contains(QStringLiteral("Drill Charts")));
+        QVERIFY(files[1].contains(QStringLiteral("Coordinates")));
+        QVERIFY(files[2].contains(QStringLiteral("Drill Charts")));
+        QVERIFY(exporter.start(temp.path()));
+        QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
+        QCOMPARE(exporter.progress(),1.0);
+        for(const auto &file:files)QVERIFY(QFileInfo(file).size()>1000);
+        options[QStringLiteral("format")]=QStringLiteral("csv");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.tableRows().size()>1);
+        QCOMPARE(exporter.tableRows()[0].toStringList().size(),12);
+        QCOMPARE(exporter.tableRows()[1].toStringList()[1],QStringLiteral("P01"));
+        QCOMPARE(exporter.tableRows()[1].toStringList()[8],QStringLiteral("2"));
+        QVERIFY(exporter.suggestedName(QStringLiteral("charts"),QStringLiteral("pdf")).endsWith(QStringLiteral(" - Drill Charts.pdf")));
+        options[QStringLiteral("format")]=QStringLiteral("video2d");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.duration()>0);
+        exporter.previewTime(exporter.duration()/2);
+        const QString preview=exporter.localPath(exporter.previewUrl());
+        QVERIFY(QFileInfo::exists(preview));
+        exporter.previewTime(0);
+        QVERIFY(!QFileInfo::exists(preview));
+        options[QStringLiteral("sets")]=QStringLiteral("missing");
+        QVERIFY(!exporter.prepare(options));
+        QVERIFY(exporter.previewUrl().isEmpty());
     }
 
     void exportsAreCreated()

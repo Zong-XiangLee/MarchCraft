@@ -93,6 +93,7 @@ QJsonObject DrillProject::toJson() const
         if (i != m_currentMovement) entry.insert(QStringLiteral("state"), m_movements[i].state);
         movements.append(entry);
     }
+    result.insert(QStringLiteral("exportBranding"), m_exportBranding);
     result.insert(QStringLiteral("movements"), movements);
     result.insert(QStringLiteral("currentMovement"), m_currentMovement);
     return result;
@@ -172,6 +173,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_performers = std::move(performers);
     m_sets = std::move(sets);
     m_archivedSets = std::move(archivedSets);
+    m_exportBranding = object.value(QStringLiteral("exportBranding")).toObject();
     m_showName = object.value(QStringLiteral("showName")).toString(QStringLiteral("Untitled Show"));
     m_fieldPreset = MarchCraft::fieldGeometry(object.value(QStringLiteral("fieldPreset")).toString()).id;
     m_audioSource = object.value(QStringLiteral("audioSource")).toString();
@@ -193,11 +195,13 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_venue = MarchCraft::VenueConfiguration::fromJson(object.value(QStringLiteral("venue")).toObject());
     m_props = std::move(props);
     m_bpm = object.value(QStringLiteral("bpm")).toDouble(120.0);
-    if (meterRegions.isEmpty()) meterRegions = {MarchCraft::MeterRegion{}};
-    if (tempoRegions.isEmpty()) tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
-    m_meterRegions = std::move(meterRegions);
-    m_tempoRegions = std::move(tempoRegions);
-    if (m_music.loaded()) rebuildTimingFromMusic();
+    // Imported timing is a fallback for legacy projects, not a replacement for
+    // explicitly saved edits (also used by undo and immutable export snapshots).
+    m_meterRegions = {MarchCraft::MeterRegion{}};
+    m_tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
+    if (m_music.loaded() && (meterRegions.isEmpty() || tempoRegions.isEmpty())) rebuildTimingFromMusic();
+    if (!meterRegions.isEmpty()) m_meterRegions = std::move(meterRegions);
+    if (!tempoRegions.isEmpty()) m_tempoRegions = std::move(tempoRegions);
     if (object.value(QStringLiteral("version")).toInt() < 3) {
         qint64 tick = 0;
         for (int i = 0; i < m_sets.size(); ++i) {

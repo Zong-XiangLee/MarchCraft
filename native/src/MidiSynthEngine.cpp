@@ -10,15 +10,15 @@
 #include <algorithm>
 #include <cstring>
 
-MidiSynthWorker::MidiSynthWorker(QObject *parent) : QObject(parent)
+MidiSynthWorker::MidiSynthWorker(QObject *parent, bool offline) : QObject(parent)
 {
     m_format.setSampleRate(48000);
     m_format.setChannelCount(2);
     m_format.setSampleFormat(QAudioFormat::Float);
     if (!loadLibrary()) return;
     QAudioDevice device = QMediaDevices::defaultAudioOutput();
-    if (device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
-    if (!device.isFormatSupported(m_format)) m_format = device.preferredFormat();
+    if (!offline && device.isNull()) { setStatus(QStringLiteral("No audio output device is available")); return; }
+    if (!offline && !device.isFormatSupported(m_format)) m_format = device.preferredFormat();
     if (m_format.sampleFormat() != QAudioFormat::Float || m_format.channelCount() != 2) {
         setStatus(QStringLiteral("Audio device does not support stereo floating-point playback")); return;
     }
@@ -32,6 +32,7 @@ MidiSynthWorker::MidiSynthWorker(QObject *parent) : QObject(parent)
     if (!QFileInfo::exists(font) || p_sfLoad(m_synth, font.toUtf8().constData(), 1) < 0) {
         setStatus(QStringLiteral("Bundled GeneralUser GS SoundFont is missing")); return;
     }
+    if (offline) { m_available = true; setStatus(QStringLiteral("Offline MIDI synth ready")); return; }
     m_sink = new QAudioSink(device, m_format, this);
     // About 100 ms of headroom, serviced independently of GUI/render stalls.
     m_sink->setBufferSize(m_format.bytesForFrames(m_format.sampleRate() / 10));
@@ -88,14 +89,17 @@ bool MidiSynthWorker::loadLibrary()
     return true;
 }
 
-bool MidiSynthWorker::load(const MarchCraft::MusicDocument &document)
+bool MidiSynthWorker::load(const MarchCraft::MusicDocument &document,
+                           std::function<double(qint64)> tickToMilliseconds)
 {
     if (m_sink) m_sink->reset();
     QMutexLocker lock(&m_mutex);
+    m_tickToMilliseconds = std::move(tickToMilliseconds);
     m_document = document; m_eventIndex = 0; m_startTick = 0; m_startMs = 0.0;
     m_eventFrames.clear(); m_eventFrames.reserve(document.playbackEvents.size());
     for (const auto &event : document.playbackEvents)
-        m_eventFrames.push_back(qRound64(document.millisecondsAt(event.tick) * m_format.sampleRate() / 1000.0));
+        m_eventFrames.push_back(qRound64((m_tickToMilliseconds ? m_tickToMilliseconds(event.tick) : document.millisecondsAt(event.tick))
+                                       * m_format.sampleRate() / 1000.0));
     m_renderedFrames = 0; m_positionMs.store(0.0); if (m_synth) p_systemReset(m_synth);
     return m_available && !m_document.playbackEvents.isEmpty();
 }
@@ -125,7 +129,7 @@ void MidiSynthWorker::seekTick(qint64 tick)
     if (m_sink) m_sink->reset();
     QMutexLocker lock(&m_mutex);
     tick = qBound<qint64>(0, tick, m_document.durationTick); restoreState(tick);
-    m_startTick = tick; m_startMs = m_document.millisecondsAt(tick);
+    m_startTick = tick; m_startMs = m_tickToMilliseconds ? m_tickToMilliseconds(tick) : m_document.millisecondsAt(tick);
     m_renderedFrames = 0; m_positionMs.store(m_startMs);
 }
 

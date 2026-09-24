@@ -20,6 +20,8 @@ class FieldTransform final
 public:
     static constexpr double MetersPerStep = 0.5715; // 22.5 inches
     static constexpr double FieldWidthSteps = 160.0;
+    static constexpr double YardLineSteps = 8.0;
+    static constexpr double GridMidlineSteps = 4.0;
 
     static QVector3D drillToWorld(const QPointF &position, double fieldDepthSteps,
                                   double surfaceOffsetMeters = 0.0)

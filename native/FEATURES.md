@@ -33,7 +33,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Audio can be attached, previewed, offset, and aligned with anchors; automatic beat/phrase inference remains outside the prototype because it is not authoritative for changing-tempo marching arrangements.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
-- GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering, and video export remain production milestones.
+- GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering remain production milestones.
 - The undo stack is active during a session; cross-session version browsing will be added with the production project archive format.
 # Apple-studio workspace refinement
 
@@ -53,7 +53,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Playback updates only motion roles; performer editing is one undoable operation.
 - Clinic dismissal safely handles issues with attached metadata; timed collisions
   remain warnings while geometric crossings alone remain intentional choreography.
-- The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active. Instrument-specific carriage meshes, modular uniforms, cinematic rendering, and video export remain production milestones.
+- The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active. Instrument-specific carriage meshes, modular uniforms, cinematic rendering remain production milestones.
 
 ### Shape drawer reliability
 
@@ -82,3 +82,9 @@ Screenshot QA accepts `--field-style realistic` or `--field-style editor` in eit
 - Creation, duplication, renaming, reordering, and deletion are undoable. Existing shows migrate to a single movement; save/recovery includes all movements.
 - MIDI rendering runs away from GUI/animation work. Volume and loop controls do not restart synthesis.
 - Music measure clicks seek and select the corresponding editing page. Rectangle/lasso tools select the performers at their displayed positions after any timeline seek; field selection pauses playback.
+
+### Drill chart and animation export
+
+The native export workspace adds full-field vector PDF charts, configurable coordinate sheets, PNG pages, analytics CSV, Windows printing, and deterministic 2D/3D MP4 capture. It supports movement/set/variant/performer selection, embedded company branding plus optional monochrome MarchCraft branding, instruction continuation pages, paper/crop/layer controls, preview, local presets, and staged output publication. Video encoding uses an external user-selected FFmpeg; audio can be silent, an attached recording, or offline FluidSynth MIDI. This implements drill playback video export; cinematic camera sequencing remains outside the prototype.
+
+The Export tab stays alongside Editor and provides automatic format-specific previews, show-based filenames, built-in and saved presets, paired chart/coordinate PDFs, independent performer label sizing, and an export-only black-and-white vector mark. Export jobs use immutable snapshots; progress remains visible while editing.

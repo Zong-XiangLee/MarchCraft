@@ -17,7 +17,13 @@ ApplicationWindow {
            : "MarchCraft"
     color: MarchCraftTheme.canvas
 
+    function showQaExport(preset) {
+        exportPanel.enter()
+        if(preset === "csv")exportPanel.openFor("charts","csv")
+        else exportPanel.applyPreset(preset)
+    }
     function showQaSurface(surface) {
+        if (surface === "export-dialog") { exportPanel.openFor("charts", "pdf"); return }
         if (surface === "preferences") settingsDialog.open()
         else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
@@ -25,6 +31,7 @@ ApplicationWindow {
     }
 
     property int activePerformer: -1
+    property bool exportWorkspace: false
     property bool threeD: false
     property bool playing: transport.playing
     property string qa3DView: ""
@@ -58,6 +65,8 @@ ApplicationWindow {
         drillProject.fieldPreset = fieldPreset
         drillProject.lightingPreset = lightingPreset
         homeMode = "dashboard"
+        exportPanel.resetForProject()
+        window.exportWorkspace = false
         workspaceState.enteredProject()
     }
 
@@ -72,6 +81,8 @@ ApplicationWindow {
     function openProjectPath(path) {
         if (!drillProject.loadProject(path)) return
         workspaceController.recordRecentProject(drillProject.projectPath, drillProject.showName)
+        exportPanel.resetForProject()
+        window.exportWorkspace = false
         workspaceState.enteredProject()
     }
 
@@ -85,6 +96,8 @@ ApplicationWindow {
             openProjectPath(path)
         } else if (action === "sample") {
             drillProject.loadDemo()
+            exportPanel.resetForProject()
+            window.exportWorkspace = false
             workspaceState.enteredProject()
         } else if (action === "exit") {
             forceClosing = true
@@ -209,8 +222,9 @@ ApplicationWindow {
             Action { text: "Import MusicXML…"; onTriggered: musicXmlDialog.open() }
             Action { text: "Attach audio…"; onTriggered: audioDialog.open() }
             MenuSeparator {}
-            Action { text: "Export analytics CSV…"; onTriggered: csvDialog.open() }
-            Action { text: "Export coordinate sheets PDF…"; onTriggered: pdfDialog.open() }
+            Action { text: "Export analytics CSV…"; onTriggered: exportPanel.openFor("charts", "csv") }
+            Action { text: "Export drill charts, sheets, images or video…"; onTriggered: exportPanel.openFor("charts", "pdf") }
+            Action { text: "Export coordinate sheets PDF…"; onTriggered: exportPanel.openFor("coordinates", "pdf") }
             MenuSeparator {}
             Action { text: "Exit"; shortcut: StandardKey.Quit; onTriggered: workspaceState.request("exit", "", drillProject.dirty) }
         }
@@ -260,16 +274,40 @@ ApplicationWindow {
         }
     }
 
-    header: EditorCommandBars {
-        id: commandBars
-        batchDialogContext: batchDialog
-        drillProjectContext: drillProject
-        editorActionsPopupContext: editorActionsPopup
-        freehandDialogContext: freehandDialog
-        performerDialogContext: performerDialog
-        shapePaletteContext: shapePalette
-        windowContext: window
-        workspaceStateContext: workspaceState
+    header: Column {
+        visible: workspaceState.workspaceActive
+        width: parent.width
+        height: visible ? workspaceTabs.height + (window.exportWorkspace ? 0 : commandBars.height) : 0
+        ToolBar {
+            id:workspaceTabs; width:parent.width; height:42
+            RowLayout {
+                anchors.fill:parent; anchors.leftMargin:12; anchors.rightMargin:12
+                Label { text:"MARCHCRAFT"; font.bold:true; font.letterSpacing:1; Layout.rightMargin:24 }
+                TabBar {
+                    currentIndex:window.exportWorkspace ? 1 : 0
+                    TabButton { background:Rectangle { color:parent.checked ? MarchCraftTheme.surfaceRaised : MarchCraftTheme.panelHeader; Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:2; color:MarchCraftTheme.accent; visible:parent.parent.checked } }
+                        text:"Editor"; implicitHeight:36; width:110; onClicked:window.exportWorkspace=false }
+                    TabButton { background:Rectangle { color:parent.checked ? MarchCraftTheme.surfaceRaised : MarchCraftTheme.panelHeader; Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:2; color:MarchCraftTheme.accent; visible:parent.parent.checked } }
+                        text:"Export"; implicitHeight:36; width:110; onClicked:exportPanel.enter() }
+                }
+                Item { Layout.fillWidth:true }
+                Label { visible:exportController.busy; text:"Exporting · "+Math.round(exportController.progress*100)+"%" }
+                ProgressBar { visible:exportController.busy; value:exportController.progress; Layout.preferredWidth:120 }
+            }
+        }
+        EditorCommandBars {
+            width:parent.width
+            visible:!window.exportWorkspace && workspaceState.workspaceActive
+            id: commandBars
+            batchDialogContext: batchDialog
+            drillProjectContext: drillProject
+            editorActionsPopupContext: editorActionsPopup
+            freehandDialogContext: freehandDialog
+            performerDialogContext: performerDialog
+            shapePaletteContext: shapePalette
+            windowContext: window
+            workspaceStateContext: workspaceState
+        }
     }
 
     Popup {
@@ -377,14 +415,14 @@ ApplicationWindow {
         project: drillProject
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         anchors.margins: 6; height: 32
-        visible: workspaceState.workspaceActive
+        visible: workspaceState.workspaceActive && !window.exportWorkspace
     }
 
     SplitView {
         id: horizontalSplit
-        enabled: workspaceState.workspaceActive
+        enabled: workspaceState.workspaceActive && !window.exportWorkspace
         visible: opacity > 0.01
-        opacity: workspaceState.workspaceActive ? 1 : 0
+        opacity: workspaceState.workspaceActive && !window.exportWorkspace ? 1 : 0
         transform: Translate {
             y: workspaceState.workspaceActive ? 0 : 8
             Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
@@ -508,7 +546,7 @@ ApplicationWindow {
             Label { text: drillProject.statusMessage; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; Layout.fillWidth: true }
             Label { text: drillProject.selectedCount + " selected"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
             Rectangle { width: 1; height: 12; color: MarchCraftTheme.divider }
-            Label { text: window.threeD ? "3D PREVIEW" : "2D EDITOR"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
+            Label { text: window.exportWorkspace ? "EXPORT" : window.threeD ? "3D PREVIEW" : "2D EDITOR"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
         }
     }
 
@@ -739,7 +777,7 @@ ApplicationWindow {
             Label { text: "Set name (double-click a set card to customize)" }
             TextField { id: setName; Layout.fillWidth: true }
             Label { text: "Caption" }
-            TextField { id: setCaption; Layout.fillWidth: true; placeholderText: "Optional description" }
+            ScrollView { Layout.fillWidth: true; Layout.preferredHeight: 90; TextArea { id: setCaption; placeholderText: "Chart instructions (multiple lines)"; wrapMode: TextEdit.Wrap } }
             Label { text: "Measures" }
             TextField { id: setMeasure; Layout.fillWidth: true; placeholderText: "17–20" }
             Label { text: "Opening behavior"; visible: setDialog.editing && drillProject.currentSetIndex === 0 }
@@ -971,6 +1009,12 @@ ApplicationWindow {
     FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMidiAsync(selectedFile) } }
     FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMusicXml(selectedFile) } }
     FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: drillProject.attachAudio(selectedFile) }
+    ExportWorkspace {
+        id:exportPanel
+        visible:workspaceState.workspaceActive && window.exportWorkspace
+        onWorkspaceRequested: { transport.pause(); window.exportWorkspace = true }
+    }
+    ExportVideoWindow { }
     FileDialog { id: csvDialog; title: "Export analytics"; fileMode: FileDialog.SaveFile; nameFilters: ["CSV (*.csv)"]; defaultSuffix: "csv"; onAccepted: drillProject.exportCsv(selectedFile) }
     FileDialog { id: pdfDialog; title: "Export coordinate sheets"; fileMode: FileDialog.SaveFile; nameFilters: ["PDF (*.pdf)"]; defaultSuffix: "pdf"; onAccepted: drillProject.exportCoordinatePdf(selectedFile) }
     ColorDialog {

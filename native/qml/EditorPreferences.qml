@@ -98,7 +98,9 @@ Dialog {
                 ComboBox { Layout.fillWidth: true; model: ["hs","college","nfl","indoor"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProjectContext.fieldPreset)); onActivated: drillProjectContext.fieldPreset=currentText }
                 CheckBox { text: "Overlay grid (realistic)"; enabled: drillProjectContext.fieldStyle !== "editor"; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid=checked }
                 Item {}
-                Label { text: "Overlay interval" }
+                Button { text: "Standard 8-to-5 grid"; onClicked: { drillProjectContext.showFieldGrid=true; drillProjectContext.fieldGridInterval=1; drillProjectContext.fieldGridColor="#b8b8b8"; drillProjectContext.fieldGridOpacity=0.35 } }
+                Item {}
+                Label { text: "Custom realistic grid interval" }
                 ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; Component.onCompleted: currentIndex=Math.max(0,find(drillProjectContext.fieldGridInterval.toString())); onActivated: drillProjectContext.fieldGridInterval=Number(currentText) }
                 Label { text: "Grid color" }
                 TextField { Layout.fillWidth: true; text: drillProjectContext.fieldGridColor; onEditingFinished: drillProjectContext.fieldGridColor=text }
