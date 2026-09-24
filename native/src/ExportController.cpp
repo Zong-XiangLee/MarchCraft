@@ -1086,19 +1086,8 @@ void ExportController::tick()
         {
             if (m_audioChart != c)
             {
-                m_synth = std::make_unique<MidiSynthWorker>(nullptr, true);
-                if (!m_synth->load(project.m_music))
-                {
-                    fail(QStringLiteral("MIDI synthesis unavailable: ") + m_synth->status());
+                if (!prepareMidiChart(c))
                     return;
-                }
-                m_synth->setGain(project.m_midiMasterVolume);
-                m_prerollFrames =
-                    chart.set == 0
-                        ? 0
-                        : qRound64(project.m_music.millisecondsAt(project.m_sets[chart.set - 1].startTick) *
-                                   48);
-                m_audioChart = c;
             }
             if (m_prerollFrames > 0)
             {
@@ -1652,4 +1641,27 @@ int ExportController::firstPageForFile(int file) const
             return page;
     }
     return 0;
+}
+
+bool ExportController::prepareMidiChart(int chartIndex)
+{
+    const auto &chart = m_charts[chartIndex];
+    auto *project = m_clones[chart.clone].get();
+    m_synth = std::make_unique<MidiSynthWorker>(nullptr, true);
+    // The cloned project outlives this worker and cannot change during export.
+    // Schedule every MIDI event with the same tempo integration as video frames,
+    // including ramps. Pre-roll in this clock preserves controllers and voices
+    // across disjoint cuts without stretching pitch or shortening held notes.
+    if (!m_synth->load(project->m_music, [project](qint64 tick) {
+            return project->millisecondsBetween(0, tick);
+        }))
+    {
+        fail(QStringLiteral("MIDI synthesis unavailable: ") + m_synth->status());
+        return false;
+    }
+    m_synth->setGain(project->m_midiMasterVolume);
+    m_prerollFrames = chart.set == 0 ? 0 : qRound64(
+        project->millisecondsBetween(0, project->m_sets[chart.set - 1].startTick) * 48);
+    m_audioChart = chartIndex;
+    return true;
 }

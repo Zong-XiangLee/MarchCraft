@@ -195,11 +195,13 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_venue = MarchCraft::VenueConfiguration::fromJson(object.value(QStringLiteral("venue")).toObject());
     m_props = std::move(props);
     m_bpm = object.value(QStringLiteral("bpm")).toDouble(120.0);
-    if (meterRegions.isEmpty()) meterRegions = {MarchCraft::MeterRegion{}};
-    if (tempoRegions.isEmpty()) tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
-    m_meterRegions = std::move(meterRegions);
-    m_tempoRegions = std::move(tempoRegions);
-    if (m_music.loaded()) rebuildTimingFromMusic();
+    // Imported timing is a fallback for legacy projects, not a replacement for
+    // explicitly saved edits (also used by undo and immutable export snapshots).
+    m_meterRegions = {MarchCraft::MeterRegion{}};
+    m_tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
+    if (m_music.loaded() && (meterRegions.isEmpty() || tempoRegions.isEmpty())) rebuildTimingFromMusic();
+    if (!meterRegions.isEmpty()) m_meterRegions = std::move(meterRegions);
+    if (!tempoRegions.isEmpty()) m_tempoRegions = std::move(tempoRegions);
     if (object.value(QStringLiteral("version")).toInt() < 3) {
         qint64 tick = 0;
         for (int i = 0; i < m_sets.size(); ++i) {

@@ -1719,6 +1719,59 @@ private slots:
         QVERIFY(!exporter.prepare(options));
     }
 
+    void exportMidiUsesEditedTempoAndCutPreroll()
+    {
+        QTemporaryDir directory;
+        // Imported 120 BPM: note starts at one second. Edited timeline: first
+        // beat at 60 BPM, then a 120->240 ramp; note starts at 1 + log(1.5) s.
+        QByteArray track=QByteArray::fromHex("00ff510307a12000c013");
+        appendVlq(track,960);track+=QByteArray::fromHex("903c64");
+        appendVlq(track,960);track+=QByteArray::fromHex("803c00");
+        track+=QByteArray::fromHex("00ff2f00");
+        QByteArray midi("MThd",4);append32(midi,6);append16(midi,0);append16(midi,1);append16(midi,480);
+        midi+=QByteArrayLiteral("MTrk");append32(midi,track.size());midi+=track;
+        QFile file(directory.filePath(QStringLiteral("tempo.mid")));
+        QVERIFY(file.open(QIODevice::WriteOnly));file.write(midi);file.close();
+        DrillProject project;project.newProject();
+        project.addPerformer(QStringLiteral("T01"),QStringLiteral("Trumpet"),QStringLiteral("Brass"),80,42);
+        QVERIFY(project.importMidi(file.fileName()));
+        project.addSet(QStringLiteral("First beat"),1);
+        project.addSet(QStringLiteral("Ramp"),2);
+        project.setTempoRegion(0,960,60,60,QStringLiteral("Slow"));
+        project.setTempoRegion(960,2880,120,240,QStringLiteral("Ramp"));
+        const QString saved=directory.filePath(QStringLiteral("edited.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        DrillProject reopened;QVERIFY(reopened.loadProject(saved));
+        QCOMPARE(reopened.tempoRegionInfo(0).value(QStringLiteral("startBpm")).toDouble(),60.0);
+        ExportController exporter(&project);
+        QVERIFY(exporter.prepare({{QStringLiteral("format"),QStringLiteral("video2d")},
+                                  {QStringLiteral("sets"),QStringLiteral("2-3")}}));
+        QCOMPARE(exporter.m_charts.size(),2);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(),qint64(960));
+        QCOMPARE(exporter.m_charts[0].durationMs,1000.0);
+        QVERIFY(qAbs(exporter.m_charts[1].durationMs-1000*std::log(2.0))<0.01);
+        QVERIFY2(exporter.prepareMidiChart(0),qPrintable(exporter.message()));
+        QCOMPARE(exporter.m_prerollFrames,0);
+        // Sample the PCM itself: rendering at the original tempo would already
+        // contain a note in the first block, and fail this silence assertion.
+        auto peak=[&](int frames) {
+            QVector<float> pcm(frames*2);
+            exporter.m_synth->renderOffline(reinterpret_cast<char *>(pcm.data()),frames*8);
+            float value=0;for(float sample:pcm)value=qMax(value,qAbs(sample));return value;
+        };
+        QVERIFY(peak(64800)<0.000001f); // 1.35 seconds, before retimed note-on
+        QVERIFY(peak(7200)>0.0001f);   // reaches 1.5 seconds, after retimed note-on
+        QVERIFY2(exporter.prepareMidiChart(1),qPrintable(exporter.message()));
+        QCOMPARE(exporter.m_prerollFrames,qint64(48000)); // edited beat, not imported 24000
+        peak(int(exporter.m_prerollFrames));
+        QVERIFY(peak(16800)<0.000001f);
+        QVERIFY(peak(7200)>0.0001f);
+        // Live project edits cannot change the immutable export clock.
+        project.setTempoRegion(0,960,240,240,QStringLiteral("Later edit"));
+        QVERIFY(exporter.prepareMidiChart(1));
+        QCOMPARE(exporter.m_prerollFrames,qint64(48000));
+    }
+
     void exportWorkspacePairedDocumentsAndPreview()
     {
         QTemporaryDir temp;

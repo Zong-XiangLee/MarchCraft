@@ -89,14 +89,17 @@ bool MidiSynthWorker::loadLibrary()
     return true;
 }
 
-bool MidiSynthWorker::load(const MarchCraft::MusicDocument &document)
+bool MidiSynthWorker::load(const MarchCraft::MusicDocument &document,
+                           std::function<double(qint64)> tickToMilliseconds)
 {
     if (m_sink) m_sink->reset();
     QMutexLocker lock(&m_mutex);
+    m_tickToMilliseconds = std::move(tickToMilliseconds);
     m_document = document; m_eventIndex = 0; m_startTick = 0; m_startMs = 0.0;
     m_eventFrames.clear(); m_eventFrames.reserve(document.playbackEvents.size());
     for (const auto &event : document.playbackEvents)
-        m_eventFrames.push_back(qRound64(document.millisecondsAt(event.tick) * m_format.sampleRate() / 1000.0));
+        m_eventFrames.push_back(qRound64((m_tickToMilliseconds ? m_tickToMilliseconds(event.tick) : document.millisecondsAt(event.tick))
+                                       * m_format.sampleRate() / 1000.0));
     m_renderedFrames = 0; m_positionMs.store(0.0); if (m_synth) p_systemReset(m_synth);
     return m_available && !m_document.playbackEvents.isEmpty();
 }
@@ -126,7 +129,7 @@ void MidiSynthWorker::seekTick(qint64 tick)
     if (m_sink) m_sink->reset();
     QMutexLocker lock(&m_mutex);
     tick = qBound<qint64>(0, tick, m_document.durationTick); restoreState(tick);
-    m_startTick = tick; m_startMs = m_document.millisecondsAt(tick);
+    m_startTick = tick; m_startMs = m_tickToMilliseconds ? m_tickToMilliseconds(tick) : m_document.millisecondsAt(tick);
     m_renderedFrames = 0; m_positionMs.store(m_startMs);
 }
 

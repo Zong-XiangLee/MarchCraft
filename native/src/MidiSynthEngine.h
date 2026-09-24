@@ -10,6 +10,7 @@
 #include <QThread>
 #include <QTimer>
 #include <atomic>
+#include <functional>
 
 class QAudioSink;
 
@@ -21,7 +22,10 @@ public:
     qint64 renderOffline(char *data, qint64 size) { return render(data, size); }
     ~MidiSynthWorker() override;
 
-    bool load(const MarchCraft::MusicDocument &document);
+    // Offline exports may provide the edited drill tick-to-time mapping. Realtime
+    // callers retain the imported MIDI timing when no mapping is supplied.
+    bool load(const MarchCraft::MusicDocument &document,
+              std::function<double(qint64)> tickToMilliseconds = {});
     void updateTracks(const QVector<MarchCraft::MusicTrack> &tracks);
     void play();
     void pause();
@@ -102,6 +106,7 @@ private:
     std::atomic<int> m_underruns{0};
     QVector<qint64> m_eventFrames;
     double m_startMs = 0.0;
+    std::function<double(qint64)> m_tickToMilliseconds;
     QTimer m_positionTimer;
 };
 

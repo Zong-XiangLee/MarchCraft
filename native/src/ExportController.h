@@ -99,6 +99,8 @@ class ExportController final : public QObject
     void finished(bool success);
 
   private:
+    friend class DrillProjectTest;
+    bool prepareMidiChart(int chart);
     struct Chart
     {
         int clone = 0;
