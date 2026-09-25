@@ -16,6 +16,13 @@ sets whose counts match coordinate-sheet rows; a hold is represented by consecut
 Formation and freehand optimization still run in the background and require an explicit
 Apply action before project data changes.
 
+Advanced transition authoring adds direct field editing for multi-control-point curves,
+Follow the Leader routes, gate/pivot arcs, and count-based stagger/ripple timing. These
+tools share the same persisted path data used by 2D/3D playback, gait, video export,
+distance analytics, and Drill Clinic. Preview changes remain isolated until **Apply**,
+which creates one undoable project transaction; **Cancel** or Escape restores the prior
+path data and selection.
+
 ## What is included
 
 - Native 2D drill editor and synchronized stylized 3D preview
@@ -27,7 +34,7 @@ Apply action before project data changes.
 - Regulation front/back field layout with ten-yard end zones, yard numbers, corrected HS/NCAA/NFL hashes, five-yard lines, and exactly four vertical one-yard inserts per five-yard interval
 - Audience-perspective coordinates: Side 1 is left, Side 2 is right, front is the near/bottom side of the editor, and back is the far/top side
 - Roster, section, label, uniform-color, and instrument assignments
-- Set/subset timeline, variant-local performer groups, single-transition and whole-show playback, paths, formations, snapping, axis locking, and undo/redo
+- Set/subset timeline, variant-local performer groups, single-transition and whole-show playback, editable curves, Follow the Leader, gate/pivot, stagger/ripple timing, formations, snapping, axis locking, and undo/redo
 - Adaptive equal-distance spirals with half-step turns and direction controls, plus optional shape-created groups
 - Persisted colored-symbol, compact-dot, and black-dot marker presets with adjustable sizing
 - Constant-speed arc-length playback with uninterrupted whole-show timing
@@ -59,7 +66,7 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, `--qa-shapes` for the editor shape palette, or `--qa-transition-authoring` for an active curve-edit session with Clinic metrics. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
 
 ## Controls
 
@@ -72,6 +79,8 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 - Use **Shape** to distribute selected performers on the full formation library; enable **Create as group** when desired.
 - Select an entire persistent shape to reveal corner resize handles and the rotation handle; resizing preserves the shape and performer spacing.
 - Use **Freehand**, choose cleanup and movement behavior, then draw directly on the field. Straight strokes and circles can be recognized automatically; handwriting is smoothed while retaining its form.
+- Select performers on a destination set and choose **Transition path**. Pick Direct, Editable curve, Follow the Leader, Gate / pivot, or Stagger / ripple; drag cyan curve/route handles, double-click to add a point, right-click a handle to remove it, and inspect live path length, step size, timing, and conflict metrics. Shift-click performers to edit multiple paths. Enter applies one undoable edit; Escape cancels it.
+- Follow the Leader accepts a leader plus selected/formation/lateral/roster order and can reverse that order. Gate/pivot accepts a pivot performer and turn direction. Stagger/ripple accepts order, pod size, count interval, and synchronized or sequential arrivals. Authored origins and destinations are never changed by path editing.
 - The timeline has aligned **Drill**, **Music**, and **Audio** lanes on one elapsed-time ruler. Transition blocks end at their destination page; the opening hold appears before the music begins.
 - Click a page to jump to its exact formation. Playback keeps running when already playing; stopped navigation displays the page for editing. Double-click pauses and opens the page editor. The editing page stays separate from the animated transition destination.
 - Click or drag the ruler/playhead to scrub; release resumes only if playback was running. **Play** / Ctrl+Space resumes at the playhead. **Page tools → Play from selection** starts at the selected range's first page.
@@ -90,7 +99,10 @@ OpenMarch was consulted only as a public behavioral reference. MarchCraft is a c
 `DrillProject` remains the QML model and transaction coordinator. Its persistence,
 formation, Clinic, transition, and music adapters have separate implementation units.
 `ProjectStorage` owns SQLite I/O, `ProjectAlgorithms` provides stateless geometry and
-assignment functions, and `TransitionPath` supplies reusable arc-length tables.
+assignment functions, and `TransitionPath` supplies reusable arc-length tables plus
+count-based start/duration mapping. Multi-control-point curves use reusable C++ path
+sampling; FTL and gate tools resolve to persisted per-performer routes rather than
+playback-only effects.
 Path tables are invalidated by project edits and live geometry changes; playhead
 updates notify only position, facing, and animation roles. Background imports are revision-checked,
 and formation workers do not instantiate multimedia resources.
@@ -131,7 +143,7 @@ The movement bar above the field switches between independent drill and music ed
 
 The roster, field, and scene settings belong to the show. Adding/removing performers updates every movement; their placements remain independent. Switching tabs stops playback, clears performer selection and pending formation previews, restores the movement's editing page and measure range, and scrolls the timeline to its zero origin. Switching does not dirty the show or occupy undo history. Undoing an edit in another movement returns to that movement. PDF/CSV exports and music/coordinate mapping operate on the active movement; full coordinate JSON import still replaces the show.
 
-Project schema 11 stores all movements in the existing `.marchcraft` database. Earlier projects open as Movement 1; older app versions reject schema 11 rather than discard the additional movements. MIDI synthesis and audio delivery run on a dedicated thread with precomputed event sample positions, independently of GUI animation. Playback position uses processed audio time, and gain/loop toggles preserve the active audio stream.
+Project schema 12 stores all movements and explicit per-performer transition start/duration counts in the existing `.marchcraft` database. Earlier projects open as Movement 1; legacy `pathType="delayed"` data retains its 25% step-off behavior, and paths without timing fields use the complete transition. Older app versions reject schema 12 rather than discard the additional movement or transition data. MIDI synthesis and audio delivery run on a dedicated thread with precomputed event sample positions, independently of GUI animation. Playback position uses processed audio time, and gain/loop toggles preserve the active audio stream.
 
 ## Export workspace
 

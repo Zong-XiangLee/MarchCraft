@@ -58,7 +58,7 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("endMeasure"), section.endMeasure}});
     }
     QJsonObject result{{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 11},
+            {QStringLiteral("version"), 12},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
@@ -102,7 +102,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 11) {
+        || object.value(QStringLiteral("version")).toInt() > 12) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }

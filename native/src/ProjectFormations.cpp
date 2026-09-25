@@ -743,35 +743,33 @@ void DrillProject::faceSelected(double degrees)
 
 void DrillProject::setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints)
 {
-    if (m_currentSet <= 0 || selectedCount() == 0) return;
-    static const QSet<QString> supported{QStringLiteral("direct"), QStringLiteral("curved"),
-        QStringLiteral("follow"), QStringLiteral("gate"), QStringLiteral("pivot"), QStringLiteral("delayed")};
-    const QString actual = supported.contains(type) ? type : QStringLiteral("direct");
-    QVector<QPointF> points;
-    for (const auto &value : controlPoints) {
-        const QPointF point = value.toPointF();
-        if (!point.isNull() || value.canConvert<QPointF>()) points.push_back(clampPosition(point));
-    }
-    const auto before = toJson();
-    for (const auto &person : m_performers) if (person.selected) {
-        auto &placement = m_sets[m_currentSet].activeVariant().placements[person.id];
-        placement.pathType = actual; placement.pathPoints = points;
-        if (actual == QStringLiteral("curved") && placement.pathPoints.isEmpty()) {
-            const QPointF from = m_sets[m_currentSet - 1].activeVariant().placements.value(person.id).position;
-            const QPointF mid = (from + placement.position) / 2.0;
-            placement.pathPoints.push_back(clampPosition(mid + QPointF(0, -8)));
+    if (!beginTransitionEdit()) return;
+    setTransitionEditType(type);
+    if (!controlPoints.isEmpty()) {
+        QVector<QPointF> points;
+        for (const auto &value : controlPoints)
+            if (value.canConvert<QPointF>()) points.push_back(clampPosition(value.toPointF()));
+        for (const auto &id : m_transitionEdit.performerIds) {
+            auto &placement = m_transitionEdit.previewPlacements[id];
+            placement.pathType = m_transitionEdit.type;
+            placement.pathPoints = points;
         }
     }
-    emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Edit transition path"));
+    applyTransitionEdit();
 }
 
 QVariantList DrillProject::transitionPathSamples(int performerRow, int samples) const
 {
     QVariantList result;
-    if (performerRow < 0 || performerRow >= m_performers.size() || playbackSetIndex() <= 0) return result;
+    if (performerRow < 0 || performerRow >= m_performers.size()) return result;
     samples = qBound(2, samples, 128);
-    for (int i = 0; i <= samples; ++i)
-        result.push_back(pathPosition(performerRow, playbackSetIndex(), double(i) / samples));
+    const int destination = m_transitionEdit.active ? m_transitionEdit.destinationSet : playbackSetIndex();
+    if (destination <= 0 || destination >= m_sets.size()) return result;
+    const Placement placement = m_transitionEdit.active
+        ? transitionEditPlacement(performerRow) : placementAt(performerRow, destination);
+    const MarchCraft::TransitionPath path(placementAt(performerRow, destination - 1).position,
+                                         placement, qMax(1, m_sets[destination].counts));
+    for (int i = 0; i <= samples; ++i) result.push_back(path.position(double(i) / samples));
     return result;
 }
 

@@ -439,6 +439,195 @@ private slots:
         QCOMPARE(follow.position(1), QPointF(8, 0));
     }
 
+    void multiPointCurvesAndExplicitTimingAreArcLengthSampled()
+    {
+        MarchCraft::Placement direct;
+        direct.position = {24, 0};
+        MarchCraft::TransitionPath directPath({}, direct, 8);
+        QCOMPARE(directPath.position(0.0), QPointF(0, 0));
+        QCOMPARE(directPath.position(0.5), QPointF(12, 0));
+        QCOMPARE(directPath.position(1.0), QPointF(24, 0));
+
+        MarchCraft::Placement curved = direct;
+        curved.pathType = QStringLiteral("curved");
+        curved.pathPoints = {{6, 12}, {18, -12}};
+        curved.pathStartCount = 2.0;
+        curved.pathDurationCounts = 4.0;
+        MarchCraft::TransitionPath path({}, curved, 8);
+        QCOMPARE(path.position(0.0), QPointF(0, 0));
+        QCOMPARE(path.position(0.20), QPointF(0, 0));
+        QCOMPARE(path.position(0.75), QPointF(24, 0));
+        QCOMPARE(path.position(1.0), QPointF(24, 0));
+        QCOMPARE(path.startCount(), 2.0);
+        QCOMPARE(path.durationCounts(), 4.0);
+
+        QVector<double> sampleLengths;
+        QPointF previous = path.position(0.25);
+        for (int sample = 1; sample <= 16; ++sample) {
+            const QPointF point = path.position(0.25 + sample * 0.5 / 16.0);
+            sampleLengths.push_back(std::hypot(point.x() - previous.x(), point.y() - previous.y()));
+            previous = point;
+        }
+        const auto [minimum, maximum] = std::minmax_element(sampleLengths.cbegin(), sampleLengths.cend());
+        QVERIFY(*minimum > 0.0);
+        QVERIFY(*maximum / *minimum < 1.12);
+    }
+
+    void transitionEditPreviewCancelsAndCommitsAsOneUndoStep()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8); project.nudgeSelected(24, 0);
+        const auto direct = project.transitionPathSamples(0, 16);
+
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("curved"));
+        QVERIFY(project.transitionEditActive());
+        QVERIFY(project.transitionEditControlPoints().size() == 1);
+        QVERIFY(project.transitionPathSamples(0, 16) != direct);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("direct"));
+        project.cancelTransitionEdit();
+        QCOMPARE(project.transitionPathSamples(0, 16), direct);
+
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("curved"));
+        project.addTransitionControlPoint();
+        QVERIFY(project.applyTransitionEdit());
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("curved"));
+        project.undo();
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("direct"));
+        project.redo();
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("curved"));
+    }
+
+    void followTheLeaderPersistsRoutesOffsetsAndReverseOrder()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("L"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 24, 24);
+        project.addPerformer(QStringLiteral("F1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 24);
+        project.addPerformer(QStringLiteral("F2"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 16, 24);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8); project.nudgeSelected(24, 0);
+
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("follow"),
+            {{QStringLiteral("leaderRow"), 0}, {QStringLiteral("order"), QStringLiteral("roster")}});
+        const auto preview = project.transitionEditPerformers();
+        QCOMPARE(preview.size(), 3);
+        QCOMPARE(preview[0].toMap().value(QStringLiteral("startCount")).toDouble(), 0.0);
+        QVERIFY(preview[1].toMap().value(QStringLiteral("startCount")).toDouble() > 0.0);
+        QVERIFY(project.applyTransitionEdit());
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("follow"));
+        QCOMPARE(project.performerInfo(1).value(QStringLiteral("pathType")).toString(), QStringLiteral("follow"));
+        QVERIFY(project.performerInfo(1).value(QStringLiteral("pathStartCount")).toDouble() > 0.0);
+        const auto leaderRoute = project.transitionPathSamples(0, 32);
+        const QPointF followerMid = project.transitionPathSamples(1, 32)[20].toPointF();
+        double routeClearance = std::numeric_limits<double>::max();
+        for (const auto &sample : leaderRoute)
+            routeClearance = qMin(routeClearance, QLineF(followerMid, sample.toPointF()).length());
+        QVERIFY(routeClearance < 1.0);
+
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("follow"),
+            {{QStringLiteral("leaderRow"), 2}, {QStringLiteral("order"), QStringLiteral("roster")},
+             {QStringLiteral("reversed"), true}});
+        QVERIFY(project.applyTransitionEdit());
+        QCOMPARE(project.performerInfo(2).value(QStringLiteral("pathStartCount")).toDouble(), 0.0);
+        QVERIFY(project.performerInfo(0).value(QStringLiteral("pathStartCount")).toDouble()
+                > project.performerInfo(1).value(QStringLiteral("pathStartCount")).toDouble());
+    }
+
+    void gatePivotGeneratesExactEndpointArc()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("Pivot"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 40, 40);
+        project.addPerformer(QStringLiteral("Gate"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 48, 40);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8);
+        project.clearSelection(); project.selectPerformer(1, false); project.nudgeSelected(-8, 8);
+        project.selectAll();
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("gate"),
+            {{QStringLiteral("pivotRow"), 0}, {QStringLiteral("direction"), QStringLiteral("counterclockwise")}});
+        QVERIFY(project.applyTransitionEdit());
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("pivot"));
+        QCOMPARE(project.performerInfo(1).value(QStringLiteral("pathType")).toString(), QStringLiteral("gate"));
+        const auto samples = project.transitionPathSamples(1, 24);
+        QCOMPARE(samples.first().toPointF(), QPointF(48, 40));
+        QCOMPARE(samples.last().toPointF(), QPointF(40, 48));
+        const QPointF midpoint = samples[12].toPointF();
+        QVERIFY(qAbs(QLineF(QPointF(40, 40), midpoint).length() - 8.0) < 0.15);
+        QVERIFY(midpoint.x() > 45.0 && midpoint.y() > 45.0);
+    }
+
+    void staggerAndRippleTimingRoundTrips()
+    {
+        QTemporaryDir directory;
+        DrillProject project;
+        project.newProject();
+        for (int row = 0; row < 4; ++row)
+            project.addPerformer(QStringLiteral("S%1").arg(row + 1), QStringLiteral("Clarinet"),
+                                 QStringLiteral("Winds"), 20 + row * 4, 20);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8); project.nudgeSelected(0, 16);
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("stagger"),
+            {{QStringLiteral("order"), QStringLiteral("roster")}, {QStringLiteral("groupSize"), 1},
+             {QStringLiteral("intervalCounts"), 1.0}, {QStringLiteral("arriveTogether"), true}});
+        const auto synchronized = project.transitionEditPerformers();
+        for (int row = 0; row < synchronized.size(); ++row) {
+            QCOMPARE(synchronized[row].toMap().value(QStringLiteral("startCount")).toDouble(), double(row));
+            QCOMPARE(synchronized[row].toMap().value(QStringLiteral("arrivalCount")).toDouble(), 8.0);
+        }
+        QVERIFY(project.applyTransitionEdit());
+
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("stagger"),
+            {{QStringLiteral("order"), QStringLiteral("roster")}, {QStringLiteral("groupSize"), 1},
+             {QStringLiteral("intervalCounts"), 1.0}, {QStringLiteral("arriveTogether"), false}});
+        const auto ripple = project.transitionEditPerformers();
+        QCOMPARE(ripple[0].toMap().value(QStringLiteral("arrivalCount")).toDouble(), 5.0);
+        QCOMPARE(ripple[3].toMap().value(QStringLiteral("arrivalCount")).toDouble(), 8.0);
+        QVERIFY(project.applyTransitionEdit());
+
+        const QString path = directory.filePath(QStringLiteral("stagger.marchcraft"));
+        QVERIFY(project.saveProject(path));
+        DrillProject restored; QVERIFY(restored.loadProject(path));
+        QCOMPARE(restored.performerInfo(3).value(QStringLiteral("pathStartCount")).toDouble(), 3.0);
+        QCOMPARE(restored.performerInfo(0).value(QStringLiteral("pathArrivalCount")).toDouble(), 5.0);
+        QCOMPARE(restored.performerInfo(3).value(QStringLiteral("pathArrivalCount")).toDouble(), 8.0);
+    }
+
+    void clinicUsesCurvedGeometryAndAuthoredTiming()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 20);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20, 40);
+        project.selectAll(); project.addSet(QStringLiteral("Set 2"), 8);
+        project.clearSelection(); project.selectPerformer(0, false); project.nudgeSelected(20, 20);
+        project.clearSelection(); project.selectPerformer(1, false); project.nudgeSelected(20, -20);
+        project.selectPerformer(0, false); project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(30, 30)});
+        project.selectPerformer(1, false); project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(30, 30)});
+        auto containsCollision = [](const QVariantList &issues) {
+            return std::any_of(issues.cbegin(), issues.cend(), [](const QVariant &issue) {
+                return issue.toMap().value(QStringLiteral("type")).toString() == QStringLiteral("collision");
+            });
+        };
+        QVERIFY(containsCollision(project.analyzeTransition(1)));
+
+        project.selectAll(); QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("stagger"),
+            {{QStringLiteral("order"), QStringLiteral("roster")}, {QStringLiteral("groupSize"), 1},
+             {QStringLiteral("intervalCounts"), 4.0}, {QStringLiteral("arriveTogether"), false}});
+        QVERIFY(project.applyTransitionEdit());
+        QVERIFY(!containsCollision(project.analyzeTransition(1)));
+        const auto info = project.performerInfo(1);
+        QVERIFY(qAbs(info.value(QStringLiteral("stepsPerCount")).toDouble()
+                     - info.value(QStringLiteral("incomingDistance")).toDouble()
+                        / info.value(QStringLiteral("pathDurationCounts")).toDouble()) < 0.001);
+    }
+
     void asynchronousResultsDoNotCrossProjectBoundaries()
     {
         QTemporaryDir directory;
