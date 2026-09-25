@@ -16,6 +16,7 @@ Item {
     property bool fitEnabled: false
     property bool followPlayhead: true
     property bool snapEnabled: true
+    property var snapFeedback: ({})
     property int revision: 0
     property int selectionAnchor: 0
 
@@ -31,12 +32,19 @@ Item {
     property real resizePointerX: 0
     property int draggingPlanCandidate: -1
 
-    readonly property real labelWidth: 78
-    readonly property real rulerHeight: 34
-    readonly property real markerLaneHeight: 28
-    readonly property real drillLaneHeight: Math.max(72, (height - rulerHeight - markerLaneHeight - 58) * 0.48)
-    readonly property real musicLaneHeight: Math.max(48, (height - rulerHeight - markerLaneHeight - drillLaneHeight - 14) * 0.55)
-    readonly property real audioLaneHeight: Math.max(42, height - rulerHeight - markerLaneHeight - drillLaneHeight - musicLaneHeight - 14)
+    readonly property bool compactLanes: height < 180
+    readonly property real labelWidth: compactLanes ? 62 : 78
+    readonly property real rulerHeight: compactLanes ? 24 : 34
+    readonly property real markerLaneHeight: compactLanes ? 16 : 28
+    readonly property real drillLaneHeight: compactLanes
+        ? Math.max(26, (height - rulerHeight - markerLaneHeight) * 0.44)
+        : Math.max(72, (height - rulerHeight - markerLaneHeight - 58) * 0.48)
+    readonly property real musicLaneHeight: compactLanes
+        ? Math.max(18, (height - rulerHeight - markerLaneHeight - drillLaneHeight) * 0.54)
+        : Math.max(48, (height - rulerHeight - markerLaneHeight - drillLaneHeight - 14) * 0.55)
+    readonly property real audioLaneHeight: compactLanes
+        ? Math.max(18, height - rulerHeight - markerLaneHeight - drillLaneHeight - musicLaneHeight)
+        : Math.max(42, height - rulerHeight - markerLaneHeight - drillLaneHeight - musicLaneHeight - 14)
     readonly property real drillY: rulerHeight + markerLaneHeight
     readonly property real musicY: drillY + drillLaneHeight
     readonly property real audioY: musicY + musicLaneHeight
@@ -76,6 +84,29 @@ Item {
             transport.navigateToSetWithMode(index, mode)
         else
             transport.navigateToSet(index, mode === 1)
+    }
+
+    function snappedPosition(contentX, temporarySnapDisabled) {
+        const showMs = xTime(contentX)
+        const tick = transport.tickAtShowMs(showMs)
+        if (!snapEnabled || temporarySnapDisabled || showMs < project.openingDurationMs
+                || typeof project.snapTimelinePosition !== "function")
+            return { tick: tick, timeMs: showMs, snapType: "free", snapLabel: "Free" }
+        return project.snapTimelinePosition(tick, true)
+    }
+
+    function showSnapFeedback(info) {
+        snapFeedback = info || ({})
+        snapFeedbackTimer.restart()
+    }
+
+    function seekAt(contentX, temporarySnapDisabled) {
+        const info = snappedPosition(contentX, temporarySnapDisabled)
+        showSnapFeedback(info)
+        if (snapEnabled && !temporarySnapDisabled && info.snapType !== "free")
+            transport.seekTick(info.tick)
+        else
+            transport.seekMs(info.timeMs)
     }
 
     function scrollTo(x, manual) {
@@ -160,6 +191,8 @@ Item {
         resizePointerX = contentX
         resizePreview = project.previewTransitionResize(index, transport.tickAtShowMs(xTime(contentX)),
                                                         snapEnabled && !temporarySnapDisabled)
+        if (snapEnabled && !temporarySnapDisabled)
+            showSnapFeedback(resizePreview)
     }
 
     function commitResize(index) {
@@ -199,6 +232,12 @@ Item {
     }
 
     onScaleChanged: drawing.requestPaint()
+
+    Timer {
+        id: snapFeedbackTimer
+        interval: 900
+        onTriggered: root.snapFeedback = ({})
+    }
 
     Rectangle {
         anchors.fill: parent
@@ -354,9 +393,11 @@ Item {
             cursorShape: Qt.PointingHandCursor
             onPressed: function(mouse) {
                 root.transport.beginScrub()
-                root.transport.seekMs(root.xTime(mouse.x))
+                root.seekAt(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0)
             }
-            onPositionChanged: function(mouse) { if (pressed) root.transport.seekMs(root.xTime(mouse.x)) }
+            onPositionChanged: function(mouse) {
+                if (pressed) root.seekAt(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+            }
             onReleased: root.transport.endScrub()
             onCanceled: root.transport.endScrub()
         }
@@ -376,14 +417,18 @@ Item {
             onPressed: function(mouse) {
                 anchorX = mouse.x
                 dragged = false
-                anchorTick = root.transport.tickAtShowMs(root.xTime(mouse.x))
+                const info = root.snappedPosition(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+                root.showSnapFeedback(info)
+                anchorTick = info.tick
                 root.project.selectTimelineRange(anchorTick, anchorTick)
             }
             onPositionChanged: function(mouse) {
                 if (pressed) {
                     if (Math.abs(mouse.x - anchorX) > 3)
                         dragged = true
-                    root.project.selectTimelineRange(anchorTick, root.transport.tickAtShowMs(root.xTime(mouse.x)))
+                    const info = root.snappedPosition(mouse.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+                    root.showSnapFeedback(info)
+                    root.project.selectTimelineRange(anchorTick, info.tick)
                 }
             }
             onClicked: if (!dragged) root.project.clearTimelineSelection()
@@ -474,6 +519,8 @@ Item {
                         if (mouse.button === Qt.RightButton) {
                             const p = mapToItem(root, mouse.x, mouse.y)
                             root.pageMenu(transition.index, p.x, p.y)
+                        } else if (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) {
+                            root.navigateSet(transition.index, mouse.modifiers)
                         } else {
                             root.project.selectTimelineTransition(transition.index)
                             root.transitionSelected(transition.index)
@@ -494,6 +541,7 @@ Item {
                             + (details.measure ? "\nMeasure " + details.measure + ", beat " + Number(details.beat).toFixed(2) : "")
                             + (details.averageDistance !== undefined ? "\nTravel avg " + Number(details.averageDistance).toFixed(1)
                                 + " yd · max " + Number(details.maximumDistance).toFixed(1) + " yd" : "")
+                            + "\nShift-click selects a page range · Ctrl-click toggles a page"
                     }
                 }
             }
@@ -566,6 +614,10 @@ Item {
                         if (mouse.button === Qt.LeftButton)
                             root.editPage(setMarker.index)
                     }
+                    ToolTip.visible: containsMouse && !pressed
+                    ToolTip.delay: 350
+                    ToolTip.text: "Set " + setMarker.info.number + " · " + setMarker.info.name
+                        + "\nShift-click selects a page range · Ctrl-click toggles a page"
                 }
 
                 // Boundary timing handle. This intentionally overlays only the
@@ -812,10 +864,13 @@ Item {
                             return
                         const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
                         planGhost.dragPosition = p.x - planGhost.width / 2
+                        const info = root.snappedPosition(p.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+                        if (root.snapEnabled && info.snapType !== "free") root.showSnapFeedback(info)
                     }
-                    onReleased: {
+                    onReleased: function(mouse) {
                         const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
-                        root.project.moveSetPlanCandidate(planGhost.index, root.transport.tickAtShowMs(root.xTime(p.x)))
+                        const info = root.snappedPosition(p.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+                        root.project.moveSetPlanCandidate(planGhost.index, info.tick)
                         planGhost.dragPosition = -1
                         root.draggingPlanCandidate = -1
                     }
@@ -858,6 +913,34 @@ Item {
             height: root.drillLaneHeight
             z: 31
             color: MarchCraftTheme.accentHover
+        }
+
+        Rectangle {
+            visible: root.snapEnabled && root.snapFeedback && root.snapFeedback.tick !== undefined
+                && root.snapFeedback.snapType !== "free"
+            x: root.timeX(root.snapFeedback.timeMs !== undefined
+                ? root.snapFeedback.timeMs : root.transport.showMsAtTick(root.snapFeedback.tick))
+            y: root.rulerHeight
+            width: 1
+            height: Math.max(0, root.laneBottom - y)
+            z: 38
+            color: "#fbbf24"
+            Rectangle {
+                x: 4
+                y: 2
+                width: snapLabel.implicitWidth + 10
+                height: 20
+                radius: 3
+                color: "#3b2b16"
+                border.color: "#fbbf24"
+                Label {
+                    id: snapLabel
+                    anchors.centerIn: parent
+                    text: root.snapFeedback.snapLabel || "Count snap"
+                    color: "#ffe2a8"
+                    font.pixelSize: 9
+                }
+            }
         }
 
         Rectangle {

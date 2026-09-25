@@ -316,6 +316,24 @@ Item {
                     placeholderText: "8, 16, 24, 32"
                     Layout.fillWidth: true
                 }
+                Label { text: "Set budget" }
+                SpinBox {
+                    id: planMaximumSets
+                    from: 16
+                    to: 512
+                    value: 112
+                    editable: true
+                    Layout.fillWidth: true
+                    ToolTip.text: "Maximum total pages after applying the plan"
+                    ToolTip.visible: hovered
+                }
+            }
+            Label {
+                text: "The 112-page default follows a full-size reference production (1,178 counts, about 10.6 counts per page). Regular eight-count grid points are guides unless you explicitly prioritize them."
+                wrapMode: Text.Wrap
+                color: MarchCraftTheme.textMuted
+                font.pixelSize: 10
+                Layout.fillWidth: true
             }
             Label {
                 visible: !drillProject.musicLoaded
@@ -333,7 +351,8 @@ Item {
                     onClicked: {
                         if (drillProject.analyzeMusicForSetPlan(planDensity.currentValue,
                                                                 planPriority.currentValue,
-                                                                root.preferredCountValues())) {
+                                                                root.preferredCountValues(),
+                                                                planMaximumSets.value)) {
                             setPlanOptions.close()
                             setPlanReview.open()
                         }
@@ -358,7 +377,8 @@ Item {
             RowLayout {
                 Layout.fillWidth: true
                 Label {
-                    text: drillProject.setPlanCandidateCount + " candidates · translucent markers preview on the timeline"
+                    text: drillProject.setPlanAcceptedNewSetCount + " new sets selected · "
+                        + drillProject.setPlanCandidateCount + " evidence items · translucent markers preview on the timeline"
                     color: MarchCraftTheme.textSecondary
                     Layout.fillWidth: true
                 }

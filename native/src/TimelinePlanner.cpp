@@ -326,8 +326,12 @@ QVector<SetPlanCandidate> SetPlanAnalyzer::analyze(const MusicDocument &music,
         merged.push_back(std::move(candidate));
     }
 
-    const int minimumCounts = density == QStringLiteral("sparse") ? 12
-        : density == QStringLiteral("detailed") ? 4 : 6;
+    // A full-size field show is normally planned in musical ideas, not at
+    // every legal eight-count boundary.  These spacings are calibrated to the
+    // supplied 2025 production (112 pages over 1,178 counts) while still
+    // allowing high-confidence impacts and authored markers to win locally.
+    const int minimumCounts = density == QStringLiteral("sparse") ? 16
+        : density == QStringLiteral("detailed") ? 6 : 10;
     const double threshold = density == QStringLiteral("sparse") ? 0.67
         : density == QStringLiteral("detailed") ? 0.34 : 0.49;
     QVector<qint64> anchors;
@@ -348,12 +352,45 @@ QVector<SetPlanCandidate> SetPlanAnalyzer::analyze(const MusicDocument &music,
         const double score = candidate.confidence + priorityBoost(candidate, options.priority)
             + preferredLengthScore(fromPrevious, options.preferredCounts);
         const bool clearOfExisting = fromPrevious >= minimumCounts && toNext >= minimumCounts;
-        candidate.accepted = clearOfExisting && (candidate.manual || score >= threshold);
+        const bool regularRequested = options.priority == QStringLiteral("regular");
+        const bool eligibleKind = candidate.kind != QStringLiteral("regular") || regularRequested;
+        candidate.accepted = eligibleKind && clearOfExisting
+            && (candidate.manual || score >= threshold);
         if (candidate.accepted) {
             anchors.push_back(candidate.tick);
             std::sort(anchors.begin(), anchors.end());
         }
         finishCandidate(candidate, music);
+    }
+
+    const int additionBudget = qMax(0, qBound(1, options.maximumSets, 512)
+        - static_cast<int>(existingSets.size()));
+    QVector<int> acceptedAdditions;
+    for (int index = 0; index < merged.size(); ++index) {
+        if (merged[index].accepted && merged[index].action == QStringLiteral("add"))
+            acceptedAdditions.push_back(index);
+    }
+    if (acceptedAdditions.size() > additionBudget) {
+        std::stable_sort(acceptedAdditions.begin(), acceptedAdditions.end(), [&](int left, int right) {
+            const auto &a = merged[left];
+            const auto &b = merged[right];
+            if (a.manual != b.manual) return a.manual;
+            const double aScore = a.confidence + priorityBoost(a, options.priority)
+                + preferredLengthScore(a.countsFromPrevious, options.preferredCounts);
+            const double bScore = b.confidence + priorityBoost(b, options.priority)
+                + preferredLengthScore(b.countsFromPrevious, options.preferredCounts);
+            if (!qFuzzyCompare(aScore + 1.0, bScore + 1.0)) return aScore > bScore;
+            return a.tick < b.tick;
+        });
+        QSet<int> retained;
+        for (int position = 0; position < additionBudget; ++position)
+            retained.insert(acceptedAdditions[position]);
+        for (int index : std::as_const(acceptedAdditions)) {
+            if (retained.contains(index)) continue;
+            merged[index].accepted = false;
+            merged[index].reason += QStringLiteral("; outside the %1-page plan budget")
+                .arg(options.maximumSets);
+        }
     }
 
     // The regular grid is supporting evidence, not a list of every legal edit

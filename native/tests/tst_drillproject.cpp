@@ -90,6 +90,17 @@ QByteArray impactMidiFixture()
     return result;
 }
 
+QByteArray longShowMidiFixture(int counts = 1178)
+{
+    QByteArray track;
+    track.append(char(0)); track += QByteArray::fromHex("ff510307a120");
+    track.append(char(0)); track += QByteArray::fromHex("ff580404021808");
+    appendVlq(track, counts * 480); track += QByteArray::fromHex("ff2f00");
+    QByteArray result("MThd", 4); append32(result, 6); append16(result, 0); append16(result, 1); append16(result, 480);
+    result += QByteArrayLiteral("MTrk"); append32(result, track.size()); result += track;
+    return result;
+}
+
 QByteArray musicXmlAnalysisFixture()
 {
     return QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
@@ -247,6 +258,11 @@ private slots:
         QCOMPARE(project.tickAtAbsoluteCount(
                      project.timelineMarkerInfo(0).value(QStringLiteral("absoluteCount")).toInt()),
                  project.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong());
+        const auto markerSnap = project.snapTimelinePosition(
+            12 * MarchCraft::TicksPerQuarter + MarchCraft::TicksPerQuarter / 4, true);
+        QCOMPARE(markerSnap.value(QStringLiteral("tick")).toLongLong(),
+                 qint64(12 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(markerSnap.value(QStringLiteral("snapLabel")).toString(), QStringLiteral("Brass impact"));
         project.undo(); QCOMPARE(project.timelineMarkerCount(), 0);
         project.redo(); QCOMPARE(project.timelineMarkerCount(), 1);
 
@@ -355,6 +371,25 @@ private slots:
         QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), originalTick);
         project.redo();
         QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), suggestedTick);
+    }
+
+    void setPlanHonorsFullShowPageBudget()
+    {
+        QTemporaryDir temporary; QVERIFY(temporary.isValid());
+        const QString midiPath = temporary.filePath(QStringLiteral("full-show.mid"));
+        QFile midi(midiPath); QVERIFY(midi.open(QIODevice::WriteOnly));
+        midi.write(longShowMidiFixture()); midi.close();
+
+        DrillProject project; project.newProject(); QVERIFY(project.importMidi(midiPath));
+        QVERIFY(project.analyzeMusicForSetPlan(QStringLiteral("detailed"),
+                                               QStringLiteral("phrases"),
+                                               {8, 12, 16, 24, 32}, 112));
+        QCOMPARE(project.setPlanAcceptedNewSetCount(), 111);
+        QVERIFY(project.setPlanCandidateCount() > project.setPlanAcceptedNewSetCount());
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
+            const auto candidate = project.setPlanCandidateInfo(index);
+            QVERIFY(candidate.value(QStringLiteral("kind")).toString() != QStringLiteral("regular"));
+        }
     }
 
     void movementSwitchPreservesLoopRangeAndEditingPage()

@@ -114,6 +114,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList timelineMarkers READ timelineMarkers NOTIFY timelineMarkersChanged)
     Q_PROPERTY(bool setPlanPreviewActive READ setPlanPreviewActive NOTIFY setPlanChanged)
     Q_PROPERTY(int setPlanCandidateCount READ setPlanCandidateCount NOTIFY setPlanChanged)
+    Q_PROPERTY(int setPlanAcceptedNewSetCount READ setPlanAcceptedNewSetCount NOTIFY setPlanChanged)
     Q_PROPERTY(QVariantList setPlanCandidates READ setPlanCandidates NOTIFY setPlanChanged)
     Q_PROPERTY(QString playbackSource READ playbackSource WRITE setPlaybackSource NOTIFY transportSettingsChanged)
     Q_PROPERTY(double midiMasterVolume READ midiMasterVolume WRITE setMidiMasterVolume NOTIFY transportSettingsChanged)
@@ -310,6 +311,7 @@ public:
     QVariantList timelineMarkers() const;
     bool setPlanPreviewActive() const { return m_setPlanPreviewActive; }
     int setPlanCandidateCount() const { return m_setPlanCandidates.size(); }
+    int setPlanAcceptedNewSetCount() const;
     QVariantList setPlanCandidates() const;
     QString playbackSource() const { return m_playbackSource; }
     void setPlaybackSource(const QString &value);
@@ -409,6 +411,8 @@ public:
     Q_INVOKABLE QVariantMap transitionInfo(int destinationSet) const;
     Q_INVOKABLE QVariantMap previewTransitionResize(int destinationSet, qint64 targetTick,
                                                     bool snapping = true) const;
+    Q_INVOKABLE QVariantMap snapTimelinePosition(qint64 targetTick,
+                                                 bool includeLandmarks = true) const;
     Q_INVOKABLE int absoluteCountAtTick(qint64 tick) const;
     Q_INVOKABLE qint64 tickAtAbsoluteCount(int count) const;
     Q_INVOKABLE void setOpeningBehavior(const QString &behavior, int counts);
@@ -429,7 +433,8 @@ public:
     Q_INVOKABLE bool removeTimelineMarker(const QString &id);
     Q_INVOKABLE bool analyzeMusicForSetPlan(const QString &density = QStringLiteral("balanced"),
                                             const QString &priority = QStringLiteral("balanced"),
-                                            const QVariantList &preferredCounts = {});
+                                            const QVariantList &preferredCounts = {},
+                                            int maximumSets = 112);
     Q_INVOKABLE QVariantMap setPlanCandidateInfo(int index) const;
     Q_INVOKABLE bool setSetPlanCandidateAccepted(int index, bool accepted);
     Q_INVOKABLE bool moveSetPlanCandidate(int index, qint64 tick);

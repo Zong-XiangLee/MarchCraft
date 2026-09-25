@@ -125,6 +125,7 @@ ApplicationWindow {
         property string themeId: "graphite"
         property var horizontalSplitState
         property var verticalSplitState
+        property bool compactTimelineDefaultApplied: false
         property bool rosterCollapsed: false
         property bool inspectorCollapsed: false
         property bool timelineCollapsed: false
@@ -461,12 +462,20 @@ ApplicationWindow {
             SplitView.fillWidth: true
             SplitView.minimumWidth: 520
             orientation: Qt.Vertical
-            Component.onCompleted: if (workspaceSettings.verticalSplitState) restoreState(workspaceSettings.verticalSplitState)
+            Component.onCompleted: {
+                if (workspaceSettings.compactTimelineDefaultApplied && workspaceSettings.verticalSplitState)
+                    restoreState(workspaceSettings.verticalSplitState)
+                else {
+                    timelinePanel.SplitView.preferredHeight = 220
+                    workspaceSettings.verticalSplitState = undefined
+                    workspaceSettings.compactTimelineDefaultApplied = true
+                }
+            }
             onResizingChanged: if (!resizing) workspaceSettings.verticalSplitState = saveState()
             handle: Rectangle {
                 implicitHeight: 6; color: SplitHandle.pressed ? MarchCraftTheme.accent : SplitHandle.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
                 TapHandler { onDoubleTapped: {
-                    timelinePanel.SplitView.preferredHeight = 300
+                    timelinePanel.SplitView.preferredHeight = 220
                     workspaceSettings.timelineMaximized = false
                     workspaceSettings.verticalSplitState = undefined
                 } }

@@ -39,6 +39,7 @@ struct SetPlanOptions {
     QString density{QStringLiteral("balanced")};
     QString priority{QStringLiteral("balanced")};
     QVector<int> preferredCounts{8, 12, 16, 24, 32};
+    int maximumSets = 112;
 };
 
 struct SetPlanCandidate {

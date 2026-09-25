@@ -316,6 +316,75 @@ QVariantMap DrillProject::previewTransitionResize(int destinationSet, qint64 tar
             {QStringLiteral("snapType"), snapType}, {QStringLiteral("snapLabel"), snapLabel}};
 }
 
+QVariantMap DrillProject::snapTimelinePosition(qint64 targetTick, bool includeLandmarks) const
+{
+    targetTick = qMax<qint64>(0, targetTick);
+    qint64 resultTick = tickAtAbsoluteCount(absoluteCountAtTick(targetTick));
+    QString snapType = QStringLiteral("count");
+    QString snapLabel = QStringLiteral("Count %1").arg(absoluteCountAtTick(resultTick));
+
+    struct Landmark { qint64 tick; QString type; QString label; };
+    QVector<Landmark> landmarks;
+    if (includeLandmarks) {
+        for (const auto &measure : m_music.measures) {
+            landmarks.push_back({measure.startTick, QStringLiteral("measure"),
+                QStringLiteral("Measure %1").arg(measure.displayNumber)});
+        }
+        for (const auto &section : std::as_const(m_musicSections)) {
+            if (section.startMeasure < 0 || section.startMeasure >= m_music.measures.size()) continue;
+            landmarks.push_back({m_music.measures[section.startMeasure].startTick,
+                QStringLiteral("section"), section.name.isEmpty()
+                    ? QStringLiteral("Music section") : section.name});
+        }
+        for (const auto &anchor : std::as_const(m_music.audioAnchors))
+            landmarks.push_back({anchor.musicTick, QStringLiteral("sync"), QStringLiteral("Audio sync anchor")});
+        for (const auto &tempo : std::as_const(m_tempoRegions)) {
+            if (tempo.startTick > 0)
+                landmarks.push_back({tempo.startTick, QStringLiteral("tempo"),
+                    tempo.name.isEmpty() ? QStringLiteral("Tempo change") : tempo.name});
+        }
+        for (const auto &meter : std::as_const(m_meterRegions)) {
+            if (meter.startTick > 0)
+                landmarks.push_back({meter.startTick, QStringLiteral("meter"),
+                    QStringLiteral("%1/%2 meter").arg(meter.numerator).arg(meter.denominator)});
+        }
+        for (int index = 0; index < timelineMarkerCount(); ++index) {
+            const auto marker = timelineMarkerInfo(index);
+            landmarks.push_back({marker.value(QStringLiteral("tick")).toLongLong(),
+                QStringLiteral("marker"), marker.value(QStringLiteral("name")).toString()});
+        }
+        for (const auto &set : std::as_const(m_sets))
+            landmarks.push_back({set.startTick, QStringLiteral("set"), QStringLiteral("Set %1").arg(set.number)});
+
+        const qint64 pulse = qMax<qint64>(1, advancePulses(targetTick, 1) - targetTick);
+        qint64 bestDistance = qRound64(pulse * 0.42);
+        for (const auto &landmark : std::as_const(landmarks)) {
+            const qint64 distance = qAbs(targetTick - landmark.tick);
+            if (distance > bestDistance) continue;
+            bestDistance = distance;
+            resultTick = landmark.tick;
+            snapType = landmark.type;
+            snapLabel = landmark.label;
+        }
+    }
+
+    const int measureIndex = musicMeasureAtTick(resultTick);
+    int beat = 0;
+    if (measureIndex >= 0) {
+        const auto &measure = m_music.measures[measureIndex];
+        beat = qMax(1, int((resultTick - measure.startTick)
+            / qMax<qint64>(1, measure.pulseTicks)) + 1);
+    }
+    const double timeMs = openingDurationMs() + millisecondsBetween(0, resultTick);
+    return {{QStringLiteral("tick"), resultTick},
+            {QStringLiteral("absoluteCount"), absoluteCountAtTick(resultTick)},
+            {QStringLiteral("measure"), measureIndex >= 0
+                ? m_music.measures[measureIndex].displayNumber : 0},
+            {QStringLiteral("beat"), beat}, {QStringLiteral("timeMs"), timeMs},
+            {QStringLiteral("timeText"), formatClock(timeMs)},
+            {QStringLiteral("snapType"), snapType}, {QStringLiteral("snapLabel"), snapLabel}};
+}
+
 QVariantList DrillProject::timelineMarkers() const
 {
     QVariantList result;
@@ -442,6 +511,14 @@ QVariantList DrillProject::setPlanCandidates() const
     return result;
 }
 
+int DrillProject::setPlanAcceptedNewSetCount() const
+{
+    return static_cast<int>(std::count_if(m_setPlanCandidates.cbegin(), m_setPlanCandidates.cend(),
+        [](const auto &candidate) {
+            return candidate.accepted && candidate.action == QStringLiteral("add");
+        }));
+}
+
 QVariantMap DrillProject::setPlanCandidateInfo(int index) const
 {
     return index >= 0 && index < m_setPlanCandidates.size()
@@ -449,7 +526,7 @@ QVariantMap DrillProject::setPlanCandidateInfo(int index) const
 }
 
 bool DrillProject::analyzeMusicForSetPlan(const QString &density, const QString &priority,
-                                          const QVariantList &preferredCounts)
+                                          const QVariantList &preferredCounts, int maximumSets)
 {
     if (!m_music.loaded() && m_timelineMarkers.isEmpty()) {
         setStatus(QStringLiteral("Import MIDI/MusicXML or add timeline markers before analysis"));
@@ -458,6 +535,7 @@ bool DrillProject::analyzeMusicForSetPlan(const QString &density, const QString 
     MarchCraft::SetPlanOptions options;
     options.density = density;
     options.priority = priority;
+    options.maximumSets = qBound(16, maximumSets, 512);
     options.preferredCounts.clear();
     for (const auto &value : preferredCounts) {
         const int count = value.toInt();
@@ -485,10 +563,8 @@ bool DrillProject::analyzeMusicForSetPlan(const QString &density, const QString 
         m_music, m_timelineMarkers, sections, existing, options);
     m_setPlanPreviewActive = true;
     emit setPlanChanged();
-    const int accepted = static_cast<int>(std::count_if(m_setPlanCandidates.cbegin(),
-        m_setPlanCandidates.cend(), [](const auto &candidate) { return candidate.accepted; }));
-    setStatus(QStringLiteral("Set plan: %1 of %2 suggestions selected for preview")
-        .arg(accepted).arg(m_setPlanCandidates.size()));
+    setStatus(QStringLiteral("Set plan: %1 new sets selected from %2 evidence items (%3-set budget)")
+        .arg(setPlanAcceptedNewSetCount()).arg(m_setPlanCandidates.size()).arg(options.maximumSets));
     return true;
 }
 

@@ -25,6 +25,7 @@ Frame {
     property alias exposedSetStrip: timeline
     property alias exposedTimelineActionsButton: pageToolsButton
     property int inspectorRevision: 0
+    readonly property bool compactLayout: height < 285
     property var transitionDetails: ({})
     property var selectedSetDetails: {
         inspectorRevision
@@ -82,8 +83,8 @@ Frame {
 
     visible: !workspaceSettingsContext.timelineCollapsed
     SplitView.preferredHeight: workspaceSettingsContext.timelineMaximized
-        ? Math.max(380, verticalSplitContext.height - 210) : 355
-    SplitView.minimumHeight: 320
+        ? Math.max(380, verticalSplitContext.height - 210) : 220
+    SplitView.minimumHeight: 180
     SplitView.maximumHeight: Math.max(380, verticalSplitContext.height - 170)
     padding: 8
     background: Rectangle { color: MarchCraftTheme.panel; border.color: MarchCraftTheme.divider }
@@ -153,6 +154,14 @@ Frame {
             Layout.fillWidth: true
             spacing: 4
             AppButton { id: pageToolsButton; text: "Set tools…"; onClicked: { transportContext.pause(); timelineActionsPopupContext.open() } }
+            AppButton {
+                text: timeline.snapEnabled ? "Snap: On" : "Snap: Off"
+                checkable: true
+                checked: timeline.snapEnabled
+                ToolTip.text: "Snap scrubbing, ranges, plan markers, and set boundaries to counts and musical landmarks. Hold Alt to bypass."
+                ToolTip.visible: hovered
+                onClicked: timeline.snapEnabled = !timeline.snapEnabled
+            }
             AppButton { text: "Music tools…"; onClicked: musicTools.openMenu() }
             AppButton { text: "Analyze music…"; onClicked: musicTools.openSetPlan() }
             AppButton { text: "Markers…"; onClicked: musicTools.openMarkers() }
@@ -163,12 +172,6 @@ Frame {
             AppButton { text: "Fit selection"; onClicked: timeline.fitSelection() }
             AppButton { text: "Fit show"; onClicked: timeline.fitShow() }
             AppToolButton { text: "◎"; ToolTip.text: "Reveal editing set"; ToolTip.visible: hovered; onClicked: timeline.revealCurrentSet() }
-            AppButton {
-                text: "Snap"
-                checkable: true
-                checked: timeline.snapEnabled
-                onClicked: timeline.snapEnabled = !timeline.snapEnabled
-            }
             AppButton {
                 text: "Follow"
                 checkable: true
@@ -202,8 +205,9 @@ Frame {
         }
 
         Frame {
+            visible: !timelinePanel.compactLayout
             Layout.fillWidth: true
-            Layout.preferredHeight: 48
+            Layout.preferredHeight: visible ? 48 : 0
             padding: 5
             background: Rectangle {
                 color: MarchCraftTheme.panelHeader

@@ -58,6 +58,12 @@ TestCase {
         function moveSet(a, b) { movedFrom = a; movedTo = b; setsChanged() }
         function waveformPeakAtMs(ms) { return 0 }
         function absoluteCountAtTick(tick) { return Math.max(0, Math.round(tick / 1000)) }
+        function snapTimelinePosition(tick, includeLandmarks) {
+            const snapped = Math.max(0, Math.round(tick / 1000) * 1000)
+            return {tick: snapped, absoluteCount: absoluteCountAtTick(snapped), measure: Math.floor(snapped / 4000) + 1,
+                beat: Math.floor((snapped % 4000) / 1000) + 1, timeMs: 1000 + snapped,
+                timeText: "0:00.0", snapType: "count", snapLabel: "Count " + absoluteCountAtTick(snapped)}
+        }
         function selectTimelineSet(index, mode) {
             if (mode === 2) {
                 const next = selectedSetIndices.slice()
@@ -151,6 +157,16 @@ TestCase {
         compare(mockTransport.lastPage, -1)
         verify(mockTransport.playing)
     }
+    function test_transitionRegionsSupportShiftRangeSelection() {
+        const first = findChild(timeline, "pageHit1")
+        mouseClick(first, first.width / 2, 30, Qt.LeftButton, Qt.ShiftModifier)
+        compare(mockProject.selectedSetStartIndex, 0); compare(mockProject.selectedSetEndIndex, 1)
+        const last = findChild(timeline, "pageHit3")
+        mouseClick(last, last.width / 2, 30, Qt.LeftButton, Qt.ShiftModifier)
+        compare(mockProject.selectedSetStartIndex, 0); compare(mockProject.selectedSetEndIndex, 3)
+        compare(mockProject.selectedSetIndices.length, 4)
+        compare(mockProject.timelineSelectionKind, "set")
+    }
     function test_setMarkersSupportShiftAndControlSelection() {
         const first = findChild(timeline, "pageMarker1")
         mouseClick(first, 10, 7)
@@ -179,6 +195,14 @@ TestCase {
         mockTransport.playing = false
         mouseClick(ruler, timeline.timeX(3000), 16)
         verify(!mockTransport.playing)
+    }
+    function test_rulerSnapsToCountsAndAltBypasses() {
+        const ruler = findChild(timeline, "timelineRuler")
+        timeline.snapEnabled = true
+        mouseClick(ruler, timeline.timeX(4250), 16)
+        compare(mockTransport.currentMs, 4000)
+        mouseClick(ruler, timeline.timeX(4250), 16, Qt.LeftButton, Qt.AltModifier)
+        fuzzyCompare(mockTransport.currentMs, 4250, 1)
     }
     function test_playheadDragUsesSharedTimeCoordinates() {
         mockTransport.currentMs = 4000
