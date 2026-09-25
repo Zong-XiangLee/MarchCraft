@@ -3,7 +3,7 @@
 ## Shape editing and freehand formations
 
 - Persistent formations expose image-editor-style uniform resize handles and a visible rotation control when the complete shape is selected.
-- Freehand field drawing supports organic forms and letter-like strokes, automatic line/circle recognition, handwriting smoothing, equal arc-length spacing, collision-aware placement, and three performer-assignment strategies.
+- Freehand field drawing supports organic forms and letter-like strokes, automatic line/circle recognition, handwriting smoothing, equal arc-length spacing, collision-aware placement, and six documented performer-assignment strategies.
 - The inspector reports selection size, average/minimum spacing, average move, dimensions, and collisions. Configure can display distances in marching steps or yards.
 - The application opens to a professional native welcome workspace with New/Open actions, a pinned editable sample, current-project resume, and eight persisted recent projects.
 - A restrained graphite visual system standardizes controls, disabled states, dialogs, panels, menus, and workspace motion; the quiet launch sound is optional and suppressed during QA.
@@ -65,12 +65,13 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Drag guides and performer dots use the same field-fitted geometry as placement. Circle/arc drags start at the center; other shapes use the dragged bounds (regular polygons retain their proportions).
 - Releasing a drag opens an asynchronous assignment preview. Apply creates one undoable formation; Cancel leaves the project unchanged.
 - Escape, Enter, right-click, selection changes, and switching drawing tools discard an unfinished drag. Choosing a shape opens the 2D field.
-- Editing any advanced-builder option invalidates the previous preview, including assignment mode and grouping. The builder scrolls within the supported minimum window size.
+- Editing any formation-builder option invalidates the previous preview, including assignment mode and grouping. The non-modal floating builder scrolls within the supported minimum window, leaves the editor interactive, and has an explicit close control.
 
 Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all six assignment modes and 1/7/24 performers, field fitting, preview immutability, Apply, cancellation, and undo/redo. `shapeDrawerMouseGestures` exercises real Qt input in both directions at three zoom levels. `tst_shapedrawer.qml` covers all drag option mappings and each advanced control's preview invalidation. Use `--qa-formation --screenshot output.png` for the advanced builder, optionally with `--qa-minimum`.
 
 - Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
-- The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
+- Preserve spatial order compares normalized two-dimensional form coordinates and never selects a mirrored assignment. Rehearsal safe compares shortest, topology-preserving, minimax, and roster candidates before removing avoidable crossings. Shortest, Even effort, Feature move, and fixed Roster slots retain distinct documented objectives.
+- The formation builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape or × still cancels it.
 
 ### Field presentation
 

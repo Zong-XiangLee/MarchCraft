@@ -966,6 +966,75 @@ private slots:
         QCOMPARE(settingsChanged.size(), modes.size());
     }
 
+    void preserveFormationAssignmentKeepsTwoDimensionalSpatialOrder()
+    {
+        DrillProject project;
+        project.newProject();
+        // Deliberately scramble roster order inside each rank. A one-dimensional
+        // path sort maps these performers across the block; spatial preservation
+        // must keep both files and ranks intact.
+        const QVector<QPointF> sources{{80, 24}, {20, 24}, {50, 24},
+                                       {80, 44}, {20, 44}, {50, 44}};
+        for (int row = 0; row < sources.size(); ++row)
+            project.addPerformer(QStringLiteral("P%1").arg(row + 1), QStringLiteral("Guard"),
+                                 QStringLiteral("Guard"), sources[row].x(), sources[row].y());
+        project.selectAll();
+        project.addSet(QStringLiteral("Destination"), 64);
+        const QVariantMap options{{QStringLiteral("centerX"), 100.0},
+            {QStringLiteral("centerY"), 40.0}, {QStringLiteral("rows"), 2},
+            {QStringLiteral("spacing"), 20.0}};
+
+        project.previewFormation(QStringLiteral("block"), options, QStringLiteral("preserveOrder"));
+        QVERIFY(project.formationPreviewActive());
+        const QVariantMap preserveMetrics = project.formationPreviewMetrics();
+        const auto preview = project.formationPreviewPoints();
+        QCOMPARE(preview.size(), sources.size());
+        QVector<QPair<QPointF, QPointF>> moves;
+        for (const auto &value : preview) {
+            const auto point = value.toMap();
+            moves.push_back({QPointF(point.value(QStringLiteral("fromX")).toDouble(),
+                                    point.value(QStringLiteral("fromY")).toDouble()),
+                             QPointF(point.value(QStringLiteral("x")).toDouble(),
+                                    point.value(QStringLiteral("y")).toDouble())});
+        }
+        for (const auto &left : moves) for (const auto &right : moves) {
+            if (qAbs(left.first.y() - right.first.y()) < 0.001
+                && left.first.x() + 0.001 < right.first.x())
+                QVERIFY2(left.second.x() < right.second.x(),
+                         "Preserve spatial order must not exchange left and right performers");
+            if (qAbs(left.first.x() - right.first.x()) < 0.001
+                && left.first.y() + 0.001 < right.first.y())
+                QVERIFY2(left.second.y() < right.second.y(),
+                         "Preserve spatial order must not exchange front and back performers");
+        }
+        QCOMPARE(project.formationPreviewMetrics().value(QStringLiteral("crossings")).toInt(), 0);
+        project.cancelFormationPreview();
+
+        project.previewFormation(QStringLiteral("block"), options, QStringLiteral("rosterOrder"));
+        const auto rosterPreview = project.formationPreviewPoints();
+        QCOMPARE(rosterPreview.first().toMap().value(QStringLiteral("x")).toDouble(), 80.0);
+        QCOMPARE(rosterPreview[1].toMap().value(QStringLiteral("x")).toDouble(), 100.0);
+        QCOMPARE(rosterPreview[2].toMap().value(QStringLiteral("x")).toDouble(), 120.0);
+        const QVariantMap rosterMetrics = project.formationPreviewMetrics();
+
+        project.previewFormation(QStringLiteral("block"), options, QStringLiteral("shortest"));
+        const QVariantMap shortestMetrics = project.formationPreviewMetrics();
+        QVERIFY(shortestMetrics.value(QStringLiteral("totalMove")).toDouble()
+                <= preserveMetrics.value(QStringLiteral("totalMove")).toDouble() + 1e-6);
+        QVERIFY(shortestMetrics.value(QStringLiteral("totalMove")).toDouble()
+                <= rosterMetrics.value(QStringLiteral("totalMove")).toDouble() + 1e-6);
+
+        project.previewFormation(QStringLiteral("block"), options, QStringLiteral("evenEffort"));
+        const QVariantMap evenMetrics = project.formationPreviewMetrics();
+        QVERIFY(evenMetrics.value(QStringLiteral("maximumMove")).toDouble()
+                <= shortestMetrics.value(QStringLiteral("maximumMove")).toDouble() + 1e-6);
+
+        project.previewFormation(QStringLiteral("block"), options, QStringLiteral("featureMove"));
+        const QVariantMap featureMetrics = project.formationPreviewMetrics();
+        QVERIFY(featureMetrics.value(QStringLiteral("maximumStepsPerCount")).toDouble()
+                <= project.maximumStepsPerCount() + 1e-6);
+    }
+
     void fieldStylePreference()
     {
         QTemporaryDir temporary;
