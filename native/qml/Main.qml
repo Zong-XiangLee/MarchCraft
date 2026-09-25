@@ -29,6 +29,9 @@ ApplicationWindow {
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
         else if (surface === "music") timelinePanel.showMusic()
     }
+    function showQaTimeline(mode) {
+        timelinePanel.showQaTimelineMode(mode)
+    }
 
     property int activePerformer: -1
     property bool exportWorkspace: false
@@ -632,6 +635,28 @@ ApplicationWindow {
     Menu {
         id: setContextMenu; property int setIndex: -1
         AppMenuItem { text: "Edit set"; onTriggered: { transport.editSet(setContextMenu.setIndex); setDialog.editing=true; setDialog.open() } }
+        AppMenuItem {
+            text: "Edit incoming transition"
+            enabled: setContextMenu.setIndex > 0
+            onTriggered: drillProject.selectTimelineTransition(setContextMenu.setIndex)
+        }
+        MenuSeparator {}
+        AppMenuItem {
+            text: "Insert 8 counts before"
+            enabled: setContextMenu.setIndex > 0
+            onTriggered: drillProject.insertCountsBeforeSet(setContextMenu.setIndex, 8)
+        }
+        AppMenuItem {
+            text: "Delete 8 incoming counts"
+            enabled: setContextMenu.setIndex > 0 && drillProject.setInfo(setContextMenu.setIndex).counts > 8
+            onTriggered: drillProject.deleteCountsFromTransition(setContextMenu.setIndex, 8)
+        }
+        AppMenuItem {
+            text: "Insert 8 counts after"
+            enabled: setContextMenu.setIndex >= 0 && setContextMenu.setIndex + 1 < drillProject.setCount
+            onTriggered: drillProject.insertCountsAfterSet(setContextMenu.setIndex, 8)
+        }
+        MenuSeparator {}
         AppMenuItem { text: "Copy set"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add before"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add after"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }

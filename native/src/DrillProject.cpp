@@ -579,10 +579,24 @@ void DrillProject::selectSetRange(int index, bool extend)
 {
     if (m_sets.isEmpty()) return;
     index = qBound(0, index, m_sets.size() - 1);
-    if (extend) m_selectedSetEnd = index;
-    else m_selectedSetStart = m_selectedSetEnd = index;
+    if (extend) {
+        m_selectedSetEnd = index;
+        m_selectedTimelineSets.clear();
+        for (int selected = qMin(m_selectedSetStart, m_selectedSetEnd);
+             selected <= qMax(m_selectedSetStart, m_selectedSetEnd); ++selected)
+            m_selectedTimelineSets.insert(selected);
+    } else {
+        m_selectedSetStart = m_selectedSetEnd = index;
+        m_selectedTimelineSets = {index};
+    }
+    m_timelineSelectionKind = QStringLiteral("set");
+    m_selectedTransition = -1;
+    const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
+    m_musicSelectionStart = m_musicSelectionEnd = -1;
     setCurrentSetIndex(index);
     emit setRangeChanged();
+    emit timelineSelectionChanged();
+    if (hadMusicSelection) emit musicChanged();
 }
 
 void DrillProject::setPlaybackSource(const QString &value)
@@ -833,11 +847,16 @@ void DrillProject::newProject()
     m_audioSource.clear();
     m_music.clear();
     m_musicSections.clear();
+    m_timelineMarkers.clear();
+    m_setPlanCandidates.clear(); m_setPlanPreviewActive = false;
     m_musicSelectionStart = m_musicSelectionEnd = -1;
     m_audioOffsetMs = 0.0; m_waveformPeaks.clear(); m_waveformEndMs.clear(); m_audioDurationMs = 0.0;
     m_projectPath.clear();
     m_currentSet = 0;
     m_selectedSetStart = m_selectedSetEnd = 0;
+    m_selectedTimelineSets = {0};
+    m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
+    m_timelineRangeStart = m_timelineRangeEnd = 0;
     m_playbackSource = QStringLiteral("midi"); m_midiMasterVolume = 0.75; m_loopEnabled = false;
     m_playhead = 0.0;
     m_playbackActive = false; m_playbackSet = -1;
@@ -855,6 +874,7 @@ void DrillProject::newProject()
     emit sceneChanged();
     emit propsChanged();
     emit musicChanged(); emit waveformChanged(); emit setRangeChanged(); emit transportSettingsChanged();
+    emit timelineSelectionChanged(); emit timelineMarkersChanged(); emit setPlanChanged();
 }
 
 void DrillProject::addPerformer(const QString &label, const QString &instrument,
@@ -1085,14 +1105,20 @@ void DrillProject::addSet(const QString &name, int counts, bool subset)
     set.activeVariant().name = name.trimmed().isEmpty()
         ? QStringLiteral("Set %1").arg(m_sets.size() + 1) : name.trimmed();
     set.counts = qMax(1, counts);
+    const int insertAt = m_currentSet + 1;
     set.startTick = m_sets.isEmpty() ? 0 : advancePulses(m_sets[qMax(0, m_currentSet)].startTick, set.counts);
     set.subset = subset;
     if (!m_sets.isEmpty())
         set.activeVariant().placements = m_sets[qMax(0, m_currentSet)].activeVariant().placements;
-    m_sets.insert(m_currentSet + 1, set);
-    m_currentSet++;
+    m_sets.insert(insertAt, set);
+    QVector<int> durations;
+    for (const auto &existing : std::as_const(m_sets)) durations.push_back(qMax(1, existing.counts));
+    if (insertAt > 0) rebuildSetTicksFrom(insertAt, durations);
+    m_currentSet = insertAt;
+    m_selectedSetStart = m_selectedSetEnd = insertAt;
+    m_selectedTimelineSets = {insertAt}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
     emit setsChanged();
-    emit currentSetChanged();
+    emit currentSetChanged(); emit timingChanged(); emit setRangeChanged(); emit timelineSelectionChanged();
     emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Add set"));
 }
@@ -1118,7 +1144,13 @@ void DrillProject::batchAddSets(int numberOfSets, int counts)
         m_sets.insert(insertAt + i, set);
     }
     m_currentSet = insertAt;
-    emit setsChanged(); emit currentSetChanged(); emitAllDataChanged();
+    QVector<int> durations;
+    for (const auto &set : std::as_const(m_sets)) durations.push_back(qMax(1, set.counts));
+    rebuildSetTicksFrom(insertAt, durations);
+    m_selectedSetStart = m_selectedSetEnd = insertAt;
+    m_selectedTimelineSets = {insertAt}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
+    emit setsChanged(); emit currentSetChanged(); emit timingChanged(); emit setRangeChanged();
+    emit timelineSelectionChanged(); emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Batch add sets"));
 }
 
@@ -1134,7 +1166,13 @@ void DrillProject::duplicateCurrentSet()
     copy.activeVariant().name += QStringLiteral(" Copy");
     m_sets.insert(m_currentSet + 1, copy);
     ++m_currentSet;
-    emit setsChanged(); emit currentSetChanged(); emitAllDataChanged();
+    QVector<int> durations;
+    for (const auto &set : std::as_const(m_sets)) durations.push_back(qMax(1, set.counts));
+    rebuildSetTicksFrom(m_currentSet, durations);
+    m_selectedSetStart = m_selectedSetEnd = m_currentSet;
+    m_selectedTimelineSets = {m_currentSet}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
+    emit setsChanged(); emit currentSetChanged(); emit timingChanged(); emit setRangeChanged();
+    emit timelineSelectionChanged(); emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Duplicate set"));
 }
 
@@ -1146,15 +1184,17 @@ void DrillProject::duplicateSetAt(int index)
     for(auto&variant:copy.variants)renewVariant(variant);for(auto&variant:copy.archivedVariants)renewVariant(variant);
     copy.activeVariantId=copy.variants.value(qMax(0,m_sets[index].activeVariantIndex())).id;
     const int insert=index+1; const int counts=qMax(1,copy.counts); copy.startTick=advancePulses(m_sets[index].startTick,counts);
-    const qint64 shift=copy.startTick-m_sets[index].startTick; for(int i=insert;i<m_sets.size();++i)m_sets[i].startTick+=shift;
-    m_sets.insert(insert,copy);m_currentSet=insert;recalculateCounts();emit setsChanged();emit currentSetChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Copy set"));
+    m_sets.insert(insert,copy);QVector<int>durations;for(const auto&set:std::as_const(m_sets))durations.push_back(qMax(1,set.counts));
+    rebuildSetTicksFrom(insert,durations);m_currentSet=insert;m_selectedSetStart=m_selectedSetEnd=insert;m_selectedTimelineSets={insert};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;
+    recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Copy set"));
 }
 
 void DrillProject::insertSetAt(int index)
 {
     index=qBound(0,index,m_sets.size());const auto before=toJson();DrillSet set;set.number=QString::number(index+1);set.activeVariant().name=QStringLiteral("New set");set.counts=index==0?0:8;
-    if(!m_sets.isEmpty()){const int source=qBound(0,index-1,m_sets.size()-1);set.activeVariant().placements=m_sets[source].activeVariant().placements;set.startTick=index==0?0:advancePulses(m_sets[source].startTick,8);const qint64 shift=index==0?advancePulses(0,8):set.startTick-m_sets[source].startTick;for(int i=index;i<m_sets.size();++i)m_sets[i].startTick+=shift;}
-    m_sets.insert(index,set);m_currentSet=index;recalculateCounts();emit setsChanged();emit currentSetChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Insert set"));
+    if(!m_sets.isEmpty()){const int source=qBound(0,index-1,m_sets.size()-1);set.activeVariant().placements=m_sets[source].activeVariant().placements;set.startTick=index==0?0:advancePulses(m_sets[source].startTick,8);}
+    m_sets.insert(index,set);if(index==0){m_sets[0].counts=0;m_sets[0].startTick=0;QVector<int>durations;durations.push_back(1);for(int i=1;i<m_sets.size();++i)durations.push_back(i==1?8:qMax(1,m_sets[i].counts));rebuildSetTicksFrom(1,durations);}else{QVector<int>durations;for(const auto&existing:std::as_const(m_sets))durations.push_back(qMax(1,existing.counts));rebuildSetTicksFrom(index,durations);}
+    m_currentSet=index;m_selectedSetStart=m_selectedSetEnd=index;m_selectedTimelineSets={index};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Insert set"));
 }
 
 void DrillProject::archiveSetAt(int index){if(index<0||index>=m_sets.size()||m_sets.size()<=1)return;setCurrentSetIndex(index);archiveCurrentSet();}
@@ -1187,8 +1227,9 @@ void DrillProject::moveSet(int from,int to)
         if (index + 1 < m_sets.size()) tick = advancePulses(tick, retainedCounts.value(m_sets[index + 1].id, 8));
     }
     m_currentSet = to; m_selectedSetStart = m_selectedSetEnd = to;
+    m_selectedTimelineSets = {to}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
     recalculateCounts(); emit propsChanged(); emit timingChanged(); emit setsChanged(); emit setRangeChanged();
-    emit currentSetChanged(); emitAllDataChanged();
+    emit timelineSelectionChanged(); emit currentSetChanged(); emitAllDataChanged();
     setStatus(QStringLiteral("Moved %1 to timeline position %2; transitions and timing were rebuilt")
         .arg(moved.number.isEmpty() ? moved.activeVariant().name : moved.number).arg(to + 1));
     commitSnapshot(before, QStringLiteral("Reorder sets"));
@@ -1283,7 +1324,8 @@ void DrillProject::archiveCurrentSet()
         for (auto &set : m_sets) set.startTick -= offset;
     }
     recalculateCounts();
-    emit setsChanged(); emit currentSetChanged(); emitAllDataChanged();
+    m_selectedSetStart=m_selectedSetEnd=m_currentSet;m_selectedTimelineSets={m_currentSet};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;
+    emit setsChanged(); emit currentSetChanged(); emit timingChanged(); emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Archive set"));
 }
 
@@ -1302,7 +1344,8 @@ void DrillProject::restoreArchivedSet(int index)
         for (int i = 1; i < m_sets.size(); ++i) m_sets[i].startTick += shift;
     }
     recalculateCounts();
-    emit setsChanged(); emit currentSetChanged(); emitAllDataChanged();
+    m_selectedSetStart=m_selectedSetEnd=insertAt;m_selectedTimelineSets={insertAt};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;
+    emit setsChanged(); emit currentSetChanged(); emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Restore archived set"));
 }
 
@@ -1356,8 +1399,10 @@ void DrillProject::updateCurrentSet(const QString &number, const QString &name,
         set.startTick = 0;
         set.stepMultiplier = 0.0;
     } else {
-        set.counts = qMax(1, counts);
-        set.startTick = advancePulses(m_sets[m_currentSet - 1].startTick, set.counts);
+        QVector<int> durations;
+        for (const auto &existing : std::as_const(m_sets)) durations.push_back(qMax(1, existing.counts));
+        durations[m_currentSet] = qMax(1, counts);
+        rebuildSetTicksFrom(m_currentSet, durations);
     }
     set.subset = subset;
     recalculateCounts();
@@ -1706,17 +1751,24 @@ QVariantMap DrillProject::setInfo(int index) const
         ? qMax(1, int((set.startTick - endingMeasure.startTick) / qMax<qint64>(1, endingMeasure.pulseTicks)) + 1) : 0;
     const double duration = index > 0 ? transitionDurationMs(index) : 0.0;
     return {{QStringLiteral("number"), set.number.isEmpty() ? QString::number(index + 1) : set.number},
+            {QStringLiteral("id"), set.id},
             {QStringLiteral("name"), set.activeVariant().name},
             {QStringLiteral("caption"), set.activeVariant().caption},
             {QStringLiteral("measure"), set.measure},
             {QStringLiteral("counts"), index == 0 ? (m_openingBehavior == QStringLiteral("hold") ? m_openingCounts : 0) : set.counts},
             {QStringLiteral("opening"), index == 0}, {QStringLiteral("openingBehavior"), index == 0 ? m_openingBehavior : QString{}},
             {QStringLiteral("startTick"), set.startTick},
+            {QStringLiteral("absoluteCount"), absoluteCountAtTick(set.startTick)},
+            {QStringLiteral("timestampMs"), index == 0 ? 0.0
+                : openingDurationMs() + millisecondsBetween(0, set.startTick)},
             {QStringLiteral("endingMeasure"), endingMeasureIndex >= 0 ? endingMeasure.displayNumber : 0},
             {QStringLiteral("endingBeat"), beat}, {QStringLiteral("durationMs"), duration},
             {QStringLiteral("stepMultiplier"), set.stepMultiplier},
             {QStringLiteral("steps"), set.counts * set.stepMultiplier},
             {QStringLiteral("tempo"), effectiveTempoText(index)}, {QStringLiteral("subset"), set.subset},
+            {QStringLiteral("selected"), isSetSelected(index)},
+            {QStringLiteral("editing"), index == m_currentSet},
+            {QStringLiteral("playbackDestination"), m_playbackActive && index == playbackSetIndex()},
             {QStringLiteral("variantLabel"), set.activeVariant().label},
             {QStringLiteral("variantCount"), set.variants.size()},
             {QStringLiteral("archivedVariantCount"), set.archivedVariants.size()}};
@@ -1876,7 +1928,10 @@ void DrillProject::commitSnapshot(const QJsonObject &before, const QString &text
 void DrillProject::markDirty(const QString &message)
 {
     ++m_projectRevision;
-    if (!m_backgroundWorkerClone) cancelFormationPreview();
+    if (!m_backgroundWorkerClone) {
+        cancelFormationPreview();
+        if (!m_applyingSetPlan) cancelSetPlanPreview();
+    }
     if (!m_dirty) {
         m_dirty = true;
         emit dirtyChanged();

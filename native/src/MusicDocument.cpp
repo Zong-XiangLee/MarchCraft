@@ -165,7 +165,7 @@ qint64 MusicDocument::tickAtMilliseconds(double milliseconds) const
 
 QJsonObject MusicDocument::toJson() const
 {
-    QJsonArray tempoArray, meterArray, trackArray, measureArray, keyArray, markerArray;
+    QJsonArray tempoArray, meterArray, trackArray, measureArray, keyArray, markerArray, attackArray;
     for (const auto &tempo : tempos) tempoArray.push_back(QJsonObject{{QStringLiteral("tick"), tempo.tick}, {QStringLiteral("bpm"), tempo.bpm}});
     for (const auto &meter : meters) meterArray.push_back(QJsonObject{{QStringLiteral("tick"), meter.tick},
         {QStringLiteral("numerator"), meter.numerator}, {QStringLiteral("denominator"), meter.denominator},
@@ -185,13 +185,18 @@ QJsonObject MusicDocument::toJson() const
         {QStringLiteral("sharps"), key.sharps}, {QStringLiteral("minor"), key.minor}});
     for (const auto &marker : markers) markerArray.push_back(QJsonObject{{QStringLiteral("tick"), marker.tick},
         {QStringLiteral("text"), marker.text}, {QStringLiteral("kind"), marker.kind}});
+    for (const auto &attack : attackEvents) attackArray.push_back(QJsonObject{
+        {QStringLiteral("tick"), attack.tick}, {QStringLiteral("track"), attack.track},
+        {QStringLiteral("channel"), attack.channel}, {QStringLiteral("velocity"), attack.velocity},
+        {QStringLiteral("percussion"), attack.percussion}});
     return {{QStringLiteral("sourceType"), sourceType}, {QStringLiteral("sourcePath"), sourcePath},
             {QStringLiteral("sourceHash"), sourceHash}, {QStringLiteral("sourcePpq"), sourcePpq},
             {QStringLiteral("durationTick"), durationTick}, {QStringLiteral("durationMs"), durationMs},
             {QStringLiteral("firstMeasureNumber"), firstMeasureNumber}, {QStringLiteral("tempos"), tempoArray},
             {QStringLiteral("meters"), meterArray}, {QStringLiteral("tracks"), trackArray},
             {QStringLiteral("measures"), measureArray}, {QStringLiteral("keys"), keyArray},
-            {QStringLiteral("markers"), markerArray}, {QStringLiteral("audioAnchors"), anchorsToJson(audioAnchors)},
+            {QStringLiteral("markers"), markerArray}, {QStringLiteral("attackEvents"), attackArray},
+            {QStringLiteral("audioAnchors"), anchorsToJson(audioAnchors)},
             {QStringLiteral("diagnostics"), QJsonArray::fromStringList(diagnostics)}};
 }
 
@@ -227,6 +232,12 @@ MusicDocument MusicDocument::fromJson(const QJsonObject &object)
         o.value(QStringLiteral("tick")).toVariant().toLongLong(), o.value(QStringLiteral("sharps")).toInt(), o.value(QStringLiteral("minor")).toBool()}); }
     for (const auto &value : object.value(QStringLiteral("markers")).toArray()) { const auto o=value.toObject(); document.markers.push_back({
         o.value(QStringLiteral("tick")).toVariant().toLongLong(), o.value(QStringLiteral("text")).toString(), o.value(QStringLiteral("kind")).toString()}); }
+    for (const auto &value : object.value(QStringLiteral("attackEvents")).toArray()) { const auto o=value.toObject(); document.attackEvents.push_back({
+        qMax<qint64>(0, o.value(QStringLiteral("tick")).toVariant().toLongLong()),
+        qMax(0, o.value(QStringLiteral("track")).toInt()),
+        qBound(0, o.value(QStringLiteral("channel")).toInt(), 15),
+        qBound(0, o.value(QStringLiteral("velocity")).toInt(), 127),
+        o.value(QStringLiteral("percussion")).toBool()}); }
     for (const auto &value : object.value(QStringLiteral("audioAnchors")).toArray()) { const auto o=value.toObject(); document.audioAnchors.push_back({
         o.value(QStringLiteral("audioMs")).toDouble(), o.value(QStringLiteral("musicTick")).toVariant().toLongLong()}); }
     for (const auto &value : object.value(QStringLiteral("diagnostics")).toArray()) document.diagnostics.push_back(value.toString());
@@ -312,7 +323,9 @@ MidiImportResult parseMidiFile(const QString &path)
                 if (track.channel < 0) track.channel = channel;
                 if (kind == 0xc0) track.program = first;
                 if (kind == 0x90 && second > 0) {
-                    ++track.noteCount; noteTicks.push_back(scaledTick(tick, division));
+                    const qint64 attackTick = scaledTick(tick, division);
+                    ++track.noteCount; noteTicks.push_back(attackTick);
+                    document.attackEvents.push_back({attackTick, trackIndex, channel, second, channel == 9});
                 }
                 document.playbackEvents.push_back({scaledTick(tick, division), trackIndex,
                     status, first, second});

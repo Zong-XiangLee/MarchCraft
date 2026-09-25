@@ -17,10 +17,10 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Canvas | GPU-backed native Qt view, zoom, pan, regulation ten-yard end zones, realistic turf mowing bands, five-yard lines, front/back yard numbers, regulation HS/NCAA/NFL hash placement, and four vertical one-yard inserts per five-yard interval |
 | Animation | Set-to-set or continuous whole-show playback with visible marcher paths and per-set count/BPM timing |
 | Roster | Add, edit, remove, batch-create, search, multi-select, custom name/section/instrument/notes |
-| Sets | Add, edit, delete, duplicate, batch-create, and mark subsets |
+| Sets | Add, edit, delete, duplicate, batch-create, mark subsets, directly retime incoming transitions, and ripple later timing without rebuilding formations |
 | Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and equal-distance distribution |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
-| Music | Native MIDI/MusicXML timing and track import, unified time-scaled drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent page/range selection, persistent color-coded movements and parts, built-in FluidSynth playback, count-based set generation, step-mode overrides, waveform audio and synchronization anchors |
+| Music | Native MIDI/MusicXML timing, meter, tempo, note-activity, and track import; unified marker/drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent set/transition/time/measure selection; persistent landmarks, movements and parts; deterministic impact/phrase set-plan suggestions; built-in FluidSynth playback; previewed set generation; step-mode overrides; waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
 | 3D | Meter-based Y-up world with grounded, height-scaled rigged human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
@@ -30,7 +30,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 ## Prototype boundaries
 
 - Transition paths are currently direct interpolations. The domain boundary is ready for curved, follow-the-leader, gate, and counter-march path implementations.
-- Audio can be attached, previewed, offset, and aligned with anchors; automatic beat/phrase inference remains outside the prototype because it is not authoritative for changing-tempo marching arrangements.
+- Audio can be attached, previewed, offset, and aligned with anchors. Set-plan analysis uses authoritative MIDI/MusicXML structure and explicit user markers; arbitrary rehearsal audio is not presented as reliable phrase understanding.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
 - GLB ingestion is architected through a validated semantic catalog; finished Blender meshes, retargeted clips, cinematic rendering remain production milestones.
@@ -54,6 +54,15 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Clinic dismissal safely handles issues with attached metadata; timed collisions
   remain warnings while geometric crossings alone remain intentional choreography.
 - The authorized human source, conditioned runtime GLBs, count-driven gait, validators, and preview tooling are active. Instrument-specific carriage meshes, modular uniforms, cinematic rendering remain production milestones.
+
+### Production timeline and set planning
+
+- Formations appear as narrow set/keyframe markers; the interval before each destination marker is its visible incoming transition. Dense-show level-of-detail retains timing geometry while suppressing labels and handles that cannot be read.
+- Transition boundaries resize directly with count quantization and optional landmark snapping. Exact count entry, insert-before/after, and delete-count commands use one ripple implementation, preserve formation/variant/subset data, update downstream playback/export timestamps, and participate in undo/redo.
+- Selection distinguishes sets (single, Shift range, and Ctrl discontiguous), transitions, count/time ranges, and music measures. The contextual strip and production sheet expose the corresponding set/timing/music/travel data.
+- Timeline markers carry a name, type, color, notes, tick/count, and derived measure/time. Imported score markers are read-only; user markers are undoable, movement-local, and persisted in schema 12.
+- `TimelinePlanner` isolates deterministic score analysis from QML. It combines phrase-sized measure boundaries, texture shifts, tempo/meter and section boundaries, score/user markers, preferred count lengths, and grouped MIDI/MusicXML attacks. Nearby evidence is coalesced and every candidate retains a confidence and human-readable reason.
+- Analysis is preview/apply: ghost markers can be accepted, rejected, added, removed, dragged, or assigned an exact count. Existing-set alignment and unusually long/short transitions are advisory. Apply is a single undoable transaction; Cancel and ordinary project edits discard the transient preview without touching the show.
 
 ### Shape drawer reliability
 

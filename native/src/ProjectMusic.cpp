@@ -51,8 +51,15 @@ void DrillProject::applyMusicDocument(MarchCraft::MusicDocument document, const 
     }
     m_musicSelectionStart = m_music.measures.isEmpty() ? -1 : 0;
     m_musicSelectionEnd = m_musicSelectionStart;
+    if (!m_music.measures.isEmpty()) {
+        m_timelineRangeStart = m_music.measures.first().startTick;
+        m_timelineRangeEnd = m_music.measures.first().endTick;
+        m_timelineSelectionKind = QStringLiteral("measure");
+        m_selectedTransition = -1;
+        m_selectedTimelineSets.clear();
+    }
     rebuildTimingFromMusic();
-    emit projectChanged(); emit timingChanged(); emit musicChanged();
+    emit projectChanged(); emit timingChanged(); emit musicChanged(); emit timelineSelectionChanged();
     commitSnapshot(before, undoText);
     setStatus(QStringLiteral("Imported %1 measures, %2 tracks, %3 tempo events")
         .arg(m_music.measures.size()).arg(m_music.tracks.size()).arg(m_music.tempos.size()));
@@ -182,8 +189,19 @@ void DrillProject::setMusicSelection(int startMeasure, int endMeasure)
     if (m_music.measures.isEmpty()) return;
     startMeasure = qBound(0, startMeasure, m_music.measures.size() - 1);
     endMeasure = qBound(0, endMeasure, m_music.measures.size() - 1);
-    if (startMeasure == m_musicSelectionStart && endMeasure == m_musicSelectionEnd) return;
-    m_musicSelectionStart = startMeasure; m_musicSelectionEnd = endMeasure; emit musicChanged();
+    if (startMeasure == m_musicSelectionStart && endMeasure == m_musicSelectionEnd
+        && m_timelineSelectionKind == QStringLiteral("measure")) return;
+    m_musicSelectionStart = startMeasure;
+    m_musicSelectionEnd = endMeasure;
+    const int first = qMin(startMeasure, endMeasure);
+    const int last = qMax(startMeasure, endMeasure);
+    m_timelineRangeStart = m_music.measures[first].startTick;
+    m_timelineRangeEnd = m_music.measures[last].endTick;
+    m_timelineSelectionKind = QStringLiteral("measure");
+    m_selectedTransition = -1;
+    m_selectedTimelineSets.clear();
+    emit musicChanged();
+    emit timelineSelectionChanged();
 }
 
 QString DrillProject::addMusicSection(const QString &name, const QString &type,
@@ -479,14 +497,7 @@ void DrillProject::recalculateCounts()
 
 void DrillProject::setCurrentSetCounts(int counts)
 {
-    if (m_currentSet <= 0 || m_currentSet >= m_sets.size()) return;
-    counts = qBound(1, counts, 2048); const auto before = toJson();
-    m_sets[m_currentSet].startTick = advancePulses(m_sets[m_currentSet - 1].startTick, counts);
-    for (int i = m_currentSet + 1; i < m_sets.size(); ++i)
-        if (m_sets[i].startTick <= m_sets[i - 1].startTick)
-            m_sets[i].startTick = advancePulses(m_sets[i - 1].startTick, qMax(1, m_sets[i].counts));
-    recalculateCounts(); emit timingChanged();
-    commitSnapshot(before, QStringLiteral("Move musical set marker"));
+    applyTransitionCounts(m_currentSet, counts, QStringLiteral("Resize transition"));
 }
 
 double DrillProject::openingDurationMs() const

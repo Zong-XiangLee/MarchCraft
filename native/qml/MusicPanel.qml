@@ -8,11 +8,27 @@ Item {
     signal requestTiming()
     signal requestMidiImport()
     signal requestMusicXmlImport()
+    signal revealTick(real tick)
     property var previewSegments: []
     property var mappingRows: []
     property var mappingMeasures: []
+    property int markerEditIndex: -1
+    property var markerEditData: ({})
     signal revealMeasure(int index)
     function openMenu() { musicMenu.popup() }
+    function openSetPlan() { setPlanOptions.open() }
+    function openSetPlanReview() { setPlanReview.open() }
+    function openMarkers() { markerLibrary.open() }
+    function preferredCountValues() {
+        const pieces = preferredCounts.text.split(/[, ]+/)
+        const result = []
+        for (let i = 0; i < pieces.length; ++i) {
+            const value = Number(pieces[i])
+            if (value > 0 && result.indexOf(value) < 0)
+                result.push(value)
+        }
+        return result
+    }
     function refreshPreview() {
         const multiplier = movementMode.currentIndex === 0 ? 1.0
                          : movementMode.currentIndex === 1 ? 0.5
@@ -29,6 +45,9 @@ Item {
         MenuItem { text: "Import MusicXML…"; onTriggered: root.requestMusicXmlImport() }
         MenuItem { text: "Attach rehearsal audio…"; onTriggered: root.requestAudioImport() }
         MenuItem { text: "Timing and synchronization…"; onTriggered: root.requestTiming() }
+        MenuSeparator {}
+        MenuItem { text: "Analyze music for set planning…"; enabled: drillProject.musicLoaded || drillProject.timelineMarkerCount > 0; onTriggered: root.openSetPlan() }
+        MenuItem { text: "Timeline markers…"; onTriggered: root.openMarkers() }
         MenuSeparator {}
         MenuItem { text: "Track mixer…"; enabled: drillProject.musicTrackCount > 0; onTriggered: trackDialog.open() }
         MenuItem { text: "Map pages to music…"; enabled: drillProject.musicLoaded; onTriggered: { transport.editSet(drillProject.currentSetIndex); mappingDialog.open() } }
@@ -238,6 +257,351 @@ Item {
             AppButton {
                 text: "Apply mapping"; highlighted: true; Layout.alignment: Qt.AlignRight
                 onClicked: if (drillProject.applySetMapping(root.mappingMeasures)) mappingDialog.close()
+            }
+        }
+    }
+
+    Dialog {
+        id: setPlanOptions
+        title: "Analyze music for set planning"
+        modal: true
+        width: 500
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Cancel
+
+        contentItem: ColumnLayout {
+            spacing: 10
+            Label {
+                text: "MarchCraft will suggest editable set boundaries from phrasing, texture changes, tempo and meter events, score markers, existing sets, and strong MIDI attacks. Nothing changes until Apply."
+                wrapMode: Text.Wrap
+                color: MarchCraftTheme.textSecondary
+                Layout.fillWidth: true
+            }
+            GridLayout {
+                columns: 2
+                columnSpacing: 10
+                rowSpacing: 8
+                Layout.fillWidth: true
+                Label { text: "Density" }
+                ComboBox {
+                    id: planDensity
+                    Layout.fillWidth: true
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [
+                        { text: "Sparse · major phrases", value: "sparse" },
+                        { text: "Balanced · rehearsal ready", value: "balanced" },
+                        { text: "Detailed · more options", value: "detailed" }
+                    ]
+                    currentIndex: 1
+                }
+                Label { text: "Prioritize" }
+                ComboBox {
+                    id: planPriority
+                    Layout.fillWidth: true
+                    textRole: "text"
+                    valueRole: "value"
+                    model: [
+                        { text: "Balanced evidence", value: "balanced" },
+                        { text: "Musical impacts", value: "impacts" },
+                        { text: "Phrase structure", value: "phrases" },
+                        { text: "Regular count structure", value: "regular" },
+                        { text: "Authored markers", value: "markers" }
+                    ]
+                }
+                Label { text: "Preferred counts" }
+                TextField {
+                    id: preferredCounts
+                    text: "8, 12, 16, 24, 32"
+                    placeholderText: "8, 16, 24, 32"
+                    Layout.fillWidth: true
+                }
+            }
+            Label {
+                visible: !drillProject.musicLoaded
+                text: "No score is loaded; analysis will use your authored timeline markers."
+                color: MarchCraftTheme.warning
+                font.pixelSize: 10
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "Analyze and preview"
+                    highlighted: true
+                    enabled: drillProject.musicLoaded || drillProject.timelineMarkerCount > 0
+                    onClicked: {
+                        if (drillProject.analyzeMusicForSetPlan(planDensity.currentValue,
+                                                                planPriority.currentValue,
+                                                                root.preferredCountValues())) {
+                            setPlanOptions.close()
+                            setPlanReview.open()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: setPlanReview
+        title: "Review set-planning suggestions"
+        modal: true
+        width: 760
+        height: 600
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.NoButton
+        onClosed: if (!drillProject.setPlanPreviewActive) candidateList.positionViewAtBeginning()
+
+        contentItem: ColumnLayout {
+            spacing: 7
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: drillProject.setPlanCandidateCount + " candidates · translucent markers preview on the timeline"
+                    color: MarchCraftTheme.textSecondary
+                    Layout.fillWidth: true
+                }
+                AppButton {
+                    text: "+ At playhead"
+                    onClicked: drillProject.addSetPlanCandidate(transport.tickAtShowMs(transport.currentMs))
+                }
+                AppButton { text: "Options…"; onClicked: { setPlanReview.close(); setPlanOptions.open() } }
+            }
+            Rectangle {
+                Layout.fillWidth: true
+                height: 30
+                color: MarchCraftTheme.panelHeader
+                RowLayout {
+                    anchors.fill: parent
+                    anchors.leftMargin: 8
+                    anchors.rightMargin: 8
+                    Label { text: "USE"; font.bold: true; Layout.preferredWidth: 42 }
+                    Label { text: "SUGGESTION / EVIDENCE"; font.bold: true; Layout.fillWidth: true }
+                    Label { text: "LOCATION"; font.bold: true; Layout.preferredWidth: 120 }
+                    Label { text: "COUNTS"; font.bold: true; Layout.preferredWidth: 64 }
+                    Item { Layout.preferredWidth: 34 }
+                }
+            }
+            ListView {
+                id: candidateList
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 3
+                model: drillProject.setPlanCandidates
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 64
+                    radius: 4
+                    color: modelData.accepted ? "#27233a" : MarchCraftTheme.surface
+                    border.color: modelData.accepted ? (modelData.color || "#d990ea") : MarchCraftTheme.divider
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 7
+                        CheckBox {
+                            checked: modelData.accepted
+                            enabled: modelData.action !== "review"
+                            Layout.preferredWidth: 42
+                            onClicked: drillProject.setSetPlanCandidateAccepted(index, checked)
+                        }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 1
+                            Label {
+                                text: modelData.title + (modelData.action === "align" ? " · align existing set"
+                                    : modelData.action === "review" ? " · review only" : " · add set")
+                                    + " · " + Math.round(Number(modelData.confidence || 0) * 100) + "%"
+                                color: MarchCraftTheme.textPrimary
+                                font.bold: true
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                            Label {
+                                text: modelData.reason
+                                color: MarchCraftTheme.textMuted
+                                font.pixelSize: 10
+                                elide: Text.ElideRight
+                                Layout.fillWidth: true
+                            }
+                        }
+                        Label {
+                            text: "m" + (modelData.measure || "—") + " b" + (modelData.beat || "—")
+                                + "\n" + (Number(modelData.timeMs || 0) / 1000).toFixed(2) + " s"
+                            color: MarchCraftTheme.textSecondary
+                            font.pixelSize: 10
+                            Layout.preferredWidth: 120
+                        }
+                        SpinBox {
+                            from: 1
+                            to: 2048
+                            editable: true
+                            enabled: modelData.action !== "review" && modelData.countsFromPrevious > 0
+                            value: Math.max(1, modelData.countsFromPrevious || 1)
+                            Layout.preferredWidth: 78
+                            onValueModified: drillProject.setSetPlanCandidateCounts(index, value)
+                        }
+                        AppToolButton {
+                            text: "×"
+                            ToolTip.text: "Remove suggestion"
+                            ToolTip.visible: hovered
+                            onClicked: drillProject.removeSetPlanCandidate(index)
+                        }
+                    }
+                }
+            }
+            Label {
+                text: "Drag a purple preview marker on the timeline to retime it. Apply is a single undoable transaction; Cancel discards the preview."
+                wrapMode: Text.Wrap
+                color: MarchCraftTheme.textMuted
+                font.pixelSize: 10
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppButton {
+                    text: "Cancel preview"
+                    onClicked: { drillProject.cancelSetPlanPreview(); setPlanReview.close() }
+                }
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "Apply selected suggestions"
+                    highlighted: true
+                    enabled: drillProject.setPlanPreviewActive
+                    onClicked: if (drillProject.applySetPlan()) setPlanReview.close()
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: markerLibrary
+        title: "Timeline markers"
+        modal: true
+        width: 680
+        height: 520
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.Close
+
+        contentItem: ColumnLayout {
+            spacing: 7
+            RowLayout {
+                Layout.fillWidth: true
+                Label {
+                    text: "Named rehearsal, impact, phrase, tempo, and annotation markers"
+                    color: MarchCraftTheme.textSecondary
+                    Layout.fillWidth: true
+                }
+                AppButton {
+                    text: "+ At playhead"
+                    onClicked: drillProject.addTimelineMarker(
+                        transport.tickAtShowMs(transport.currentMs),
+                        "Marker " + (drillProject.timelineMarkerCount + 1), "rehearsal", "#38bdf8", "")
+                }
+            }
+            ListView {
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                clip: true
+                spacing: 4
+                model: drillProject.timelineMarkers
+                delegate: Rectangle {
+                    required property int index
+                    required property var modelData
+                    width: ListView.view.width
+                    height: 58
+                    radius: 4
+                    color: MarchCraftTheme.surface
+                    border.color: modelData.color || MarchCraftTheme.divider
+                    RowLayout {
+                        anchors.fill: parent
+                        anchors.margins: 7
+                        Rectangle { width: 8; Layout.fillHeight: true; radius: 3; color: modelData.color }
+                        ColumnLayout {
+                            Layout.fillWidth: true
+                            spacing: 0
+                            Label { text: modelData.name; font.bold: true; Layout.fillWidth: true; elide: Text.ElideRight }
+                            Label {
+                                text: modelData.type + " · count " + modelData.absoluteCount
+                                    + (modelData.measure ? " · m" + modelData.measure + " b" + modelData.beat : "")
+                                    + " · " + (Number(modelData.timeMs || 0) / 1000).toFixed(2) + " s"
+                                color: MarchCraftTheme.textMuted
+                                font.pixelSize: 10
+                            }
+                        }
+                        AppButton { text: "Show"; onClicked: { root.revealTick(modelData.tick); transport.seekTick(modelData.tick) } }
+                        AppButton {
+                            text: "Edit"
+                            enabled: !modelData.readOnly
+                            onClicked: {
+                                root.markerEditIndex = index
+                                root.markerEditData = modelData
+                                markerName.text = modelData.name
+                                markerType.editText = modelData.type
+                                markerColor.text = modelData.color
+                                markerCount.value = modelData.absoluteCount
+                                markerNotes.text = modelData.notes || ""
+                                markerEditor.open()
+                            }
+                        }
+                        AppToolButton {
+                            text: "×"
+                            enabled: !modelData.readOnly
+                            ToolTip.text: modelData.readOnly ? "Imported score markers are read-only" : "Remove marker"
+                            ToolTip.visible: hovered
+                            onClicked: drillProject.removeTimelineMarker(modelData.id)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    Dialog {
+        id: markerEditor
+        title: "Edit timeline marker"
+        modal: true
+        width: 460
+        anchors.centerIn: Overlay.overlay
+        standardButtons: Dialog.NoButton
+        contentItem: GridLayout {
+            columns: 2
+            rowSpacing: 8
+            columnSpacing: 10
+            Label { text: "Name" }
+            TextField { id: markerName; Layout.fillWidth: true; maximumLength: 80 }
+            Label { text: "Type" }
+            ComboBox {
+                id: markerType
+                editable: true
+                model: ["rehearsal", "impact", "phrase", "tempo", "annotation"]
+                Layout.fillWidth: true
+            }
+            Label { text: "Absolute count" }
+            SpinBox { id: markerCount; from: 0; to: 1000000; editable: true; Layout.fillWidth: true }
+            Label { text: "Color" }
+            TextField { id: markerColor; placeholderText: "#38bdf8"; Layout.fillWidth: true }
+            Label { text: "Notes"; Layout.alignment: Qt.AlignTop }
+            TextArea { id: markerNotes; Layout.fillWidth: true; Layout.preferredHeight: 90; wrapMode: TextEdit.Wrap }
+            RowLayout {
+                Layout.columnSpan: 2
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                AppButton { text: "Cancel"; onClicked: markerEditor.close() }
+                AppButton {
+                    text: "Save marker"
+                    highlighted: true
+                    enabled: markerName.text.trim().length > 0
+                    onClicked: {
+                        if (drillProject.updateTimelineMarker(root.markerEditData.id,
+                                                              drillProject.tickAtAbsoluteCount(markerCount.value),
+                                                              markerName.text, markerType.editText,
+                                                              markerColor.text, markerNotes.text))
+                            markerEditor.close()
+                    }
+                }
             }
         }
     }
