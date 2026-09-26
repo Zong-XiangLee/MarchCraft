@@ -57,8 +57,14 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("startMeasure"), section.startMeasure},
             {QStringLiteral("endMeasure"), section.endMeasure}});
     }
+    QJsonArray timelineMarkers;
+    for (const auto &marker : m_timelineMarkers) timelineMarkers.push_back(marker.toJson());
+    QJsonArray selectedSets;
+    QList<int> selectedIndices = m_selectedTimelineSets.values();
+    std::sort(selectedIndices.begin(), selectedIndices.end());
+    for (int index : selectedIndices) selectedSets.push_back(index);
     QJsonObject result{{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 11},
+            {QStringLiteral("version"), 12},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
@@ -67,10 +73,16 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("musicSections"), musicSections},
             {QStringLiteral("musicSelectionStart"), m_musicSelectionStart},
             {QStringLiteral("musicSelectionEnd"), m_musicSelectionEnd},
+            {QStringLiteral("timelineMarkers"), timelineMarkers},
             {QStringLiteral("bpm"), m_bpm},
             {QStringLiteral("currentSet"), m_currentSet},
             {QStringLiteral("selectedSetStart"), m_selectedSetStart},
             {QStringLiteral("selectedSetEnd"), m_selectedSetEnd},
+            {QStringLiteral("selectedSetIndices"), selectedSets},
+            {QStringLiteral("timelineSelectionKind"), m_timelineSelectionKind},
+            {QStringLiteral("selectedTransition"), m_selectedTransition},
+            {QStringLiteral("timelineRangeStart"), m_timelineRangeStart},
+            {QStringLiteral("timelineRangeEnd"), m_timelineRangeEnd},
             {QStringLiteral("playbackSource"), m_playbackSource},
             {QStringLiteral("midiMasterVolume"), m_midiMasterVolume},
             {QStringLiteral("loopEnabled"), m_loopEnabled},
@@ -102,7 +114,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 11) {
+        || object.value(QStringLiteral("version")).toInt() > 12) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
@@ -137,6 +149,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     QVector<MarchCraft::TempoRegion> tempoRegions;
     QVector<MarchCraft::PropInstance> props;
     QVector<MusicSection> musicSections;
+    QVector<MarchCraft::TimelineMarker> timelineMarkers;
     for (const auto &value : object.value(QStringLiteral("performers")).toArray())
         performers.push_back(Performer::fromJson(value.toObject()));
     for (const auto &value : object.value(QStringLiteral("sets")).toArray())
@@ -163,6 +176,14 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
                                  section.value(QStringLiteral("startMeasure")).toInt(),
                                  section.value(QStringLiteral("endMeasure")).toInt()});
     }
+    QSet<QString> markerIds;
+    for (const auto &value : object.value(QStringLiteral("timelineMarkers")).toArray()) {
+        auto marker = MarchCraft::TimelineMarker::fromJson(value.toObject());
+        if (marker.id.isEmpty()) marker.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+        if (marker.name.isEmpty() || markerIds.contains(marker.id)) continue;
+        markerIds.insert(marker.id);
+        timelineMarkers.push_back(std::move(marker));
+    }
     for (int i = 0; i < sets.size(); ++i)
         if (sets[i].number.isEmpty()) sets[i].number = QString::number(i + 1);
     if (sets.isEmpty()) {
@@ -188,9 +209,17 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
         section.endMeasure = qBound(section.startMeasure, section.endMeasure, m_music.measures.size() - 1);
         m_musicSections.push_back(std::move(section));
     }
+    m_timelineMarkers = std::move(timelineMarkers);
+    std::stable_sort(m_timelineMarkers.begin(), m_timelineMarkers.end(), [](const auto &a, const auto &b) {
+        return a.tick < b.tick;
+    });
+    m_setPlanCandidates.clear(); m_setPlanPreviewActive = false;
     if (m_music.sourceType == QStringLiteral("midi") && QFileInfo::exists(m_music.sourcePath)) {
         const auto reparsed = MarchCraft::parseMidiFile(m_music.sourcePath);
-        if (reparsed.ok) m_music.playbackEvents = reparsed.document.playbackEvents;
+        if (reparsed.ok) {
+            m_music.playbackEvents = reparsed.document.playbackEvents;
+            if (m_music.attackEvents.isEmpty()) m_music.attackEvents = reparsed.document.attackEvents;
+        }
     }
     m_venue = MarchCraft::VenueConfiguration::fromJson(object.value(QStringLiteral("venue")).toObject());
     m_props = std::move(props);
@@ -214,6 +243,29 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
                               0, static_cast<int>(m_sets.size()) - 1);
     m_selectedSetStart = qBound(0, object.value(QStringLiteral("selectedSetStart")).toInt(m_currentSet), m_sets.size()-1);
     m_selectedSetEnd = qBound(0, object.value(QStringLiteral("selectedSetEnd")).toInt(m_selectedSetStart), m_sets.size()-1);
+    m_selectedTimelineSets.clear();
+    for (const auto &value : object.value(QStringLiteral("selectedSetIndices")).toArray()) {
+        const int selected = value.toInt(-1);
+        if (selected >= 0 && selected < m_sets.size()) m_selectedTimelineSets.insert(selected);
+    }
+    static const QSet<QString> selectionKinds{QStringLiteral("none"), QStringLiteral("set"),
+        QStringLiteral("transition"), QStringLiteral("time"), QStringLiteral("measure"),
+        QStringLiteral("marker")};
+    m_timelineSelectionKind = object.value(QStringLiteral("timelineSelectionKind")).toString(QStringLiteral("set"));
+    if (!selectionKinds.contains(m_timelineSelectionKind)) m_timelineSelectionKind = QStringLiteral("set");
+    if (m_timelineSelectionKind == QStringLiteral("set") && m_selectedTimelineSets.isEmpty()) {
+        for (int selected = qMin(m_selectedSetStart, m_selectedSetEnd);
+             selected <= qMax(m_selectedSetStart, m_selectedSetEnd); ++selected)
+            m_selectedTimelineSets.insert(selected);
+    } else if (m_timelineSelectionKind != QStringLiteral("set")) {
+        m_selectedTimelineSets.clear();
+    }
+    m_selectedTransition = qBound(-1, object.value(QStringLiteral("selectedTransition")).toInt(-1), m_sets.size() - 1);
+    if (m_selectedTransition <= 0 && m_timelineSelectionKind == QStringLiteral("transition"))
+        m_timelineSelectionKind = QStringLiteral("set");
+    m_timelineRangeStart = qMax<qint64>(0, object.value(QStringLiteral("timelineRangeStart")).toVariant().toLongLong());
+    m_timelineRangeEnd = qMax(m_timelineRangeStart,
+        object.value(QStringLiteral("timelineRangeEnd")).toVariant().toLongLong());
     m_playbackSource = object.value(QStringLiteral("playbackSource")).toString(
         m_audioSource.isEmpty() ? QStringLiteral("midi") : QStringLiteral("rehearsal"));
     m_midiMasterVolume = qBound(0.0, object.value(QStringLiteral("midiMasterVolume")).toDouble(0.75), 1.0);
@@ -243,6 +295,7 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     emit timingChanged();
     emit musicChanged();
     emit setRangeChanged(); emit transportSettingsChanged();
+    emit timelineSelectionChanged(); emit timelineMarkersChanged(); emit setPlanChanged();
     if (!m_backgroundWorkerClone) { invalidateClinic(); analyzeTransition(m_currentSet); startWaveformDecode(); }
     return true;
 }
@@ -657,13 +710,15 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
         setStatus(QStringLiteral("Could not open MusicXML"));
         return false;
     }
-    struct ImportedMeasure { QString number; qint64 tick = 0; qint64 duration = 0; };
+    struct ImportedMeasure { QString number; qint64 tick = 0; qint64 duration = 0; int noteCount = 0; };
     QXmlStreamReader xml(&file);
     QVector<ImportedMeasure> measures;
     QVector<MarchCraft::MeterRegion> meters;
     QVector<MarchCraft::TempoRegion> tempos;
     int divisions = 1, beats = 4, beatType = 4, unsupported = 0;
-    qint64 scoreTick = 0, cursor = 0, maximum = 0;
+    qint64 scoreTick = 0, cursor = 0, maximum = 0, lastNoteStart = 0;
+    int measureNoteCount = 0;
+    QVector<MarchCraft::MusicAttackEvent> attacks;
     QString measureNumber;
     bool inMeasure = false;
     auto sourceToTicks = [&divisions](int duration) {
@@ -672,12 +727,12 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
     while (!xml.atEnd()) {
         xml.readNext();
         if (xml.isStartElement() && xml.name() == QLatin1StringView("measure")) {
-            inMeasure = true; cursor = 0; maximum = 0;
+            inMeasure = true; cursor = 0; maximum = 0; lastNoteStart = 0; measureNoteCount = 0;
             measureNumber = xml.attributes().value(QLatin1StringView("number")).toString();
         } else if (xml.isEndElement() && xml.name() == QLatin1StringView("measure")) {
             const qint64 nominal = qRound64(double(beats) * 4.0 / beatType * MarchCraft::TicksPerQuarter);
             const qint64 duration = maximum > 0 ? maximum : nominal;
-            measures.push_back({measureNumber, scoreTick, duration});
+            measures.push_back({measureNumber, scoreTick, duration, measureNoteCount});
             scoreTick += duration; inMeasure = false;
         } else if (!xml.isStartElement()) {
             continue;
@@ -695,15 +750,24 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
             if (!meters.isEmpty()) meters.last().endTick = scoreTick;
             meters.push_back(r);
         } else if (xml.name() == QLatin1StringView("note")) {
-            int rawDuration = 0; bool chord = false, grace = false;
+            int rawDuration = 0; bool chord = false, grace = false, rest = false;
             while (!(xml.isEndElement() && xml.name() == QLatin1StringView("note")) && !xml.atEnd()) {
                 xml.readNext();
                 if (!xml.isStartElement()) continue;
                 if (xml.name() == QLatin1StringView("duration")) rawDuration = xml.readElementText().toInt();
                 else if (xml.name() == QLatin1StringView("chord")) chord = true;
                 else if (xml.name() == QLatin1StringView("grace")) grace = true;
+                else if (xml.name() == QLatin1StringView("rest")) rest = true;
             }
-            if (!chord && !grace) cursor += sourceToTicks(rawDuration);
+            const qint64 attackTick = scoreTick + (chord ? lastNoteStart : cursor);
+            if (!rest && !grace) {
+                attacks.push_back({attackTick, 0, 0, 80, false});
+                ++measureNoteCount;
+            }
+            if (!chord && !grace) {
+                lastNoteStart = cursor;
+                cursor += sourceToTicks(rawDuration);
+            }
             maximum = qMax(maximum, cursor);
         } else if (xml.name() == QLatin1StringView("backup") || xml.name() == QLatin1StringView("forward")) {
             const bool backward = xml.name() == QLatin1StringView("backup"); int rawDuration = 0;
@@ -736,7 +800,8 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
     if (hashFile.open(QIODevice::ReadOnly))
         document.sourceHash = QString::fromLatin1(QCryptographicHash::hash(hashFile.readAll(), QCryptographicHash::Sha256).toHex());
     document.durationTick = scoreTick;
-    document.tracks.push_back({0, QStringLiteral("Score"), 0, -1, -1, true});
+    document.tracks.push_back({0, QStringLiteral("Score"), static_cast<int>(attacks.size()), -1, -1, true});
+    document.attackEvents = attacks;
     for (const auto &meter : std::as_const(meters))
         document.meters.push_back({meter.startTick, meter.numerator, meter.denominator, meter.pulseTicks, meter.grouping});
     for (const auto &tempo : std::as_const(tempos))
@@ -753,7 +818,9 @@ bool DrillProject::importMusicXml(const QString &urlOrPath)
         }
         measure.counts = qMax(1, qRound(double(source.duration) / qMax<qint64>(1, measure.pulseTicks)));
         const qint64 nominal = qRound64(double(MarchCraft::TicksPerQuarter) * 4.0 * measure.numerator / measure.denominator);
-        measure.partial = source.duration != nominal; document.measures.push_back(measure);
+        measure.partial = source.duration != nominal;
+        measure.noteCount = source.noteCount;
+        document.measures.push_back(measure);
     }
     document.firstMeasureNumber = document.measures.first().displayNumber;
     document.durationMs = document.millisecondsAt(document.durationTick);
@@ -771,6 +838,9 @@ QJsonObject DrillProject::movementState(const QJsonObject &project)
         QStringLiteral("selectedSetStart"), QStringLiteral("selectedSetEnd"),
         QStringLiteral("music"), QStringLiteral("musicSections"),
         QStringLiteral("musicSelectionStart"), QStringLiteral("musicSelectionEnd"),
+        QStringLiteral("timelineMarkers"), QStringLiteral("selectedSetIndices"),
+        QStringLiteral("timelineSelectionKind"), QStringLiteral("selectedTransition"),
+        QStringLiteral("timelineRangeStart"), QStringLiteral("timelineRangeEnd"),
         QStringLiteral("audioSource"), QStringLiteral("audioOffsetMs"), QStringLiteral("bpm"),
         QStringLiteral("meterRegions"), QStringLiteral("tempoRegions"),
         QStringLiteral("playbackSource"), QStringLiteral("midiMasterVolume"), QStringLiteral("loopEnabled"),

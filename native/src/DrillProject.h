@@ -3,6 +3,7 @@
 #include "DrillTypes.h"
 #include "TransitionPath.h"
 #include "MusicDocument.h"
+#include "TimelinePlanner.h"
 
 #include <QAbstractListModel>
 #include <QJsonObject>
@@ -41,6 +42,11 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(int currentSetIndex READ currentSetIndex WRITE setCurrentSetIndex NOTIFY currentSetChanged)
     Q_PROPERTY(int selectedSetStartIndex READ selectedSetStartIndex NOTIFY setRangeChanged)
     Q_PROPERTY(int selectedSetEndIndex READ selectedSetEndIndex NOTIFY setRangeChanged)
+    Q_PROPERTY(QVariantList selectedSetIndices READ selectedSetIndices NOTIFY timelineSelectionChanged)
+    Q_PROPERTY(QString timelineSelectionKind READ timelineSelectionKind NOTIFY timelineSelectionChanged)
+    Q_PROPERTY(int selectedTransitionIndex READ selectedTransitionIndex NOTIFY timelineSelectionChanged)
+    Q_PROPERTY(qint64 timelineRangeStartTick READ timelineRangeStartTick NOTIFY timelineSelectionChanged)
+    Q_PROPERTY(qint64 timelineRangeEndTick READ timelineRangeEndTick NOTIFY timelineSelectionChanged)
     Q_PROPERTY(int setCount READ setCount NOTIFY setsChanged)
     Q_PROPERTY(int currentVariantCount READ currentVariantCount NOTIFY setsChanged)
     Q_PROPERTY(int currentArchivedVariantCount READ currentArchivedVariantCount NOTIFY setsChanged)
@@ -104,6 +110,12 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QString musicDiagnostics READ musicDiagnostics NOTIFY musicChanged)
     Q_PROPERTY(int musicSelectionStart READ musicSelectionStart NOTIFY musicChanged)
     Q_PROPERTY(int musicSelectionEnd READ musicSelectionEnd NOTIFY musicChanged)
+    Q_PROPERTY(int timelineMarkerCount READ timelineMarkerCount NOTIFY timelineMarkersChanged)
+    Q_PROPERTY(QVariantList timelineMarkers READ timelineMarkers NOTIFY timelineMarkersChanged)
+    Q_PROPERTY(bool setPlanPreviewActive READ setPlanPreviewActive NOTIFY setPlanChanged)
+    Q_PROPERTY(int setPlanCandidateCount READ setPlanCandidateCount NOTIFY setPlanChanged)
+    Q_PROPERTY(int setPlanAcceptedNewSetCount READ setPlanAcceptedNewSetCount NOTIFY setPlanChanged)
+    Q_PROPERTY(QVariantList setPlanCandidates READ setPlanCandidates NOTIFY setPlanChanged)
     Q_PROPERTY(QString playbackSource READ playbackSource WRITE setPlaybackSource NOTIFY transportSettingsChanged)
     Q_PROPERTY(double midiMasterVolume READ midiMasterVolume WRITE setMidiMasterVolume NOTIFY transportSettingsChanged)
     Q_PROPERTY(bool loopEnabled READ loopEnabled WRITE setLoopEnabled NOTIFY transportSettingsChanged)
@@ -214,6 +226,11 @@ public:
     void setCurrentSetIndex(int value);
     int selectedSetStartIndex() const { return m_selectedSetStart; }
     int selectedSetEndIndex() const { return m_selectedSetEnd; }
+    QVariantList selectedSetIndices() const;
+    QString timelineSelectionKind() const { return m_timelineSelectionKind; }
+    int selectedTransitionIndex() const { return m_selectedTransition; }
+    qint64 timelineRangeStartTick() const { return m_timelineRangeStart; }
+    qint64 timelineRangeEndTick() const { return m_timelineRangeEnd; }
     int setCount() const { return m_sets.size(); }
     int currentVariantCount() const;
     int currentArchivedVariantCount() const;
@@ -290,6 +307,12 @@ public:
     QString musicDiagnostics() const { return m_music.diagnostics.join(QStringLiteral(" · ")); }
     int musicSelectionStart() const { return m_musicSelectionStart; }
     int musicSelectionEnd() const { return m_musicSelectionEnd; }
+    int timelineMarkerCount() const { return m_music.markers.size() + m_timelineMarkers.size(); }
+    QVariantList timelineMarkers() const;
+    bool setPlanPreviewActive() const { return m_setPlanPreviewActive; }
+    int setPlanCandidateCount() const { return m_setPlanCandidates.size(); }
+    int setPlanAcceptedNewSetCount() const;
+    QVariantList setPlanCandidates() const;
     QString playbackSource() const { return m_playbackSource; }
     void setPlaybackSource(const QString &value);
     double midiMasterVolume() const { return m_midiMasterVolume; }
@@ -347,6 +370,11 @@ public:
     Q_INVOKABLE void setMusicTrackSolo(int index, bool solo);
     Q_INVOKABLE void setMusicTrackVolume(int index, double volume);
     Q_INVOKABLE void selectSetRange(int index, bool extend = false);
+    Q_INVOKABLE void selectTimelineSet(int index, int mode = 0);
+    Q_INVOKABLE bool isSetSelected(int index) const;
+    Q_INVOKABLE void selectTimelineTransition(int destinationSet);
+    Q_INVOKABLE void selectTimelineRange(qint64 startTick, qint64 endTick);
+    Q_INVOKABLE void clearTimelineSelection();
     Q_INVOKABLE void setMusicSelection(int startMeasure, int endMeasure);
     Q_INVOKABLE QString addMusicSection(const QString &name, const QString &type,
                                         const QString &color, int startMeasure, int endMeasure);
@@ -376,12 +404,45 @@ public:
     Q_INVOKABLE void removeTempoRegion(int index);
     Q_INVOKABLE void recalculateCounts();
     Q_INVOKABLE void setCurrentSetCounts(int counts);
+    Q_INVOKABLE bool setTransitionCounts(int destinationSet, int counts);
+    Q_INVOKABLE bool insertCountsBeforeSet(int setIndex, int counts);
+    Q_INVOKABLE bool insertCountsAfterSet(int setIndex, int counts);
+    Q_INVOKABLE bool deleteCountsFromTransition(int destinationSet, int counts);
+    Q_INVOKABLE QVariantMap transitionInfo(int destinationSet) const;
+    Q_INVOKABLE QVariantMap previewTransitionResize(int destinationSet, qint64 targetTick,
+                                                    bool snapping = true) const;
+    Q_INVOKABLE QVariantMap snapTimelinePosition(qint64 targetTick,
+                                                 bool includeLandmarks = true) const;
+    Q_INVOKABLE int absoluteCountAtTick(qint64 tick) const;
+    Q_INVOKABLE qint64 tickAtAbsoluteCount(int count) const;
     Q_INVOKABLE void setOpeningBehavior(const QString &behavior, int counts);
     Q_INVOKABLE double transitionDurationMs(int destinationSet) const;
     Q_INVOKABLE double showDurationMs() const;
     Q_INVOKABLE bool setShowTimeMs(double milliseconds);
     Q_INVOKABLE bool setShowAudioTimeMs(double audioMilliseconds);
     Q_INVOKABLE QString effectiveTempoText(int destinationSet) const;
+
+    Q_INVOKABLE QVariantMap timelineMarkerInfo(int index) const;
+    Q_INVOKABLE QString addTimelineMarker(qint64 tick, const QString &name,
+                                          const QString &type = QStringLiteral("user"),
+                                          const QString &color = QStringLiteral("#f59e0b"),
+                                          const QString &notes = {});
+    Q_INVOKABLE bool updateTimelineMarker(const QString &id, qint64 tick, const QString &name,
+                                          const QString &type, const QString &color,
+                                          const QString &notes = {});
+    Q_INVOKABLE bool removeTimelineMarker(const QString &id);
+    Q_INVOKABLE bool analyzeMusicForSetPlan(const QString &density = QStringLiteral("balanced"),
+                                            const QString &priority = QStringLiteral("balanced"),
+                                            const QVariantList &preferredCounts = {},
+                                            int maximumSets = 112);
+    Q_INVOKABLE QVariantMap setPlanCandidateInfo(int index) const;
+    Q_INVOKABLE bool setSetPlanCandidateAccepted(int index, bool accepted);
+    Q_INVOKABLE bool moveSetPlanCandidate(int index, qint64 tick);
+    Q_INVOKABLE bool setSetPlanCandidateCounts(int index, int counts);
+    Q_INVOKABLE bool removeSetPlanCandidate(int index);
+    Q_INVOKABLE bool addSetPlanCandidate(qint64 tick);
+    Q_INVOKABLE void cancelSetPlanPreview();
+    Q_INVOKABLE bool applySetPlan();
 
     Q_INVOKABLE void addPerformer(const QString &label, const QString &instrument,
                                   const QString &section, double x = 80.0, double y = 28.0);
@@ -521,6 +582,9 @@ signals:
     void musicChanged();
     void waveformChanged();
     void setRangeChanged();
+    void timelineSelectionChanged();
+    void timelineMarkersChanged();
+    void setPlanChanged();
     void transportSettingsChanged();
     void formationPreviewChanged();
     void clinicChanged();
@@ -561,6 +625,8 @@ private:
     void applyMusicDocument(MarchCraft::MusicDocument document, const QString &undoText);
     void rebuildTimingFromMusic();
     int musicMeasureAtTick(qint64 tick) const;
+    void rebuildSetTicksFrom(int destinationSet, const QVector<int> &counts);
+    bool applyTransitionCounts(int destinationSet, int counts, const QString &undoText);
     void startWaveformDecode();
     static QColor sectionColor(const QString &section);
     QVector<int> assignedTargetIndices(const QVector<int> &performerRows,
@@ -606,6 +672,11 @@ private:
     int m_currentSet = 0;
     int m_selectedSetStart = 0;
     int m_selectedSetEnd = 0;
+    QSet<int> m_selectedTimelineSets{0};
+    QString m_timelineSelectionKind{QStringLiteral("set")};
+    int m_selectedTransition = -1;
+    qint64 m_timelineRangeStart = 0;
+    qint64 m_timelineRangeEnd = 0;
     bool m_dirty = false;
     QVector<MarchCraft::Performer> m_performers;
     struct Movement {
@@ -630,6 +701,10 @@ private:
     int m_musicSelectionStart = -1;
     int m_musicSelectionEnd = -1;
     QVector<MusicSection> m_musicSections;
+    QVector<MarchCraft::TimelineMarker> m_timelineMarkers;
+    QVector<MarchCraft::SetPlanCandidate> m_setPlanCandidates;
+    bool m_setPlanPreviewActive = false;
+    bool m_applyingSetPlan = false;
     QString m_playbackSource{QStringLiteral("midi")};
     double m_midiMasterVolume = 0.75;
     bool m_loopEnabled = false;

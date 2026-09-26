@@ -274,12 +274,17 @@ void TransportController::seekNormalized(double position) { seekMs(qBound(0.0, p
 
 void TransportController::navigateToSet(int index, bool extend)
 {
+    navigateToSetWithMode(index, extend ? 1 : 0);
+}
+
+void TransportController::navigateToSetWithMode(int index, int selectionMode)
+{
     if (m_project->m_sets.isEmpty()) return;
     index = qBound(0, index, m_project->m_sets.size() - 1);
     checkLoopForSeek(setPositionMs(index));
     m_navigating = true;
-    if (m_project->m_loopEnabled && !extend) m_project->setCurrentSetIndex(index);
-    else m_project->selectSetRange(index, extend);
+    if (m_project->m_loopEnabled && selectionMode == 0) m_project->setCurrentSetIndex(index);
+    else m_project->selectTimelineSet(index, selectionMode);
     m_navigating = false;
     seekMs(setPositionMs(index));
     if (!playing()) { m_project->setPlaybackActive(false); m_project->setPlayhead(1.0); }

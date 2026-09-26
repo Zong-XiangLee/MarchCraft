@@ -29,6 +29,9 @@ ApplicationWindow {
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
         else if (surface === "music") timelinePanel.showMusic()
     }
+    function showQaTimeline(mode) {
+        timelinePanel.showQaTimelineMode(mode)
+    }
 
     property int activePerformer: -1
     property bool exportWorkspace: false
@@ -122,6 +125,7 @@ ApplicationWindow {
         property string themeId: "graphite"
         property var horizontalSplitState
         property var verticalSplitState
+        property bool compactTimelineDefaultApplied: false
         property bool rosterCollapsed: false
         property bool inspectorCollapsed: false
         property bool timelineCollapsed: false
@@ -458,12 +462,20 @@ ApplicationWindow {
             SplitView.fillWidth: true
             SplitView.minimumWidth: 520
             orientation: Qt.Vertical
-            Component.onCompleted: if (workspaceSettings.verticalSplitState) restoreState(workspaceSettings.verticalSplitState)
+            Component.onCompleted: {
+                if (workspaceSettings.compactTimelineDefaultApplied && workspaceSettings.verticalSplitState)
+                    restoreState(workspaceSettings.verticalSplitState)
+                else {
+                    timelinePanel.SplitView.preferredHeight = 190
+                    workspaceSettings.verticalSplitState = undefined
+                    workspaceSettings.compactTimelineDefaultApplied = true
+                }
+            }
             onResizingChanged: if (!resizing) workspaceSettings.verticalSplitState = saveState()
             handle: Rectangle {
                 implicitHeight: 6; color: SplitHandle.pressed ? MarchCraftTheme.accent : SplitHandle.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
                 TapHandler { onDoubleTapped: {
-                    timelinePanel.SplitView.preferredHeight = 300
+                    timelinePanel.SplitView.preferredHeight = 190
                     workspaceSettings.timelineMaximized = false
                     workspaceSettings.verticalSplitState = undefined
                 } }
@@ -632,6 +644,28 @@ ApplicationWindow {
     Menu {
         id: setContextMenu; property int setIndex: -1
         AppMenuItem { text: "Edit set"; onTriggered: { transport.editSet(setContextMenu.setIndex); setDialog.editing=true; setDialog.open() } }
+        AppMenuItem {
+            text: "Edit incoming transition"
+            enabled: setContextMenu.setIndex > 0
+            onTriggered: drillProject.selectTimelineTransition(setContextMenu.setIndex)
+        }
+        MenuSeparator {}
+        AppMenuItem {
+            text: "Insert 8 counts before"
+            enabled: setContextMenu.setIndex > 0
+            onTriggered: drillProject.insertCountsBeforeSet(setContextMenu.setIndex, 8)
+        }
+        AppMenuItem {
+            text: "Delete 8 incoming counts"
+            enabled: setContextMenu.setIndex > 0 && drillProject.setInfo(setContextMenu.setIndex).counts > 8
+            onTriggered: drillProject.deleteCountsFromTransition(setContextMenu.setIndex, 8)
+        }
+        AppMenuItem {
+            text: "Insert 8 counts after"
+            enabled: setContextMenu.setIndex >= 0 && setContextMenu.setIndex + 1 < drillProject.setCount
+            onTriggered: drillProject.insertCountsAfterSet(setContextMenu.setIndex, 8)
+        }
+        MenuSeparator {}
         AppMenuItem { text: "Copy set"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add before"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add after"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }

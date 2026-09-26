@@ -41,6 +41,17 @@ struct MidiPlaybackEvent {
     quint8 data2 = 0;
 };
 
+// Compact note-on data retained with the project for deterministic local
+// impact analysis. Playback events may be reparsed from the source file, but
+// planning must continue to work when that source file is no longer present.
+struct MusicAttackEvent {
+    qint64 tick = 0;
+    int track = 0;
+    int channel = 0;
+    int velocity = 0;
+    bool percussion = false;
+};
+
 struct MusicMeasure {
     int index = 0;
     int displayNumber = 1;
@@ -86,6 +97,7 @@ struct MusicDocument {
     QVector<MusicKeyEvent> keys;
     QVector<MusicMarker> markers;
     QVector<MidiPlaybackEvent> playbackEvents;
+    QVector<MusicAttackEvent> attackEvents;
     QVector<AudioAnchor> audioAnchors;
     QStringList diagnostics;
 

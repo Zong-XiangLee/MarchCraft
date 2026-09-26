@@ -46,6 +46,7 @@ public:
     Q_INVOKABLE void stop();
     Q_INVOKABLE void seekTick(qint64 tick);
     Q_INVOKABLE void navigateToSet(int index, bool extend = false);
+    Q_INVOKABLE void navigateToSetWithMode(int index, int selectionMode);
     Q_INVOKABLE void editSet(int index);
     Q_INVOKABLE void seekMs(double milliseconds);
     Q_INVOKABLE void beginScrub();

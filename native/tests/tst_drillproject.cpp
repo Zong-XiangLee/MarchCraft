@@ -66,6 +66,73 @@ QByteArray midiFixture()
     result += QByteArrayLiteral("MTrk"); append32(result, notes.size()); result += notes;
     return result;
 }
+
+QByteArray impactMidiFixture()
+{
+    QByteArray conductor;
+    conductor.append(char(0)); conductor += QByteArray::fromHex("ff510307a120");
+    conductor.append(char(0)); conductor += QByteArray::fromHex("ff580404021808");
+    appendVlq(conductor, 15360); conductor += QByteArray::fromHex("ff2f00");
+    QByteArray result("MThd", 4); append32(result, 6); append16(result, 1); append16(result, 7); append16(result, 480);
+    result += QByteArrayLiteral("MTrk"); append32(result, conductor.size()); result += conductor;
+    for (int trackIndex = 1; trackIndex <= 6; ++trackIndex) {
+        QByteArray track;
+        track.append(char(0));
+        const QByteArray name = QStringLiteral("Part %1").arg(trackIndex).toUtf8();
+        track += QByteArray::fromHex("ff03"); appendVlq(track, name.size()); track += name;
+        appendVlq(track, 5760);
+        track.append(char(0x90 | (trackIndex == 6 ? 9 : (trackIndex - 1))));
+        track.append(char(48 + trackIndex)); track.append(char(92 + trackIndex));
+        appendVlq(track, 240); track.append(char(48 + trackIndex)); track.append(char(0));
+        appendVlq(track, 9360); track += QByteArray::fromHex("ff2f00");
+        result += QByteArrayLiteral("MTrk"); append32(result, track.size()); result += track;
+    }
+    return result;
+}
+
+QByteArray longShowMidiFixture(int counts = 1178)
+{
+    QByteArray track;
+    track.append(char(0)); track += QByteArray::fromHex("ff510307a120");
+    track.append(char(0)); track += QByteArray::fromHex("ff580404021808");
+    appendVlq(track, counts * 480); track += QByteArray::fromHex("ff2f00");
+    QByteArray result("MThd", 4); append32(result, 6); append16(result, 0); append16(result, 1); append16(result, 480);
+    result += QByteArrayLiteral("MTrk"); append32(result, track.size()); result += track;
+    return result;
+}
+
+QByteArray musicXmlAnalysisFixture()
+{
+    return QByteArrayLiteral(R"xml(<?xml version="1.0" encoding="UTF-8"?>
+<score-partwise version="4.0">
+  <part-list><score-part id="P1"><part-name>Winds</part-name></score-part></part-list>
+  <part id="P1">
+    <measure number="1">
+      <attributes><divisions>4</divisions><time><beats>5</beats><beat-type>8</beat-type></time></attributes>
+      <direction><sound tempo="100"/></direction>
+      <note><pitch><step>C</step><octave>4</octave></pitch><duration>2</duration></note>
+      <note><pitch><step>D</step><octave>4</octave></pitch><duration>2</duration></note>
+      <note><pitch><step>E</step><octave>4</octave></pitch><duration>2</duration></note>
+      <note><pitch><step>F</step><octave>4</octave></pitch><duration>2</duration></note>
+      <note><pitch><step>G</step><octave>4</octave></pitch><duration>2</duration></note>
+    </measure>
+    <measure number="2">
+      <note><pitch><step>C</step><octave>5</octave></pitch><duration>2</duration></note>
+      <note><chord/><pitch><step>E</step><octave>5</octave></pitch><duration>2</duration></note>
+      <note><chord/><pitch><step>G</step><octave>5</octave></pitch><duration>2</duration></note>
+      <note><chord/><pitch><step>B</step><octave>5</octave></pitch><duration>2</duration></note>
+      <note><rest/><duration>8</duration></note>
+    </measure>
+    <measure number="3">
+      <attributes><time><beats>7</beats><beat-type>8</beat-type></time></attributes>
+      <note><pitch><step>A</step><octave>4</octave></pitch><duration>14</duration></note>
+    </measure>
+    <measure number="4">
+      <note><pitch><step>B</step><octave>4</octave></pitch><duration>14</duration></note>
+    </measure>
+  </part>
+</score-partwise>)xml");
+}
 }
 
 class DrillProjectTest final : public QObject
@@ -73,6 +140,258 @@ class DrillProjectTest final : public QObject
     Q_OBJECT
 
 private slots:
+    void musicXmlMeterMappingAndAnalysis()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        const QString path = temporary.filePath(QStringLiteral("analysis.musicxml"));
+        QFile file(path);
+        QVERIFY(file.open(QIODevice::WriteOnly));
+        QCOMPARE(file.write(musicXmlAnalysisFixture()), musicXmlAnalysisFixture().size());
+        file.close();
+
+        DrillProject project;
+        project.newProject();
+        QVERIFY(project.importMusicXml(path));
+        QCOMPARE(project.musicSourceType(), QStringLiteral("musicxml"));
+        QCOMPARE(project.musicMeasureCount(), 4);
+        QCOMPARE(project.musicMeasureInfo(0).value(QStringLiteral("numerator")).toInt(), 5);
+        QCOMPARE(project.musicMeasureInfo(0).value(QStringLiteral("denominator")).toInt(), 8);
+        QCOMPARE(project.musicMeasureInfo(2).value(QStringLiteral("numerator")).toInt(), 7);
+        QCOMPARE(project.musicTrackInfo(0).value(QStringLiteral("noteCount")).toInt(), 11);
+        QVERIFY(project.analyzeMusicForSetPlan(QStringLiteral("detailed"),
+                                              QStringLiteral("impacts"), {8, 12, 16}));
+        bool impact = false;
+        bool phrase = false;
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
+            const auto candidate = project.setPlanCandidateInfo(index);
+            impact |= candidate.value(QStringLiteral("kind")).toString() == QStringLiteral("impact")
+                && candidate.value(QStringLiteral("reason")).toString().contains(QStringLiteral("4 attacks"));
+            phrase |= candidate.value(QStringLiteral("kind")).toString() == QStringLiteral("phrase")
+                || candidate.value(QStringLiteral("reason")).toString().contains(QStringLiteral("measure boundary"));
+        }
+        QVERIFY(impact);
+        QVERIFY(phrase);
+        project.cancelSetPlanPreview();
+    }
+
+    void timelineRippleAcrossTempoAndMeterRegions()
+    {
+        DrillProject project;
+        project.newProject();
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("counts")).toInt(), 0);
+        project.setMeterRegion(0, 8 * MarchCraft::TicksPerQuarter, 5, 4,
+                               MarchCraft::TicksPerQuarter, QStringLiteral("3+2"));
+        project.setMeterRegion(8 * MarchCraft::TicksPerQuarter, 100000, 7, 8,
+                               MarchCraft::TicksPerQuarter / 2, QStringLiteral("2+2+3"));
+        project.setTempoRegion(0, 8 * MarchCraft::TicksPerQuarter, 120.0, 120.0,
+                               QStringLiteral("Opening"));
+        project.setTempoRegion(8 * MarchCraft::TicksPerQuarter, 100000, 90.0, 90.0,
+                               QStringLiteral("Odd-meter section"));
+        project.addSet(QStringLiteral("Meter boundary"), 8);
+        project.addSet(QStringLiteral("Inside 7/8"), 8);
+
+        QVERIFY(project.setTransitionCounts(1, 12));
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(),
+                 qint64(10 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong(),
+                 qint64(14 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 20);
+        TransportController transport(&project);
+        QVERIFY(qAbs(transport.setPositionMs(2) - 8000.0) < 0.01);
+
+        QVERIFY(project.setTransitionCounts(1, 4));
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(),
+                 qint64(4 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong(),
+                 qint64(10 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 8);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 12);
+        project.undo();
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 12);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 20);
+        project.redo();
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 4);
+    }
+
+    void timelineRippleCountsMarkersAndPersistence()
+    {
+        QTemporaryDir temporary; QVERIFY(temporary.isValid());
+        DrillProject project; project.newProject();
+        project.addPerformer(QStringLiteral("P1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 40, 30);
+        project.selectAll();
+        project.addSet(QStringLiteral("Set 2"), 16); project.nudgeSelected(8, 0);
+        project.addSet(QStringLiteral("Set 3"), 8, true); project.nudgeSelected(4, 0);
+        const QString firstId = project.setInfo(1).value(QStringLiteral("id")).toString();
+        const QString thirdCoordinate = project.coordinateFor(0, 2);
+
+        QVERIFY(project.setTransitionCounts(1, 24));
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 24);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 8);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 32);
+        QCOMPARE(project.coordinateFor(0, 2), thirdCoordinate);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("id")).toString(), firstId);
+        project.undo();
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 16);
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 24);
+        project.redo();
+
+        QVERIFY(project.setTransitionCounts(1, 8));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 16);
+        QVERIFY(project.insertCountsBeforeSet(2, 4));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 12);
+        QVERIFY(project.deleteCountsFromTransition(2, 5));
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 7);
+        QVERIFY(project.insertCountsAfterSet(0, 3));
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 11);
+        QVERIFY(project.setInfo(2).value(QStringLiteral("subset")).toBool());
+
+        const auto resize = project.previewTransitionResize(1, 16 * MarchCraft::TicksPerQuarter, true);
+        QCOMPARE(resize.value(QStringLiteral("counts")).toInt(), 16);
+        QVERIFY(resize.contains(QStringLiteral("absoluteCount")));
+        QVERIFY(resize.contains(QStringLiteral("timeText")));
+
+        const QString markerId = project.addTimelineMarker(12 * MarchCraft::TicksPerQuarter,
+            QStringLiteral("Brass impact"), QStringLiteral("impact"), QStringLiteral("#ff6600"),
+            QStringLiteral("Manual synchronization landmark"));
+        QVERIFY(!markerId.isEmpty()); QCOMPARE(project.timelineMarkerCount(), 1);
+        QCOMPARE(project.tickAtAbsoluteCount(
+                     project.timelineMarkerInfo(0).value(QStringLiteral("absoluteCount")).toInt()),
+                 project.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong());
+        const auto markerSnap = project.snapTimelinePosition(
+            12 * MarchCraft::TicksPerQuarter + MarchCraft::TicksPerQuarter / 4, true);
+        QCOMPARE(markerSnap.value(QStringLiteral("tick")).toLongLong(),
+                 qint64(12 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(markerSnap.value(QStringLiteral("snapLabel")).toString(), QStringLiteral("Brass impact"));
+        project.undo(); QCOMPARE(project.timelineMarkerCount(), 0);
+        project.redo(); QCOMPARE(project.timelineMarkerCount(), 1);
+
+        project.selectTimelineSet(0, 0); project.selectTimelineSet(2, 2);
+        QCOMPARE(project.selectedSetIndices().size(), 2);
+        QVERIFY(project.isSetSelected(0)); QVERIFY(project.isSetSelected(2));
+        project.selectTimelineTransition(1);
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("transition"));
+        QCOMPARE(project.transitionInfo(1).value(QStringLiteral("sourceNumber")).toString(), QStringLiteral("1"));
+
+        const QString path = temporary.filePath(QStringLiteral("timeline-v12.marchcraft"));
+        QVERIFY(project.saveProject(path));
+        DrillProject restored; QVERIFY(restored.loadProject(path));
+        QCOMPARE(restored.timelineMarkerCount(), 1);
+        QCOMPARE(restored.timelineMarkerInfo(0).value(QStringLiteral("notes")).toString(),
+                 QStringLiteral("Manual synchronization landmark"));
+        QCOMPARE(restored.setInfo(1).value(QStringLiteral("counts")).toInt(), 11);
+        QCOMPARE(restored.setInfo(2).value(QStringLiteral("counts")).toInt(), 7);
+        QCOMPARE(restored.coordinateFor(0, 2), thirdCoordinate);
+    }
+
+    void deterministicSetPlanningPreviewAndApply()
+    {
+        QTemporaryDir temporary; QVERIFY(temporary.isValid());
+        const QString midiPath = temporary.filePath(QStringLiteral("impacts.mid"));
+        QFile midi(midiPath); QVERIFY(midi.open(QIODevice::WriteOnly));
+        midi.write(impactMidiFixture()); midi.close();
+
+        DrillProject project; project.newProject(); QVERIFY(project.importMidi(midiPath));
+        project.addSet(QStringLiteral("Early set"), 10);
+        project.addTimelineMarker(24 * MarchCraft::TicksPerQuarter,
+            QStringLiteral("Designer hit"), QStringLiteral("impact"), QStringLiteral("#f97316"));
+        project.addTimelineMarker(24 * MarchCraft::TicksPerQuarter + MarchCraft::TicksPerQuarter / 2,
+            QStringLiteral("Designer hit detail"), QStringLiteral("hit"), QStringLiteral("#f97316"));
+        const QString saved = temporary.filePath(QStringLiteral("planning.marchcraft"));
+        QVERIFY(project.saveProject(saved));
+        const int originalSets = project.setCount();
+        const qint64 originalTick = project.setInfo(1).value(QStringLiteral("startTick")).toLongLong();
+        const bool originalDirty = project.dirty();
+
+        QVERIFY(project.analyzeMusicForSetPlan(QStringLiteral("detailed"), QStringLiteral("impacts"),
+                                              {8, 12, 16, 24, 32}));
+        QVERIFY(project.setPlanPreviewActive());
+        QCOMPARE(project.setCount(), originalSets);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), originalTick);
+        QCOMPARE(project.dirty(), originalDirty);
+
+        bool impact = false, phrase = false, manual = false, alignment = false;
+        QSet<qint64> addTicks;
+        qint64 previousAddTick = -1;
+        int editableCandidate = -1;
+        int acceptedDetailed = 0;
+        int alignmentIndex = -1;
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
+            const auto candidate = project.setPlanCandidateInfo(index);
+            const QString kind = candidate.value(QStringLiteral("kind")).toString();
+            if (kind == QStringLiteral("regular"))
+                QVERIFY2(candidate.value(QStringLiteral("accepted")).toBool(),
+                         "Rejected regular-grid points must not flood the plan review");
+            impact |= kind == QStringLiteral("impact")
+                && candidate.value(QStringLiteral("reason")).toString().contains(QStringLiteral("active tracks"));
+            phrase |= kind == QStringLiteral("phrase");
+            manual |= kind == QStringLiteral("userMarker");
+            if (kind == QStringLiteral("alignment")) { alignment = true; alignmentIndex = index; }
+            if (candidate.value(QStringLiteral("accepted")).toBool()) ++acceptedDetailed;
+            if (candidate.value(QStringLiteral("action")).toString() == QStringLiteral("add")) {
+                const qint64 tick = candidate.value(QStringLiteral("tick")).toLongLong();
+                QVERIFY2(!addTicks.contains(tick), "Analyzer must deduplicate nearby/equal candidates");
+                if (previousAddTick >= 0)
+                    QVERIFY2(tick - previousAddTick > MarchCraft::TicksPerQuarter,
+                             "Analyzer must coalesce suggestions within one count");
+                addTicks.insert(tick);
+                previousAddTick = tick;
+                if (editableCandidate < 0) editableCandidate = index;
+            }
+        }
+        QVERIFY(impact); QVERIFY(phrase); QVERIFY(manual); QVERIFY(alignment);
+        QVERIFY(editableCandidate >= 0);
+        QVERIFY(project.setSetPlanCandidateCounts(editableCandidate, 20));
+        QCOMPARE(project.setPlanCandidateInfo(editableCandidate)
+                     .value(QStringLiteral("countsFromPrevious")).toInt(), 20);
+        QCOMPARE(project.setCount(), originalSets);
+        project.cancelSetPlanPreview(); QCOMPARE(project.setCount(), originalSets);
+
+        QVERIFY(project.analyzeMusicForSetPlan(QStringLiteral("sparse"), QStringLiteral("phrases"), {16, 24, 32}));
+        int acceptedSparse = 0;
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index)
+            acceptedSparse += project.setPlanCandidateInfo(index).value(QStringLiteral("accepted")).toBool() ? 1 : 0;
+        QVERIFY(acceptedSparse <= acceptedDetailed);
+
+        alignmentIndex = -1;
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
+            const auto candidate = project.setPlanCandidateInfo(index);
+            project.setSetPlanCandidateAccepted(index, false);
+            if (candidate.value(QStringLiteral("kind")).toString() == QStringLiteral("alignment"))
+                alignmentIndex = index;
+        }
+        QVERIFY(alignmentIndex >= 0);
+        QVERIFY(project.setSetPlanCandidateAccepted(alignmentIndex, true));
+        const qint64 suggestedTick = project.setPlanCandidateInfo(alignmentIndex).value(QStringLiteral("tick")).toLongLong();
+        QVERIFY(project.applySetPlan());
+        QCOMPARE(project.setCount(), originalSets);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), suggestedTick);
+        project.undo();
+        QCOMPARE(project.setCount(), originalSets);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), originalTick);
+        project.redo();
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong(), suggestedTick);
+    }
+
+    void setPlanHonorsFullShowPageBudget()
+    {
+        QTemporaryDir temporary; QVERIFY(temporary.isValid());
+        const QString midiPath = temporary.filePath(QStringLiteral("full-show.mid"));
+        QFile midi(midiPath); QVERIFY(midi.open(QIODevice::WriteOnly));
+        midi.write(longShowMidiFixture()); midi.close();
+
+        DrillProject project; project.newProject(); QVERIFY(project.importMidi(midiPath));
+        QVERIFY(project.analyzeMusicForSetPlan(QStringLiteral("detailed"),
+                                               QStringLiteral("phrases"),
+                                               {8, 12, 16, 24, 32}, 112));
+        QCOMPARE(project.setPlanAcceptedNewSetCount(), 111);
+        QVERIFY(project.setPlanCandidateCount() > project.setPlanAcceptedNewSetCount());
+        for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
+            const auto candidate = project.setPlanCandidateInfo(index);
+            QVERIFY(candidate.value(QStringLiteral("kind")).toString() != QStringLiteral("regular"));
+        }
+    }
+
     void movementSwitchPreservesLoopRangeAndEditingPage()
     {
         DrillProject project;
@@ -119,6 +438,8 @@ private slots:
         project.selectAll(); project.nudgeSelected(12, 0);
         QVERIFY(project.importMidi(midi.fileName()));
         project.setMusicSelection(1, 1);
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("measure"));
+        QVERIFY(project.timelineRangeEndTick() > project.timelineRangeStartTick());
         project.setAudioOffsetMs(125);
         QVERIFY(project.renameMovement(0, QStringLiteral("Opener")));
         TransportController transport(&project);
@@ -135,6 +456,8 @@ private slots:
         QVERIFY(!transport.playing()); QVERIFY(!project.dirty());
         QVERIFY(project.musicLoaded()); QCOMPARE(project.audioOffsetMs(), 125.0);
         QCOMPARE(project.musicSelectionStart(), 1); QCOMPARE(project.setCount(), 2);
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("measure"));
+        QVERIFY(project.selectedSetIndices().isEmpty());
         QCOMPARE(project.currentSetName(), QStringLiteral("Finale"));
         QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 32.0);
         project.activateMovement(1); QVERIFY(!project.dirty());
