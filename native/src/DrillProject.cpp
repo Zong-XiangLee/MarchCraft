@@ -157,9 +157,10 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     });
     connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelFormationPreview);
     connect(&m_undo, &QUndoStack::cleanChanged, this, [this](bool clean) {
-        if (m_dirty == !clean) return;
-        m_dirty = !clean;
-        if (clean) m_autosaveTimer.stop();
+        const bool dirty = m_requiresExplicitSave || !clean;
+        if (m_dirty == dirty) return;
+        m_dirty = dirty;
+        if (!dirty) m_autosaveTimer.stop();
         emit dirtyChanged();
     });
     newProject();
@@ -823,6 +824,8 @@ void DrillProject::setAudioOffsetMs(double value)
 
 void DrillProject::newProject()
 {
+    m_requiresExplicitSave = false;
+    m_ownedRecoveryPath.clear();
     resetMovements();
     if (m_audioDecoder) m_audioDecoder->stop();
     m_transitionPaths.clear();
@@ -2035,8 +2038,10 @@ void DrillProject::autosave()
 {
     const QString root = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
     QDir().mkpath(root);
+    const QString recoveryPath = root + QStringLiteral("/recovery.marchcraft");
     QString error;
-    if (writeSqliteProject(root + QStringLiteral("/recovery.marchcraft"), toJson(), &error)) {
+    if (writeSqliteProject(recoveryPath, toJson(), &error)) {
+        m_ownedRecoveryPath = QFileInfo(recoveryPath).absoluteFilePath();
         setStatus(QStringLiteral("Recovery copy updated"));
     }
 }

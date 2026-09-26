@@ -664,6 +664,7 @@ private:
     QString m_fieldPreset{QStringLiteral("hs")};
     QString m_audioSource;
     QString m_projectPath;
+    QString m_ownedRecoveryPath;
     QString m_statusMessage{QStringLiteral("Ready")};
     double m_bpm = 120.0;
     double m_playhead = 0.0;
@@ -680,6 +681,7 @@ private:
     qint64 m_timelineRangeStart = 0;
     qint64 m_timelineRangeEnd = 0;
     bool m_dirty = false;
+    bool m_requiresExplicitSave = false;
     QVector<MarchCraft::Performer> m_performers;
     struct Movement {
         QString id;

@@ -13,7 +13,6 @@
 #include <QScopedValueRollback>
 #include <QSizeF>
 #include <QSet>
-#include <QStandardPaths>
 #include <QTextStream>
 #include <QUuid>
 #include <QXmlStreamReader>
@@ -303,6 +302,8 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 
 void DrillProject::loadDemo()
 {
+    m_requiresExplicitSave = false;
+    m_ownedRecoveryPath.clear();
     resetMovements();
     m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     m_musicSections.clear();
@@ -509,16 +510,20 @@ bool DrillProject::saveProject(const QString &urlOrPath)
         setStatus(QStringLiteral("Could not save project database: %1").arg(databaseError));
         return false;
     }
+    const QString savedPath = QFileInfo(path).absoluteFilePath();
+    const QString ownedRecoveryPath = QFileInfo(m_ownedRecoveryPath).absoluteFilePath();
+    const bool removeOwnedRecovery = !m_ownedRecoveryPath.isEmpty()
+        && savedPath != ownedRecoveryPath;
     m_projectPath = path;
     m_autosaveTimer.stop();
+    m_requiresExplicitSave = false;
     m_undo.setClean();
     m_dirty = false;
     emit dirtyChanged();
     emit projectChanged();
-    const QString recoveryPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
-        + QStringLiteral("/recovery.marchcraft");
-    if (QFileInfo(path).absoluteFilePath() != QFileInfo(recoveryPath).absoluteFilePath())
-        QFile::remove(recoveryPath);
+    if (removeOwnedRecovery)
+        QFile::remove(m_ownedRecoveryPath);
+    m_ownedRecoveryPath.clear();
     setStatus(QStringLiteral("Saved %1").arg(QFileInfo(path).fileName()));
     return true;
 }
@@ -549,6 +554,8 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     }
     if (!restoreJson(root, false))
         return false;
+    m_requiresExplicitSave = false;
+    m_ownedRecoveryPath.clear();
     m_projectPath = legacyJson ? QString{} : path;
     m_autosaveTimer.stop();
     m_dirty = false;
@@ -564,6 +571,8 @@ bool DrillProject::loadRecoveryProject(const QString &urlOrPath)
 {
     if (!loadProject(urlOrPath))
         return false;
+    m_requiresExplicitSave = true;
+    m_ownedRecoveryPath = QFileInfo(localPath(urlOrPath)).absoluteFilePath();
     m_projectPath.clear();
     emit projectChanged();
     markDirty(QStringLiteral("Recovered autosaved work — choose Save As to keep it"));

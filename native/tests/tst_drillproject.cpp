@@ -10,6 +10,7 @@
 #include "TransitionPath.h"
 
 #include <QFile>
+#include <QDir>
 #include <QDataStream>
 #include <QLineF>
 #include <QQmlContext>
@@ -23,6 +24,7 @@
 #include <QSet>
 #include <QSettings>
 #include <QScopeGuard>
+#include <QStandardPaths>
 #include <QTemporaryDir>
 #include <QtTest>
 
@@ -912,6 +914,66 @@ private slots:
         QCOMPARE(recovered.performerCount(), 4);
         QVERIFY(recovered.projectPath().isEmpty());
         QVERIFY(recovered.dirty());
+    }
+
+    void recoveredProjectRemainsDirtyAtCleanUndoIndex()
+    {
+        QTemporaryDir directory;
+        const QString recoveryPath = directory.filePath(QStringLiteral("recovery.marchcraft"));
+        DrillProject source;
+        source.newProject();
+        source.setShowName(QStringLiteral("Recovered Show"));
+        QVERIFY(source.saveProject(recoveryPath));
+
+        DrillProject recovered;
+        QVERIFY(recovered.loadRecoveryProject(recoveryPath));
+        recovered.addPerformer(QStringLiteral("T1"), QStringLiteral("Trumpet"),
+                               QStringLiteral("Brass"));
+        QVERIFY(recovered.canUndo());
+        recovered.undo();
+
+        QVERIFY(recovered.projectPath().isEmpty());
+        QVERIFY(recovered.dirty());
+        QVERIFY(QFileInfo::exists(recoveryPath));
+
+        const QString savedPath = directory.filePath(QStringLiteral("recovered-show.marchcraft"));
+        QVERIFY(recovered.saveProject(savedPath));
+        QVERIFY(!recovered.dirty());
+        QVERIFY(!QFileInfo::exists(recoveryPath));
+    }
+
+    void savingAnotherProjectPreservesUnownedRecovery()
+    {
+        const QString recoveryRoot = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation);
+        QVERIFY(QDir().mkpath(recoveryRoot));
+        const QString recoveryPath = recoveryRoot + QStringLiteral("/recovery.marchcraft");
+        const QByteArray previousRecovery = [&] {
+            QFile existing(recoveryPath);
+            return existing.open(QIODevice::ReadOnly) ? existing.readAll() : QByteArray{};
+        }();
+        const bool recoveryExisted = QFileInfo::exists(recoveryPath);
+        const auto restoreRecovery = qScopeGuard([&] {
+            if (!recoveryExisted) {
+                QFile::remove(recoveryPath);
+                return;
+            }
+            QFile restored(recoveryPath);
+            if (restored.open(QIODevice::WriteOnly | QIODevice::Truncate))
+                restored.write(previousRecovery);
+        });
+        QFile recovery(recoveryPath);
+        QVERIFY(recovery.open(QIODevice::WriteOnly | QIODevice::Truncate));
+        QCOMPARE(recovery.write("unrelated recovery"), qint64(18));
+        recovery.close();
+
+        QTemporaryDir directory;
+        DrillProject project;
+        project.newProject();
+        QVERIFY(project.saveProject(directory.filePath(QStringLiteral("other-project.marchcraft"))));
+
+        QFile preserved(recoveryPath);
+        QVERIFY(preserved.open(QIODevice::ReadOnly));
+        QCOMPARE(preserved.readAll(), QByteArray("unrelated recovery"));
     }
 
     void regulationFieldGeometry()
