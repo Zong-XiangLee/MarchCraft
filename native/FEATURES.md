@@ -17,6 +17,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - A persistent header exposes **Roster**, **Music**, **Editor**, **Review**, and **Export** without enforcing a wizard. Workspace changes pause hidden playback and do not dirty the project or consume undo history.
 - Quick Start captures only the project, field/environment, and ensemble size before opening Editor. Guided Setup adds preview-first multi-section roster creation and an optional Music step.
 - Roster is a full searchable workspace with section filters, multi-selection tools, performer editing, and transactional section-batch creation. Music is an optional preparation workspace backed by the existing import, track, marker, section, synchronization, and set-plan tools.
+- Editor opens as a field-and-timeline workspace. Its compact performer picker is optional and collapsed by default; complete roster management remains in Roster.
 - Review reuses the production 2D/3D views, transport, and timeline while presenting Drill Clinic controls and issue cards. It does not fork formation, transition, or timing semantics.
 - Home exposes automatic recovery. Opening recovery creates a dirty, pathless working copy so the next save always asks for an explicit destination.
 

@@ -119,6 +119,8 @@ and formation workers do not instantiate multimedia resources.
 The welcome workspace, persistent project header, focused Roster/Music/Review workspaces,
 command bars, inspector, timeline, and settings dialogs
 are separate QML components with explicit dependencies supplied by the application shell.
+Roster management stays in its dedicated workspace; the Editor opens with its optional compact
+performer picker collapsed so the field and timeline remain the primary authoring surfaces.
 Performer dialog submissions retain name/notes and undo as one action.
 
 The 3D preview uses the authorized rigged LowPolyBoy source conditioned to the

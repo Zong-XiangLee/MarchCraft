@@ -50,6 +50,9 @@ ApplicationWindow {
     property string savePurpose: "normal"
     property string homeMode: initialHomeMode
     property bool qaShapePalette: false
+    readonly property bool editorSurfaceActive: workspaceState.workspaceActive
+                                                && (workspaceState.currentWorkspace === "editor"
+                                                    || workspaceState.currentWorkspace === "review")
 
     WorkspaceLogic {
         id: workspaceState
@@ -177,11 +180,12 @@ ApplicationWindow {
         property var horizontalSplitState
         property var verticalSplitState
         property bool compactTimelineDefaultApplied: false
-        property bool rosterCollapsed: false
+        property bool rosterCollapsed: true
         property bool inspectorCollapsed: false
         property bool timelineCollapsed: false
         property bool timelineMaximized: false
         property var quickShapes: ["line", "rectangle", "circle", "triangle"]
+        property int workspaceChromeRevision: 0
     }
 
     property bool previewTheme: false
@@ -198,6 +202,14 @@ ApplicationWindow {
     }
 
     Component.onCompleted: {
+        // The dedicated Roster workspace owns roster management. Existing
+        // profiles get the cleaner editor layout once, while the optional
+        // performer picker remains available from View or Ctrl+Shift+R.
+        if (workspaceSettings.workspaceChromeRevision < 1) {
+            workspaceSettings.rosterCollapsed = true
+            workspaceSettings.horizontalSplitState = undefined
+            workspaceSettings.workspaceChromeRevision = 1
+        }
         MarchCraftTheme.themeId = workspaceSettings.themeId
         workspaceController.refreshRecentProjects()
         if (!workspaceState.workspaceActive && !qaMode && workspaceController.startupSoundEnabled)
@@ -327,7 +339,7 @@ ApplicationWindow {
             Action { text: "Show field grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
             Action { text: "Show labels"; checkable: true; checked: fieldView.showLabels; onToggled: fieldView.showLabels = checked }
             MenuSeparator {}
-            Action { text: "Roster panel"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; onToggled: workspaceSettings.rosterCollapsed = !checked }
+            Action { text: "Performer picker"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; onToggled: workspaceSettings.rosterCollapsed = !checked }
             Action { text: "Inspector panel"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.inspectorCollapsed; onToggled: workspaceSettings.inspectorCollapsed = !checked }
             Action { text: "Timeline panel"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !workspaceSettings.timelineCollapsed; onToggled: workspaceSettings.timelineCollapsed = !checked }
         }
@@ -470,6 +482,7 @@ ApplicationWindow {
     RosterWorkspace {
         id: rosterWorkspace
         anchors.fill: parent
+        z: 2
         visible: workspaceState.workspaceActive && workspaceState.currentWorkspace === "roster"
         enabled: visible
         drillProjectContext: drillProject
@@ -482,6 +495,7 @@ ApplicationWindow {
     MusicWorkspace {
         id: musicWorkspace
         anchors.fill: parent
+        z: 2
         visible: workspaceState.workspaceActive && workspaceState.currentWorkspace === "music"
         enabled: visible
         drillProjectContext: drillProject
@@ -498,21 +512,13 @@ ApplicationWindow {
         project: drillProject
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         anchors.margins: 6; height: 32
-        visible: workspaceState.workspaceActive
-                 && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review")
+        visible: window.editorSurfaceActive
     }
 
     SplitView {
         id: horizontalSplit
-        enabled: workspaceState.workspaceActive
-                 && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review")
-        visible: opacity > 0.01
-        opacity: enabled ? 1 : 0
-        transform: Translate {
-            y: workspaceState.workspaceActive ? 0 : 8
-            Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
-        }
-        Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
+        enabled: window.editorSurfaceActive
+        visible: window.editorSurfaceActive
         anchors.fill: parent
         anchors.margins: 6
         anchors.topMargin: 44
@@ -705,12 +711,12 @@ ApplicationWindow {
         z: 20
         anchors.left: parent.left
         anchors.top: parent.top
-        anchors.topMargin: 12
-        width: 24
-        height: 42
+        anchors.topMargin: 52
+        width: 28
+        height: 46
         text: "›"
         font.pixelSize: 17
-        ToolTip.text: "Show rosterPanel.exposedRoster (Ctrl+Shift+R)"
+        ToolTip.text: "Show performer picker (Ctrl+Shift+R)"
         ToolTip.visible: hovered
         onClicked: workspaceSettings.rosterCollapsed = false
         background: Rectangle {
