@@ -30,10 +30,13 @@ qt_add_executable(marchcraft
     src/ProjectTransitions.cpp
     src/TransitionPath.cpp
     src/ProjectMusic.cpp
+    src/ProjectTimeline.cpp
     src/DrillProject.h
     src/DrillTypes.h
     src/MusicDocument.cpp
     src/MusicDocument.h
+    src/TimelinePlanner.cpp
+    src/TimelinePlanner.h
     src/MidiSynthEngine.cpp
     src/MidiSynthEngine.h
     src/TransportController.cpp
@@ -211,10 +214,13 @@ if(BUILD_TESTING)
         src/ProjectTransitions.cpp
         src/TransitionPath.cpp
         src/ProjectMusic.cpp
+        src/ProjectTimeline.cpp
         src/DrillProject.h
         src/DrillTypes.h
         src/MusicDocument.cpp
         src/MusicDocument.h
+        src/TimelinePlanner.cpp
+        src/TimelinePlanner.h
         src/MidiSynthEngine.cpp
         src/MidiSynthEngine.h
         src/TransportController.cpp

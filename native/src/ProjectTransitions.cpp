@@ -289,6 +289,16 @@ bool DrillProject::beginTransitionEdit()
     const Placement activePlacement = m_transitionEdit.previewPlacements.value(m_transitionEdit.activePerformerId);
     m_transitionEdit.type = activePlacement.pathType == QStringLiteral("delayed")
         ? QStringLiteral("stagger") : activePlacement.pathType;
+    if (m_transitionEdit.type == QStringLiteral("direct")) {
+        const bool hasExplicitTiming = std::any_of(
+            m_transitionEdit.originalPlacements.cbegin(), m_transitionEdit.originalPlacements.cend(),
+            [](const Placement &placement) {
+                return (placement.pathType == QStringLiteral("direct")
+                        || placement.pathType == QStringLiteral("delayed"))
+                    && (placement.pathStartCount >= 0.0 || placement.pathDurationCounts >= 0.0);
+            });
+        if (hasExplicitTiming) m_transitionEdit.type = QStringLiteral("stagger");
+    }
     if (m_transitionEdit.type == QStringLiteral("pivot")) m_transitionEdit.type = QStringLiteral("gate");
     m_transitionEdit.options = {{QStringLiteral("order"), QStringLiteral("selection")},
         {QStringLiteral("reversed"), false}, {QStringLiteral("leaderRow"), transitionEditActiveRow()},
@@ -546,8 +556,10 @@ bool DrillProject::selectTransitionEditPerformer(int row, bool additive)
     m_transitionEdit.activePerformerId = id;
     if (!m_transitionEdit.originalPlacements.contains(id))
         m_transitionEdit.activePerformerId = m_transitionEdit.performerIds.first();
-    const Placement active = m_transitionEdit.previewPlacements.value(m_transitionEdit.activePerformerId);
-    m_transitionEdit.type = active.pathType == QStringLiteral("delayed") ? QStringLiteral("stagger") : active.pathType;
+    // Membership changes are edits to the current operation, not requests to
+    // adopt the newly active performer's previously persisted path type.
+    // Rebuild so group routes, pivots, and stagger timing use the new set.
+    rebuildTransitionEditPreview();
     emit selectionChanged(); emit transitionEditChanged();
     return true;
 }
@@ -770,8 +782,10 @@ void DrillProject::mirrorActiveTransitionPath(bool horizontal)
         point = clampPosition(origin + tangent * along + normal * offset);
     }
     const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
-    if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow)
+    if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
         m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(found->pathPoints));
+        rebuildTransitionEditPreview();
+    }
     emit transitionEditChanged();
 }
 

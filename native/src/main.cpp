@@ -75,6 +75,11 @@ int main(int argc, char *argv[])
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
         QStringLiteral("--qa-transition-authoring"),
+        QStringLiteral("--qa-timeline"), QStringLiteral("--qa-timeline-zoom"),
+        QStringLiteral("--qa-timeline-fit"), QStringLiteral("--qa-timeline-selection"),
+        QStringLiteral("--qa-selected-transition"),
+        QStringLiteral("--qa-transition-resize"), QStringLiteral("--qa-set-plan"),
+        QStringLiteral("--qa-music-impacts"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"), QStringLiteral("--qa-export"),
         QStringLiteral("--field-style"), QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"),
@@ -131,6 +136,22 @@ int main(int argc, char *argv[])
         project.createMovement(QStringLiteral("Ballad"));
         project.createMovement(QStringLiteral("Finale"));
         project.activateMovement(0);
+    }
+    const bool qaSetPlan = arguments.contains(QStringLiteral("--qa-set-plan"));
+    const bool qaMusicImpacts = arguments.contains(QStringLiteral("--qa-music-impacts"));
+    if ((qaSetPlan || qaMusicImpacts) && project.setCount() > 2) {
+        const qint64 first = project.setInfo(0).value(QStringLiteral("startTick")).toLongLong();
+        const qint64 second = project.setInfo(1).value(QStringLiteral("startTick")).toLongLong();
+        const qint64 third = project.setInfo(2).value(QStringLiteral("startTick")).toLongLong();
+        project.addTimelineMarker(first + (second - first) / 2,
+                                  QStringLiteral("Ensemble impact"), QStringLiteral("impact"),
+                                  QStringLiteral("#f97316"), QStringLiteral("QA musical landmark"));
+        project.addTimelineMarker(second + (third - second) / 2,
+                                  QStringLiteral("Phrase arrival"), QStringLiteral("phrase"),
+                                  QStringLiteral("#8b5cf6"), QStringLiteral("QA phrase landmark"));
+        if (qaSetPlan)
+            project.analyzeMusicForSetPlan(QStringLiteral("balanced"), QStringLiteral("markers"),
+                                           {8, 12, 16, 24, 32});
     }
     const int qaPdfFlag = arguments.indexOf(QStringLiteral("--qa-coordinate-pdf"));
     if (qaPdfFlag >= 0 && qaPdfFlag + 1 < arguments.size()) {
@@ -227,6 +248,21 @@ int main(int argc, char *argv[])
         engine.rootObjects().first()->setProperty("qa3DView", arguments.at(viewFlag + 1));
     if (arguments.contains(QStringLiteral("--qa-set-drag-preview")) && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaSetDragPreview", true);
+    QString timelineQaMode;
+    if (arguments.contains(QStringLiteral("--qa-timeline-zoom"))) timelineQaMode = QStringLiteral("zoom");
+    else if (arguments.contains(QStringLiteral("--qa-timeline-selection"))) timelineQaMode = QStringLiteral("selection");
+    else if (arguments.contains(QStringLiteral("--qa-selected-transition"))) timelineQaMode = QStringLiteral("transition");
+    else if (arguments.contains(QStringLiteral("--qa-transition-resize"))) timelineQaMode = QStringLiteral("resize");
+    else if (qaSetPlan) timelineQaMode = QStringLiteral("plan");
+    else if (arguments.contains(QStringLiteral("--qa-timeline-fit"))) timelineQaMode = QStringLiteral("fit");
+    else if (qaMusicImpacts) timelineQaMode = QStringLiteral("impacts");
+    else if (arguments.contains(QStringLiteral("--qa-timeline"))) timelineQaMode = QStringLiteral("normal");
+    if (!timelineQaMode.isEmpty() && !engine.rootObjects().isEmpty()) {
+        QObject *root = engine.rootObjects().first();
+        QTimer::singleShot(450, &application, [root, timelineQaMode] {
+            QMetaObject::invokeMethod(root, "showQaTimeline", Q_ARG(QVariant, timelineQaMode));
+        });
+    }
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
     for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music"), QStringLiteral("formation")}) {
