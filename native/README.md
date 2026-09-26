@@ -9,6 +9,21 @@ optional launch sound are designed for a focused professional editing workflow. 
 ships with dedicated MarchCraft window/executable branding and a warm three-note launch cue that
 avoids resembling a Windows notification.
 
+## Workspace flow
+
+The persistent project header provides direct access to **Roster**, **Music**, **Editor**,
+**Review**, and **Export**. This is a flexible workspace shell, not a wizard: Music and Review
+are optional, and Roster or Music can be revisited at any time without leaving the project.
+Home remains available from the MarchCraft wordmark; returning Home preserves the loaded show
+and **Resume** returns to the last useful project workspace. Saved projects also remember their
+last useful workspace between launches (Export reopens in Editor).
+
+**Quick Start** creates a named project with a field, environment, and performer count, then
+opens Editor. **Guided Setup** adds a preview-first section roster plan and an optional Music
+step before entering Editor. Workspace changes pause hidden playback but do not dirty the project
+or add undo history. Automatic recovery is offered on Home; recovered projects are unsaved working
+copies and therefore require an explicit **Save As** destination.
+
 Version 0.6 expands the offline Drill Clinic with path-sampled performer, instrument,
 and moving-prop clearance checks plus previewable fixes. The production timeline now
 treats formations as set markers and the moves between them as editable time regions.
@@ -61,10 +76,12 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for the welcome workspace, `--qa-new-project` for the inline setup screen, or `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Timeline states are `--qa-timeline`, `--qa-timeline-zoom`, `--qa-timeline-fit`, `--qa-timeline-selection`, `--qa-selected-transition`, `--qa-transition-resize`, `--qa-set-plan`, and `--qa-music-impacts`. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for Home, `--qa-new-project` for project setup, or `--qa-roster-workspace`, `--qa-music-workspace`, `--qa-review-workspace`, and `--qa-export-workspace` for the major destinations. Use `--qa-shapes` for the editor shape palette. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Timeline states are `--qa-timeline`, `--qa-timeline-zoom`, `--qa-timeline-fit`, `--qa-timeline-selection`, `--qa-selected-transition`, `--qa-transition-resize`, `--qa-set-plan`, and `--qa-music-impacts`. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
 
 ## Controls
 
+- Use the persistent project header or **Alt+1** through **Alt+5** to open Roster, Music, Editor, Review, or Export. **Ctrl+1** and **Ctrl+2** continue to switch the editor between 2D and 3D.
+- Press **Ctrl+L** to open Roster and focus its search field.
 - Double-click an empty field location to add a performer.
 - Click a grouped performer to select its group; Ctrl-click targets an individual member.
 - Click or right-click a grouped performer to select its full group. The context menu offers Group, Remove from group, and Ungroup only when their selection requirements are satisfied.
@@ -99,7 +116,8 @@ Path tables are invalidated by project edits and live geometry changes; playhead
 updates notify only position, facing, and animation roles. Background imports are revision-checked,
 and formation workers do not instantiate multimedia resources.
 
-The welcome workspace, command bars, roster, inspector, timeline, and settings dialogs
+The welcome workspace, persistent project header, focused Roster/Music/Review workspaces,
+command bars, inspector, timeline, and settings dialogs
 are separate QML components with explicit dependencies supplied by the application shell.
 Performer dialog submissions retain name/notes and undo as one action.
 
@@ -139,7 +157,7 @@ Project schema 12 stores movement-local timeline markers and timeline selection 
 
 ## Export workspace
 
-Use the persistent **Editor / Export** tabs or **File > Export drill charts, sheets, images or video**. Switching tabs keeps the editor mounted and preserves its selection, zoom and movement. The coordinate-sheet and CSV shortcuts open the same workspace with their output type selected.
+Open **Export** from the persistent project header or choose **File > Export drill charts, sheets, images or video**. Switching workspaces keeps the shared editor state mounted and preserves its selection, zoom, and movement. The coordinate-sheet and CSV shortcuts open the same workspace with their output type selected.
 
 1. Choose PDF, PNG pages, analytics CSV, native printing, 2D MP4, or 3D MP4. Select the entire show, active movement, or individual movements. Set numbers accept comma-separated entries and inclusive ranges (for example `1-8, 12, 14A`); blank includes every set. Choose active/all/individual variants, include or exclude subsets, and optionally filter performer labels or sections.
 2. Choose paper size, orientation, margins, marker/text sizes, grid/label/symbol/prop/instruction layers, color or monochrome, and full-field/fit/custom framing. Custom crops report excluded performers. Charts preserve director perspective and the eight-to-five coordinate system. Instructions use each variant's multiline caption and continue onto additional pages when needed.

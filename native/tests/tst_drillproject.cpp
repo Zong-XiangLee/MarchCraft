@@ -868,6 +868,52 @@ private slots:
         QVERIFY(project.averageDistance() > 0.0);
     }
 
+    void multiSectionRosterCreationIsOneUndoableCommand()
+    {
+        DrillProject project;
+        project.newProject();
+        const QVariantList sections{
+            QVariantMap{{QStringLiteral("section"), QStringLiteral("Trumpets")},
+                        {QStringLiteral("prefix"), QStringLiteral("T")},
+                        {QStringLiteral("count"), 3},
+                        {QStringLiteral("instrument"), QStringLiteral("Trumpet")}},
+            QVariantMap{{QStringLiteral("section"), QStringLiteral("Mellophones")},
+                        {QStringLiteral("prefix"), QStringLiteral("M")},
+                        {QStringLiteral("count"), 2},
+                        {QStringLiteral("instrument"), QStringLiteral("Mellophone")}}
+        };
+
+        QVERIFY(project.batchCreateRoster(sections));
+        QCOMPARE(project.performerCount(), 5);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("label")).toString(), QStringLiteral("T1"));
+        QCOMPARE(project.performerInfo(2).value(QStringLiteral("label")).toString(), QStringLiteral("T3"));
+        QCOMPARE(project.performerInfo(3).value(QStringLiteral("label")).toString(), QStringLiteral("M1"));
+        QCOMPARE(project.performerInfo(4).value(QStringLiteral("section")).toString(), QStringLiteral("Mellophones"));
+
+        project.undo();
+        QCOMPARE(project.performerCount(), 0);
+        project.redo();
+        QCOMPARE(project.performerCount(), 5);
+    }
+
+    void recoveryLoadRequiresAnExplicitSaveDestination()
+    {
+        QTemporaryDir directory;
+        const QString path = directory.filePath(QStringLiteral("recovery.marchcraft"));
+        DrillProject source;
+        source.newProject();
+        source.setShowName(QStringLiteral("Recovered Show"));
+        source.batchAddPerformers(QStringLiteral("R"), 4, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        QVERIFY(source.saveProject(path));
+
+        DrillProject recovered;
+        QVERIFY(recovered.loadRecoveryProject(path));
+        QCOMPARE(recovered.showName(), QStringLiteral("Recovered Show"));
+        QCOMPARE(recovered.performerCount(), 4);
+        QVERIFY(recovered.projectPath().isEmpty());
+        QVERIFY(recovered.dirty());
+    }
+
     void regulationFieldGeometry()
     {
         const auto highSchool = MarchCraft::fieldGeometry(QStringLiteral("hs"));

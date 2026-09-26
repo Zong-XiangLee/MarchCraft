@@ -54,6 +54,34 @@ Rectangle {
             }
         }
 
+        Rectangle {
+            visible: workspaceControllerContext.recoveryAvailable && windowContext.homeMode === "dashboard"
+            Layout.fillWidth: true
+            Layout.preferredHeight: visible ? 72 : 0
+            radius: MarchCraftTheme.radiusLarge
+            color: "#2a2419"
+            border.color: MarchCraftTheme.warning
+            RowLayout {
+                anchors.fill: parent
+                anchors.margins: 14
+                spacing: 12
+                Rectangle {
+                    width: 34; height: 34; radius: 17; color: MarchCraftTheme.warning
+                    Label { anchors.centerIn: parent; text: "↻"; color: MarchCraftTheme.canvas; font.bold: true; font.pixelSize: 18 }
+                }
+                ColumnLayout {
+                    Layout.fillWidth: true; spacing: 1
+                    Label { text: "Recover unsaved work"; color: MarchCraftTheme.textPrimary; font.bold: true }
+                    Label {
+                        text: workspaceControllerContext.recoveryDescription + " · Recovery opens as an unsaved project so you choose where to save it."
+                        color: MarchCraftTheme.textSecondary; font.pixelSize: 10; elide: Text.ElideRight; Layout.fillWidth: true
+                    }
+                }
+                AppButton { text: "Discard"; flat: true; onClicked: discardRecoveryDialog.open() }
+                AppButton { text: "Recover"; highlighted: true; onClicked: windowContext.recoverProject() }
+            }
+        }
+
         GridLayout {
             id: homeContent
             Layout.fillWidth: true
@@ -90,7 +118,7 @@ Rectangle {
                         visible: workspaceStateContext.hasCurrentProject
                         text: "Resume " + drillProjectContext.showName
                         Layout.fillWidth: true
-                        onClicked: workspaceStateContext.workspaceActive = true
+                        onClicked: windowContext.resumeProject()
                     }
                     Rectangle { Layout.fillWidth: true; height: 1; color: MarchCraftTheme.divider; Layout.topMargin: 4; Layout.bottomMargin: 4 }
                     Rectangle {
@@ -172,15 +200,52 @@ Rectangle {
         ProjectSetupPage {
             id: inlineProjectSetup
             Layout.fillWidth: true
-            Layout.preferredHeight: 420
+            Layout.preferredHeight: 510
             visible: windowContext.homeMode === "new"
             enabled: windowContext.homeMode === "new"
             opacity: windowContext.homeMode === "new" ? 1 : 0
             scale: windowContext.homeMode === "new" ? 1 : 0.985
             onCancelled: { windowContext.homeMode = "dashboard"; Qt.callLater(function() { newProjectHomeButton.forceActiveFocus() }) }
-            onCreateRequested: function(name, fieldPreset, lightingPreset) { windowContext.createProject(name, fieldPreset, lightingPreset) }
+            onQuickStartRequested: function(name, fieldPreset, lightingPreset, performerCount) {
+                windowContext.createQuickProject(name, fieldPreset, lightingPreset, performerCount)
+            }
+            onGuidedCreateRequested: function(name, fieldPreset, lightingPreset, rosterRows, nextWorkspace) {
+                windowContext.createGuidedProject(name, fieldPreset, lightingPreset, rosterRows, nextWorkspace)
+            }
             Behavior on opacity { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
             Behavior on scale { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
+        }
+    }
+
+    Dialog {
+        id: discardRecoveryDialog
+        parent: Overlay.overlay
+        anchors.centerIn: Overlay.overlay
+        width: 440
+        modal: true
+        title: "Discard recovered work?"
+        standardButtons: Dialog.NoButton
+        contentItem: ColumnLayout {
+            spacing: 14
+            Label {
+                text: "The automatic recovery copy will be permanently removed. Saved project files are not affected."
+                color: MarchCraftTheme.textSecondary
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                Item { Layout.fillWidth: true }
+                AppButton { text: "Cancel"; onClicked: discardRecoveryDialog.close() }
+                AppButton {
+                    text: "Discard recovery"
+                    highlighted: true
+                    onClicked: {
+                        if (workspaceControllerContext.discardRecovery())
+                            discardRecoveryDialog.close()
+                    }
+                }
+            }
         }
     }
 

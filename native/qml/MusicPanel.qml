@@ -19,6 +19,13 @@ Item {
     function openSetPlan() { setPlanOptions.open() }
     function openSetPlanReview() { setPlanReview.open() }
     function openMarkers() { markerLibrary.open() }
+    function openTracks() { trackDialog.open() }
+    function openSections() { groupsDialog.open() }
+    function openGroupSelection() { groupDialog.open() }
+    function openDiagnostics() { diagnosticsDialog.open() }
+    function openOffset() { offsetDialog.open() }
+    function openGeneration() { transport.editSet(drillProject.currentSetIndex); generationOptions.open() }
+    function openMapping() { transport.editSet(drillProject.currentSetIndex); mappingDialog.open() }
     function preferredCountValues() {
         const pieces = preferredCounts.text.split(/[, ]+/)
         const result = []

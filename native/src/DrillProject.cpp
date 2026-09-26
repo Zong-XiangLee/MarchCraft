@@ -942,6 +942,90 @@ void DrillProject::batchAddPerformers(const QString &prefix, int count,
     commitSnapshot(before, QStringLiteral("Batch add performers"));
 }
 
+bool DrillProject::batchCreateRoster(const QVariantList &sections)
+{
+    struct RosterSection {
+        QString name;
+        QString prefix;
+        QString instrument;
+        int count = 0;
+    };
+
+    QVector<RosterSection> requested;
+    int total = 0;
+    for (const QVariant &value : sections) {
+        const QVariantMap row = value.toMap();
+        RosterSection section;
+        section.name = row.value(QStringLiteral("section")).toString().simplified().left(60);
+        section.prefix = row.value(QStringLiteral("prefix")).toString().simplified().left(8).toUpper();
+        section.prefix.remove(QRegularExpression(QStringLiteral("\\s+")));
+        section.instrument = row.value(QStringLiteral("instrument")).toString().simplified().left(80);
+        section.count = qBound(0, row.value(QStringLiteral("count")).toInt(), 500);
+        if (section.count <= 0)
+            continue;
+        if (section.name.isEmpty()) section.name = QStringLiteral("Unassigned");
+        if (section.prefix.isEmpty()) section.prefix = QStringLiteral("P");
+        if (section.instrument.isEmpty()) section.instrument = section.name;
+        if (total + section.count > 2000) {
+            setStatus(QStringLiteral("A roster batch is limited to 2,000 performers"));
+            return false;
+        }
+        total += section.count;
+        requested.push_back(std::move(section));
+    }
+    if (requested.isEmpty() || total <= 0) {
+        setStatus(QStringLiteral("Add at least one roster section"));
+        return false;
+    }
+
+    const auto before = toJson();
+    const int first = m_performers.size();
+    QSet<QString> labels;
+    for (const auto &person : std::as_const(m_performers))
+        labels.insert(person.label.toUpper());
+
+    beginInsertRows({}, first, first + total - 1);
+    int created = 0;
+    for (const RosterSection &section : std::as_const(requested)) {
+        int sequence = 1;
+        for (int i = 0; i < section.count; ++i) {
+            QString label;
+            do {
+                label = QStringLiteral("%1%2").arg(section.prefix).arg(sequence++);
+            } while (labels.contains(label.toUpper()));
+            labels.insert(label.toUpper());
+
+            Performer person;
+            person.label = label;
+            person.name = label;
+            person.instrument = section.instrument;
+            person.section = section.name;
+            person.symbol = person.instrument.left(1).toUpper();
+            person.appearance.instrumentAssetId = instrumentAssetIdFor(person.instrument);
+            person.color = sectionColor(person.section);
+            m_performers.push_back(person);
+
+            const int rosterIndex = first + created++;
+            const QPointF position = clampPosition({20.0 + (rosterIndex % 16) * 8.0,
+                                                    16.0 + (rosterIndex / 16) * 5.0});
+            auto addToSets = [&person, &position](QVector<DrillSet> &sets) {
+                for (auto &set : sets) {
+                    for (auto &variant : set.variants)
+                        variant.placements.insert(person.id, Placement{position, 0.0});
+                    for (auto &variant : set.archivedVariants)
+                        variant.placements.insert(person.id, Placement{position, 0.0});
+                }
+            };
+            addToSets(m_sets);
+            addToSets(m_archivedSets);
+        }
+    }
+    endInsertRows();
+    emit performerCountChanged();
+    commitSnapshot(before, QStringLiteral("Create roster"));
+    return true;
+}
+
 void DrillProject::removeSelectedPerformers()
 {
     if (selectedCount() == 0)

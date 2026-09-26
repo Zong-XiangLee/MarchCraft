@@ -28,13 +28,20 @@ ApplicationWindow {
         else if (surface === "performer") { performerDialog.editing = false; performerDialog.open() }
         else if (surface === "formation") { drillProject.selectAll(); formationDialog.open() }
         else if (surface === "music") timelinePanel.showMusic()
+        else if (surface === "roster-workspace") requestWorkspace("roster")
+        else if (surface === "music-workspace") requestWorkspace("music")
+        else if (surface === "review-workspace") {
+            if (drillProject.setCount > 1) transport.editSet(1)
+            drillProject.scanShow()
+            requestWorkspace("review")
+        }
+        else if (surface === "export-workspace") requestWorkspace("export")
     }
     function showQaTimeline(mode) {
         timelinePanel.showQaTimelineMode(mode)
     }
 
     property int activePerformer: -1
-    property bool exportWorkspace: false
     property bool threeD: false
     property bool playing: transport.playing
     property string qa3DView: ""
@@ -57,20 +64,64 @@ ApplicationWindow {
     }
 
     function returnHome() {
+        transport.pause()
         homeMode = "dashboard"
         workspaceState.workspaceActive = false
+        workspaceController.refreshRecovery()
         Qt.callLater(function() { (homePage.exposedResumeButton.visible ? homePage.exposedResumeButton : homePage.exposedNewProjectHomeButton).forceActiveFocus() })
     }
 
-    function createProject(name, fieldPreset, lightingPreset) {
+    function activateWorkspace(workspace) {
+        if (!workspaceState.isWorkspace(workspace)) return
+        if (workspaceState.currentWorkspace !== workspace) transport.pause()
+        workspaceState.switchWorkspace(workspace)
+        if (workspace !== "export" && drillProject.projectPath)
+            workspaceController.rememberWorkspace(drillProject.projectPath, workspace)
+    }
+
+    function requestWorkspace(workspace) {
+        if (!workspaceState.hasCurrentProject) return
+        if (!workspaceState.workspaceActive)
+            workspaceState.enteredProject(workspace)
+        if (workspace === "export") {
+            exportPanel.enter()
+            return
+        }
+        activateWorkspace(workspace)
+    }
+
+    function resumeProject() {
+        workspaceState.enteredProject(workspaceState.lastUsefulWorkspace)
+    }
+
+    function createConfiguredProject(name, fieldPreset, lightingPreset, rosterRows, destination) {
         drillProject.newProject()
         drillProject.showName = name
         drillProject.fieldPreset = fieldPreset
         drillProject.lightingPreset = lightingPreset
+        if (rosterRows && rosterRows.length > 0) drillProject.batchCreateRoster(rosterRows)
         homeMode = "dashboard"
         exportPanel.resetForProject()
-        window.exportWorkspace = false
-        workspaceState.enteredProject()
+        workspaceState.enteredProject(destination || "editor")
+    }
+
+    function createQuickProject(name, fieldPreset, lightingPreset, performerCount) {
+        var rows = performerCount > 0
+            ? [{section: "Ensemble", prefix: "P", count: performerCount, instrument: "Unassigned"}]
+            : []
+        createConfiguredProject(name, fieldPreset, lightingPreset, rows, "editor")
+    }
+
+    function createGuidedProject(name, fieldPreset, lightingPreset, rosterRows, destination) {
+        createConfiguredProject(name, fieldPreset, lightingPreset, rosterRows, destination)
+    }
+
+    function recoverProject() {
+        if (!workspaceController.recoveryAvailable || !drillProject.loadRecoveryProject(workspaceController.recoveryPath)) return
+        exportPanel.resetForProject()
+        workspaceController.refreshRecovery()
+        homeMode = "dashboard"
+        workspaceState.enteredProject("editor")
     }
 
     function requestOpenProject() {
@@ -85,8 +136,7 @@ ApplicationWindow {
         if (!drillProject.loadProject(path)) return
         workspaceController.recordRecentProject(drillProject.projectPath, drillProject.showName)
         exportPanel.resetForProject()
-        window.exportWorkspace = false
-        workspaceState.enteredProject()
+        workspaceState.enteredProject(workspaceController.workspaceForProject(drillProject.projectPath))
     }
 
     function executeWorkspaceAction(action, path) {
@@ -100,8 +150,7 @@ ApplicationWindow {
         } else if (action === "sample") {
             drillProject.loadDemo()
             exportPanel.resetForProject()
-            window.exportWorkspace = false
-            workspaceState.enteredProject()
+            workspaceState.enteredProject("editor")
         } else if (action === "exit") {
             forceClosing = true
             Qt.quit()
@@ -116,6 +165,8 @@ ApplicationWindow {
         }
         if (drillProject.saveProject()) {
             workspaceController.recordRecentProject(drillProject.projectPath, drillProject.showName)
+            workspaceController.rememberWorkspace(drillProject.projectPath, workspaceState.lastUsefulWorkspace)
+            workspaceController.refreshRecovery()
             if (savePurpose === "pending") workspaceState.confirmAfterSave()
         }
     }
@@ -222,15 +273,23 @@ ApplicationWindow {
             Action { text: "Save As…"; shortcut: StandardKey.SaveAs; enabled: workspaceState.hasCurrentProject; onTriggered: { window.savePurpose = "normal"; saveDialog.open() } }
             MenuSeparator {}
             Action { text: "Import coordinate JSON…"; onTriggered: importCoordinateDialog.open() }
-            Action { text: "Import MIDI…"; onTriggered: midiDialog.open() }
-            Action { text: "Import MusicXML…"; onTriggered: musicXmlDialog.open() }
-            Action { text: "Attach audio…"; onTriggered: audioDialog.open() }
+            Action { text: "Import MIDI…"; onTriggered: { window.requestWorkspace("music"); midiDialog.open() } }
+            Action { text: "Import MusicXML…"; onTriggered: { window.requestWorkspace("music"); musicXmlDialog.open() } }
+            Action { text: "Attach audio…"; onTriggered: { window.requestWorkspace("music"); audioDialog.open() } }
             MenuSeparator {}
             Action { text: "Export analytics CSV…"; onTriggered: exportPanel.openFor("charts", "csv") }
             Action { text: "Export drill charts, sheets, images or video…"; onTriggered: exportPanel.openFor("charts", "pdf") }
             Action { text: "Export coordinate sheets PDF…"; onTriggered: exportPanel.openFor("coordinates", "pdf") }
             MenuSeparator {}
             Action { text: "Exit"; shortcut: StandardKey.Quit; onTriggered: workspaceState.request("exit", "", drillProject.dirty) }
+        }
+        Menu {
+            title: "&Workspace"
+            Action { text: "Roster"; shortcut: "Alt+1"; checkable: true; checked: workspaceState.currentWorkspace === "roster"; onTriggered: window.requestWorkspace("roster") }
+            Action { text: "Music"; shortcut: "Alt+2"; checkable: true; checked: workspaceState.currentWorkspace === "music"; onTriggered: window.requestWorkspace("music") }
+            Action { text: "Editor"; shortcut: "Alt+3"; checkable: true; checked: workspaceState.currentWorkspace === "editor"; onTriggered: window.requestWorkspace("editor") }
+            Action { text: "Review"; shortcut: "Alt+4"; checkable: true; checked: workspaceState.currentWorkspace === "review"; onTriggered: window.requestWorkspace("review") }
+            Action { text: "Export"; shortcut: "Alt+5"; checkable: true; checked: workspaceState.currentWorkspace === "export"; onTriggered: window.requestWorkspace("export") }
         }
         Menu {
             title: "&Edit"
@@ -246,6 +305,7 @@ ApplicationWindow {
         }
         Menu {
             title: "&Formation"
+            enabled: workspaceState.currentWorkspace === "editor"
             Action { text: "Formation builder…"; enabled: drillProject.selectedCount > 0; onTriggered: formationDialog.open() }
             Action { text: "Snap to 1-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(1.0) }
             Action { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
@@ -259,17 +319,17 @@ ApplicationWindow {
         }
         Menu {
             title: "&View"
-            Action { text: "2D drill editor"; checkable: true; checked: !window.threeD; onTriggered: window.threeD = false }
-            Action { text: "3D preview"; checkable: true; checked: window.threeD; onTriggered: window.threeD = true }
+            Action { text: "2D drill editor"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !window.threeD; onTriggered: window.threeD = false }
+            Action { text: "3D preview"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: window.threeD; onTriggered: window.threeD = true }
             MenuSeparator {}
             Action { text: "Show paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
             Action { text: "Show shape guides"; checkable: true; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides = checked }
             Action { text: "Show field grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
             Action { text: "Show labels"; checkable: true; checked: fieldView.showLabels; onToggled: fieldView.showLabels = checked }
             MenuSeparator {}
-            Action { text: "Roster panel"; checkable: true; checked: !workspaceSettings.rosterCollapsed; onToggled: workspaceSettings.rosterCollapsed = !checked }
-            Action { text: "Inspector panel"; checkable: true; checked: !workspaceSettings.inspectorCollapsed; onToggled: workspaceSettings.inspectorCollapsed = !checked }
-            Action { text: "Timeline panel"; checkable: true; checked: !workspaceSettings.timelineCollapsed; onToggled: workspaceSettings.timelineCollapsed = !checked }
+            Action { text: "Roster panel"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; onToggled: workspaceSettings.rosterCollapsed = !checked }
+            Action { text: "Inspector panel"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.inspectorCollapsed; onToggled: workspaceSettings.inspectorCollapsed = !checked }
+            Action { text: "Timeline panel"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !workspaceSettings.timelineCollapsed; onToggled: workspaceSettings.timelineCollapsed = !checked }
         }
         Menu {
             title: "&Help"
@@ -281,27 +341,20 @@ ApplicationWindow {
     header: Column {
         visible: workspaceState.workspaceActive
         width: parent.width
-        height: visible ? workspaceTabs.height + (window.exportWorkspace ? 0 : commandBars.height) : 0
-        ToolBar {
-            id:workspaceTabs; width:parent.width; height:42
-            RowLayout {
-                anchors.fill:parent; anchors.leftMargin:12; anchors.rightMargin:12
-                Label { text:"MARCHCRAFT"; font.bold:true; font.letterSpacing:1; Layout.rightMargin:24 }
-                TabBar {
-                    currentIndex:window.exportWorkspace ? 1 : 0
-                    TabButton { background:Rectangle { color:parent.checked ? MarchCraftTheme.surfaceRaised : MarchCraftTheme.panelHeader; Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:2; color:MarchCraftTheme.accent; visible:parent.parent.checked } }
-                        text:"Editor"; implicitHeight:36; width:110; onClicked:window.exportWorkspace=false }
-                    TabButton { background:Rectangle { color:parent.checked ? MarchCraftTheme.surfaceRaised : MarchCraftTheme.panelHeader; Rectangle { anchors.bottom:parent.bottom; width:parent.width; height:2; color:MarchCraftTheme.accent; visible:parent.parent.checked } }
-                        text:"Export"; implicitHeight:36; width:110; onClicked:exportPanel.enter() }
-                }
-                Item { Layout.fillWidth:true }
-                Label { visible:exportController.busy; text:"Exporting · "+Math.round(exportController.progress*100)+"%" }
-                ProgressBar { visible:exportController.busy; value:exportController.progress; Layout.preferredWidth:120 }
-            }
+        height: visible ? workspaceHeader.height + commandBars.height : 0
+        WorkspaceHeader {
+            id: workspaceHeader
+            width: parent.width
+            drillProjectContext: drillProject
+            exportControllerContext: exportController
+            workspaceStateContext: workspaceState
+            onHomeRequested: window.returnHome()
+            onSaveRequested: window.saveCurrentProject("normal")
+            onWorkspaceRequested: function(workspace) { window.requestWorkspace(workspace) }
         }
         EditorCommandBars {
             width:parent.width
-            visible:!window.exportWorkspace && workspaceState.workspaceActive
+            visible: workspaceState.currentWorkspace === "editor" && workspaceState.workspaceActive
             id: commandBars
             batchDialogContext: batchDialog
             drillProjectContext: drillProject
@@ -414,19 +467,47 @@ ApplicationWindow {
         workspaceStateContext: workspaceState
     }
 
+    RosterWorkspace {
+        id: rosterWorkspace
+        anchors.fill: parent
+        visible: workspaceState.workspaceActive && workspaceState.currentWorkspace === "roster"
+        enabled: visible
+        drillProjectContext: drillProject
+        performerDialogContext: performerDialog
+        bulkEditDialogContext: bulkEditDialog
+        inspectorContext: inspectorPanel.exposedInspector
+        windowContext: window
+    }
+
+    MusicWorkspace {
+        id: musicWorkspace
+        anchors.fill: parent
+        visible: workspaceState.workspaceActive && workspaceState.currentWorkspace === "music"
+        enabled: visible
+        drillProjectContext: drillProject
+        transportContext: transport
+        onMidiImportRequested: midiDialog.open()
+        onMusicXmlImportRequested: musicXmlDialog.open()
+        onAudioImportRequested: audioDialog.open()
+        onAdvancedToolRequested: function(tool) { timelinePanel.openMusicTool(tool) }
+        onEditorRequested: window.requestWorkspace("editor")
+    }
+
     MovementTabs {
         id: movementTabs
         project: drillProject
         anchors.top: parent.top; anchors.left: parent.left; anchors.right: parent.right
         anchors.margins: 6; height: 32
-        visible: workspaceState.workspaceActive && !window.exportWorkspace
+        visible: workspaceState.workspaceActive
+                 && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review")
     }
 
     SplitView {
         id: horizontalSplit
-        enabled: workspaceState.workspaceActive && !window.exportWorkspace
+        enabled: workspaceState.workspaceActive
+                 && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review")
         visible: opacity > 0.01
-        opacity: workspaceState.workspaceActive && !window.exportWorkspace ? 1 : 0
+        opacity: enabled ? 1 : 0
         transform: Translate {
             y: workspaceState.workspaceActive ? 0 : 8
             Behavior on y { NumberAnimation { duration: MarchCraftTheme.motionScreen; easing.type: Easing.OutCubic } }
@@ -455,6 +536,7 @@ ApplicationWindow {
         performerDialogContext: performerDialog
         windowContext: window
         workspaceSettingsContext: workspaceSettings
+        visible: workspaceState.currentWorkspace === "editor" && !workspaceSettings.rosterCollapsed
     }
 
         SplitView {
@@ -487,8 +569,8 @@ ApplicationWindow {
                 currentIndex: window.threeD ? 1 : 0
                 FieldView {
                     id: fieldView
-                    drawMode: window.freehandDrawing
-                    shapeDrawMode: window.shapeDrawing
+                    drawMode: workspaceState.currentWorkspace === "editor" && window.freehandDrawing
+                    shapeDrawMode: workspaceState.currentWorkspace === "editor" ? window.shapeDrawing : ""
                     showPaths: drillProject.showTransitionPaths
                     showShapeGuides: drillProject.showShapeGuides
                     onPerformerActivated: function(row) { window.activePerformer = row; inspectorPanel.exposedInspector.refresh() }
@@ -545,6 +627,15 @@ ApplicationWindow {
         uniformColorDialogContext: uniformColorDialog
         windowContext: window
         workspaceSettingsContext: workspaceSettings
+        visible: workspaceState.currentWorkspace === "editor" && !workspaceSettings.inspectorCollapsed
+    }
+
+    ReviewPanel {
+        id: reviewPanel
+        visible: workspaceState.currentWorkspace === "review"
+        drillProjectContext: drillProject
+        transportContext: transport
+        windowContext: window
     }
     }
 
@@ -556,9 +647,9 @@ ApplicationWindow {
             anchors.fill: parent
             anchors.leftMargin: 10; anchors.rightMargin: 10
             Label { text: drillProject.statusMessage; color: MarchCraftTheme.textSecondary; font.pixelSize: 10; Layout.fillWidth: true }
-            Label { text: drillProject.selectedCount + " selected"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
+            Label { visible: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review" || workspaceState.currentWorkspace === "roster"; text: drillProject.selectedCount + " selected"; color: MarchCraftTheme.textMuted; font.pixelSize: 10 }
             Rectangle { width: 1; height: 12; color: MarchCraftTheme.divider }
-            Label { text: window.exportWorkspace ? "EXPORT" : window.threeD ? "3D PREVIEW" : "2D EDITOR"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
+            Label { text: workspaceState.currentWorkspace.toUpperCase(); color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
         }
     }
 
@@ -610,7 +701,7 @@ ApplicationWindow {
 
     AppToolButton {
         id: rosterRevealButton
-        visible: workspaceSettings.rosterCollapsed
+        visible: workspaceState.currentWorkspace === "editor" && workspaceSettings.rosterCollapsed
         z: 20
         anchors.left: parent.left
         anchors.top: parent.top
@@ -1034,19 +1125,21 @@ ApplicationWindow {
         onAccepted: {
             if (!drillProject.saveProject(selectedFile)) return
             workspaceController.recordRecentProject(drillProject.projectPath, drillProject.showName)
+            workspaceController.rememberWorkspace(drillProject.projectPath, workspaceState.lastUsefulWorkspace)
+            workspaceController.refreshRecovery()
             if (window.savePurpose === "pending") workspaceState.confirmAfterSave()
             window.savePurpose = "normal"
         }
         onRejected: window.savePurpose = "normal"
     }
     FileDialog { id: importCoordinateDialog; title: "Import coordinate data"; nameFilters: ["Coordinate JSON (*.json)"]; onAccepted: drillProject.importCoordinateJson(selectedFile) }
-    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMidiAsync(selectedFile) } }
-    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { timelinePanel.showMusic(); drillProject.importMusicXml(selectedFile) } }
-    FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: drillProject.attachAudio(selectedFile) }
+    FileDialog { id: midiDialog; title: "Import MIDI score"; nameFilters: ["MIDI (*.mid *.midi)"]; onAccepted: { window.activateWorkspace("music"); drillProject.importMidiAsync(selectedFile) } }
+    FileDialog { id: musicXmlDialog; title: "Import MusicXML score"; nameFilters: ["MusicXML (*.musicxml *.xml)"]; onAccepted: { window.activateWorkspace("music"); drillProject.importMusicXml(selectedFile) } }
+    FileDialog { id: audioDialog; title: "Attach rehearsal audio"; nameFilters: ["Audio (*.wav *.mp3 *.m4a *.flac)"]; onAccepted: { window.activateWorkspace("music"); drillProject.attachAudio(selectedFile) } }
     ExportWorkspace {
         id:exportPanel
-        visible:workspaceState.workspaceActive && window.exportWorkspace
-        onWorkspaceRequested: { transport.pause(); window.exportWorkspace = true }
+        visible:workspaceState.workspaceActive && workspaceState.currentWorkspace === "export"
+        onWorkspaceRequested: window.activateWorkspace("export")
     }
     ExportVideoWindow { }
     FileDialog { id: csvDialog; title: "Export analytics"; fileMode: FileDialog.SaveFile; nameFilters: ["CSV (*.csv)"]; defaultSuffix: "csv"; onAccepted: drillProject.exportCsv(selectedFile) }
@@ -1060,18 +1153,24 @@ ApplicationWindow {
         }
     }
 
-    Shortcut { sequence: "Left"; onActivated: drillProject.nudgeSelected(-0.25, 0) }
-    Shortcut { sequence: "Right"; onActivated: drillProject.nudgeSelected(0.25, 0) }
-    Shortcut { sequence: "Up"; onActivated: drillProject.nudgeSelected(0, -0.25) }
-    Shortcut { sequence: "Down"; onActivated: drillProject.nudgeSelected(0, 0.25) }
-    Shortcut { sequence: "Ctrl+Space"; context: Qt.ApplicationShortcut; onActivated: transport.playPause() }
+    Shortcut { sequence: "Left"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; onActivated: drillProject.nudgeSelected(-0.25, 0) }
+    Shortcut { sequence: "Right"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; onActivated: drillProject.nudgeSelected(0.25, 0) }
+    Shortcut { sequence: "Up"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; onActivated: drillProject.nudgeSelected(0, -0.25) }
+    Shortcut { sequence: "Down"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; onActivated: drillProject.nudgeSelected(0, 0.25) }
+    Shortcut {
+        sequence: "Ctrl+Space"
+        enabled: workspaceState.workspaceActive
+                 && ["music", "editor", "review"].indexOf(workspaceState.currentWorkspace) >= 0
+        context: Qt.ApplicationShortcut
+        onActivated: transport.playPause()
+    }
     Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: projectSetupDialog.open() }
-    Shortcut { sequence: "Ctrl+L"; context: Qt.ApplicationShortcut; onActivated: { rosterPanel.exposedRosterSearch.forceActiveFocus(); rosterPanel.exposedRosterSearch.selectAll() } }
-    Shortcut { sequence: "Ctrl+1"; context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
-    Shortcut { sequence: "Ctrl+2"; context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
-    Shortcut { sequence: "Ctrl+Shift+R"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+I"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+T"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
-    Shortcut { sequence: "+"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
-    Shortcut { sequence: "-"; context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
+    Shortcut { sequence: "Ctrl+L"; enabled: workspaceState.hasCurrentProject; context: Qt.ApplicationShortcut; onActivated: { window.requestWorkspace("roster"); Qt.callLater(function() { rosterWorkspace.focusSearch() }) } }
+    Shortcut { sequence: "Ctrl+1"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
+    Shortcut { sequence: "Ctrl+2"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
+    Shortcut { sequence: "Ctrl+Shift+R"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+I"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
+    Shortcut { sequence: "Ctrl+Shift+T"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
+    Shortcut { sequence: "+"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
+    Shortcut { sequence: "-"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
 }

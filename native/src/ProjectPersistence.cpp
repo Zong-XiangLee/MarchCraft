@@ -13,6 +13,7 @@
 #include <QScopedValueRollback>
 #include <QSizeF>
 #include <QSet>
+#include <QStandardPaths>
 #include <QTextStream>
 #include <QUuid>
 #include <QXmlStreamReader>
@@ -514,6 +515,10 @@ bool DrillProject::saveProject(const QString &urlOrPath)
     m_dirty = false;
     emit dirtyChanged();
     emit projectChanged();
+    const QString recoveryPath = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/recovery.marchcraft");
+    if (QFileInfo(path).absoluteFilePath() != QFileInfo(recoveryPath).absoluteFilePath())
+        QFile::remove(recoveryPath);
     setStatus(QStringLiteral("Saved %1").arg(QFileInfo(path).fileName()));
     return true;
 }
@@ -552,6 +557,16 @@ bool DrillProject::loadProject(const QString &urlOrPath)
     emit projectChanged();
     setStatus(legacyJson ? QStringLiteral("Imported legacy project; save to create a .marchcraft database")
                          : QStringLiteral("Opened %1").arg(QFileInfo(path).fileName()));
+    return true;
+}
+
+bool DrillProject::loadRecoveryProject(const QString &urlOrPath)
+{
+    if (!loadProject(urlOrPath))
+        return false;
+    m_projectPath.clear();
+    emit projectChanged();
+    markDirty(QStringLiteral("Recovered autosaved work — choose Save As to keep it"));
     return true;
 }
 

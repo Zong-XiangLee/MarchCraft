@@ -11,18 +11,29 @@
 
 This inventory tracks behavioral parity with the public OpenMarch feature list. MarchCraft is an independent native implementation and does not contain OpenMarch source code.
 
+## Flexible workspace workflow
+
+- Home is separate from the project shell and preserves the loaded project for Resume. Saved projects remember their last useful Roster, Music, Editor, or Review destination; Export intentionally reopens in Editor.
+- A persistent header exposes **Roster**, **Music**, **Editor**, **Review**, and **Export** without enforcing a wizard. Workspace changes pause hidden playback and do not dirty the project or consume undo history.
+- Quick Start captures only the project, field/environment, and ensemble size before opening Editor. Guided Setup adds preview-first multi-section roster creation and an optional Music step.
+- Roster is a full searchable workspace with section filters, multi-selection tools, performer editing, and transactional section-batch creation. Music is an optional preparation workspace backed by the existing import, track, marker, section, synchronization, and set-plan tools.
+- Review reuses the production 2D/3D views, transport, and timeline while presenting Drill Clinic controls and issue cards. It does not fork formation, transition, or timing semantics.
+- Home exposes automatic recovery. Opening recovery creates a dirty, pathless working copy so the next save always asks for an explicit destination.
+
 | Area | Prototype behavior |
 | --- | --- |
 | Field types | High-school, college, professional, and indoor presets |
 | Canvas | GPU-backed native Qt view, zoom, pan, regulation ten-yard end zones, realistic turf mowing bands, five-yard lines, front/back yard numbers, regulation HS/NCAA/NFL hash placement, and four vertical one-yard inserts per five-yard interval |
 | Animation | Set-to-set or continuous whole-show playback with visible marcher paths and per-set count/BPM timing |
-| Roster | Add, edit, remove, batch-create, search, multi-select, custom name/section/instrument/notes |
+| Workflow | Flexible Home → Roster → Music → Editor → Review → Export shell with direct navigation, optional Music/Review, Resume, and per-project last-workspace memory |
+| Roster | Dedicated workspace for add, edit, remove, transactional section batches, label previews, search/filter, multi-select, grouping, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, mark subsets, directly retime incoming transitions, and ripple later timing without rebuilding formations |
 | Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and equal-distance distribution |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
 | Music | Native MIDI/MusicXML timing, meter, tempo, note-activity, and track import; unified marker/drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent set/transition/time/measure selection; persistent landmarks, movements and parts; deterministic impact/phrase set-plan suggestions; built-in FluidSynth playback; previewed set generation; step-mode overrides; waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
 | Analytics | Per-move and total distance, ensemble average, longest move, collision and step-size warnings |
+| Review | Shared field/3D/transport/timeline with Drill Clinic scan, filters, issue cards, dismissal, and preview/apply fixes |
 | 3D | Meter-based Y-up world with grounded, height-scaled rigged human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 97 sets |
@@ -96,4 +107,4 @@ Screenshot QA accepts `--field-style realistic` or `--field-style editor` in eit
 
 The native export workspace adds full-field vector PDF charts, configurable coordinate sheets, PNG pages, analytics CSV, Windows printing, and deterministic 2D/3D MP4 capture. It supports movement/set/variant/performer selection, embedded company branding plus optional monochrome MarchCraft branding, instruction continuation pages, paper/crop/layer controls, preview, local presets, and staged output publication. Video encoding uses an external user-selected FFmpeg; audio can be silent, an attached recording, or offline FluidSynth MIDI. This implements drill playback video export; cinematic camera sequencing remains outside the prototype.
 
-The Export tab stays alongside Editor and provides automatic format-specific previews, show-based filenames, built-in and saved presets, paired chart/coordinate PDFs, independent performer label sizing, and an export-only black-and-white vector mark. Export jobs use immutable snapshots; progress remains visible while editing.
+The Export destination stays directly accessible from every project workspace and provides automatic format-specific previews, show-based filenames, built-in and saved presets, paired chart/coordinate PDFs, independent performer label sizing, and an export-only black-and-white vector mark. Export jobs use immutable snapshots; progress remains visible while editing.

@@ -79,6 +79,8 @@ int main(int argc, char *argv[])
         QStringLiteral("--qa-transition-resize"), QStringLiteral("--qa-set-plan"),
         QStringLiteral("--qa-music-impacts"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"), QStringLiteral("--qa-export"),
+        QStringLiteral("--qa-roster-workspace"), QStringLiteral("--qa-music-workspace"),
+        QStringLiteral("--qa-review-workspace"), QStringLiteral("--qa-export-workspace"),
         QStringLiteral("--field-style"), QStringLiteral("--venue"), QStringLiteral("--lighting"),
         QStringLiteral("--graphics-profile"),
         QStringLiteral("--midi"), QStringLiteral("--qa-minimum")
@@ -255,7 +257,11 @@ int main(int argc, char *argv[])
     }
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
-    for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"), QStringLiteral("performer"), QStringLiteral("music"), QStringLiteral("formation")}) {
+    for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"),
+                                QStringLiteral("performer"), QStringLiteral("music"),
+                                QStringLiteral("formation"), QStringLiteral("roster-workspace"),
+                                QStringLiteral("music-workspace"), QStringLiteral("review-workspace"),
+                                QStringLiteral("export-workspace")}) {
         if (arguments.contains(QStringLiteral("--qa-") + surface) && !engine.rootObjects().isEmpty()) {
             QObject *root = engine.rootObjects().first();
             QTimer::singleShot(350, &application, [root, surface] {

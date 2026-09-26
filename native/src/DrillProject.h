@@ -357,6 +357,7 @@ public:
     Q_INVOKABLE bool importCoordinateJson(const QString &urlOrPath);
     Q_INVOKABLE bool saveProject(const QString &urlOrPath = {});
     Q_INVOKABLE bool loadProject(const QString &urlOrPath);
+    Q_INVOKABLE bool loadRecoveryProject(const QString &urlOrPath);
     Q_INVOKABLE bool exportCsv(const QString &urlOrPath) const;
     Q_INVOKABLE bool exportCoordinatePdf(const QString &urlOrPath) const;
     Q_INVOKABLE bool importMusicXml(const QString &urlOrPath);
@@ -448,6 +449,7 @@ public:
                                   const QString &section, double x = 80.0, double y = 28.0);
     Q_INVOKABLE void batchAddPerformers(const QString &prefix, int count,
                                         const QString &instrument, const QString &section);
+    Q_INVOKABLE bool batchCreateRoster(const QVariantList &sections);
     Q_INVOKABLE void removeSelectedPerformers();
     Q_INVOKABLE void updatePerformer(int row, const QString &label, const QString &name,
                                      const QString &instrument, const QString &section,
