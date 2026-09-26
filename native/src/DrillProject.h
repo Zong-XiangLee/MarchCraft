@@ -138,6 +138,12 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList formationPreviewPoints READ formationPreviewPoints NOTIFY formationPreviewChanged)
     Q_PROPERTY(QVariantMap formationPreviewMetrics READ formationPreviewMetrics NOTIFY formationPreviewChanged)
     Q_PROPERTY(QString formationPreviewMode READ formationPreviewMode NOTIFY formationPreviewChanged)
+    Q_PROPERTY(bool transitionEditActive READ transitionEditActive NOTIFY transitionEditChanged)
+    Q_PROPERTY(QString transitionEditType READ transitionEditType NOTIFY transitionEditChanged)
+    Q_PROPERTY(int transitionEditActiveRow READ transitionEditActiveRow NOTIFY transitionEditChanged)
+    Q_PROPERTY(QVariantList transitionEditControlPoints READ transitionEditControlPoints NOTIFY transitionEditChanged)
+    Q_PROPERTY(QVariantList transitionEditPerformers READ transitionEditPerformers NOTIFY transitionEditChanged)
+    Q_PROPERTY(QVariantMap transitionEditMetrics READ transitionEditMetrics NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantList clinicIssues READ clinicIssues NOTIFY clinicChanged)
     Q_PROPERTY(int clinicIssueCount READ clinicIssueCount NOTIFY clinicChanged)
     Q_PROPERTY(QString capabilityProfile READ capabilityProfile WRITE setCapabilityProfile NOTIFY clinicChanged)
@@ -339,6 +345,12 @@ public:
     QVariantList formationPreviewPoints() const;
     QVariantMap formationPreviewMetrics() const { return m_formationPreview.metrics; }
     QString formationPreviewMode() const { return m_formationPreview.mode; }
+    bool transitionEditActive() const { return m_transitionEdit.active; }
+    QString transitionEditType() const { return m_transitionEdit.type; }
+    int transitionEditActiveRow() const;
+    QVariantList transitionEditControlPoints() const;
+    QVariantList transitionEditPerformers() const;
+    QVariantMap transitionEditMetrics() const;
     QVariantList clinicIssues() const { return m_clinicIssues; }
     int clinicIssueCount() const { return m_clinicIssues.size(); }
     QString capabilityProfile() const { return m_capability.name; }
@@ -537,6 +549,22 @@ public:
     Q_INVOKABLE void mirrorSelected(bool horizontal);
     Q_INVOKABLE void snapSelected(double grid);
     Q_INVOKABLE void faceSelected(double degrees);
+    Q_INVOKABLE bool beginTransitionEdit();
+    Q_INVOKABLE void setTransitionEditType(const QString &type, const QVariantMap &options = {});
+    Q_INVOKABLE void updateTransitionEditOptions(const QVariantMap &options);
+    Q_INVOKABLE bool applyTransitionEdit();
+    Q_INVOKABLE void cancelTransitionEdit();
+    Q_INVOKABLE bool selectTransitionEditPerformer(int row, bool additive = false);
+    Q_INVOKABLE bool selectTransitionPathAt(double x, double y, double toleranceSteps,
+                                             bool additive = false);
+    Q_INVOKABLE void moveTransitionControlPoint(int row, int pointIndex, double x, double y);
+    Q_INVOKABLE void addTransitionControlPoint(int row = -1);
+    Q_INVOKABLE void insertTransitionControlPoint(int row, int pointIndex, double x, double y);
+    Q_INVOKABLE void removeTransitionControlPoint(int row, int pointIndex);
+    Q_INVOKABLE void resetTransitionPath(int row = -1);
+    Q_INVOKABLE void mirrorActiveTransitionPath(bool horizontal = true);
+    Q_INVOKABLE void copyActiveTransitionPathToSelection(bool mirrored = false);
+    Q_INVOKABLE QVariantMap transitionEditPathInfo(int row) const;
     Q_INVOKABLE void setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints = {});
     Q_INVOKABLE QVariantList transitionPathSamples(int performerRow, int samples = 24) const;
     Q_INVOKABLE QVariantMap shapeInfo(int index) const;
@@ -587,6 +615,7 @@ signals:
     void setPlanChanged();
     void transportSettingsChanged();
     void formationPreviewChanged();
+    void transitionEditChanged();
     void clinicChanged();
 
 private:
@@ -617,6 +646,9 @@ private:
     double performerTotalDistance(int performerIndex) const;
     bool performerHasWarning(int performerIndex) const;
     void ensureAnalyticsCache() const;
+    MarchCraft::Placement transitionEditPlacement(int performerIndex) const;
+    QVector<int> orderedTransitionEditRows(const QString &order, bool reversed = false) const;
+    void rebuildTransitionEditPreview();
     QPointF clampPosition(QPointF point) const;
     void ensurePlacements();
     int pulsesBetween(qint64 startTick, qint64 endTick) const;
@@ -647,6 +679,18 @@ private:
         QHash<QString, QPointF> placements;
         QHash<QString, QPointF> sourcePlacements;
         QVariantMap metrics;
+    };
+
+    struct TransitionEditState {
+        bool active = false;
+        int destinationSet = -1;
+        QString type{QStringLiteral("direct")};
+        QVariantMap options;
+        QVector<QString> performerIds;
+        QSet<QString> initialSelectedIds;
+        QString activePerformerId;
+        QHash<QString, MarchCraft::Placement> originalPlacements;
+        QHash<QString, MarchCraft::Placement> previewPlacements;
     };
 
     struct MusicSection {
@@ -746,6 +790,7 @@ private:
     double m_fieldGridOpacity = 0.18;
     QString m_measurementUnit{QStringLiteral("steps")};
     FormationPreviewState m_formationPreview;
+    TransitionEditState m_transitionEdit;
     bool m_generatingFormationPreview = false;
     int m_formationPreviewSourceSet = -1;
     bool m_formationPreviewInsertsNext = false;

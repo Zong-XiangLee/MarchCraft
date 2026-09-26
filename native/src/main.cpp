@@ -69,10 +69,12 @@ int main(int argc, char *argv[])
     const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
     const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
     const bool qaMovements = arguments.contains(QStringLiteral("--qa-movements"));
+    const bool qaTransitionAuthoring = arguments.contains(QStringLiteral("--qa-transition-authoring"));
     const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
+        QStringLiteral("--qa-transition-authoring"),
         QStringLiteral("--qa-timeline"), QStringLiteral("--qa-timeline-zoom"),
         QStringLiteral("--qa-timeline-fit"), QStringLiteral("--qa-timeline-selection"),
         QStringLiteral("--qa-selected-transition"),
@@ -92,6 +94,14 @@ int main(int argc, char *argv[])
         project.loadDemo();
     if (qaShapes)
         project.selectAll();
+    if (qaTransitionAuthoring) {
+        project.setCurrentSetIndex(qMin(1, project.setCount() - 1));
+        project.clearSelection();
+        for (int row = 0; row < qMin(6, project.performerCount()); ++row)
+            project.selectPerformerMode(row, 1);
+        project.beginTransitionEdit();
+        project.setTransitionEditType(QStringLiteral("curved"));
+    }
     const int fieldPresetFlag = arguments.indexOf(QStringLiteral("--field-preset"));
     if (fieldPresetFlag >= 0 && fieldPresetFlag + 1 < arguments.size())
         project.setFieldPreset(arguments.at(fieldPresetFlag + 1));

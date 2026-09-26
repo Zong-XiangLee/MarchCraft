@@ -87,9 +87,22 @@ ToolBar {
                     onClicked: shapePaletteContext.open()
                 }
                 AppButton { text: windowContext.freehandDrawing ? "Drawing…" : "Freehand"; enabled: drillProjectContext.selectedCount > 0; highlighted: windowContext.freehandDrawing; onClicked: freehandDialogContext.open() }
+                AppButton {
+                    text: drillProjectContext.transitionEditActive ? "Transition · " + drillProjectContext.transitionEditType : "Transition path"
+                    enabled: drillProjectContext.transitionEditActive
+                        || (drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0)
+                    highlighted: drillProjectContext.transitionEditActive
+                    ToolTip.visible: hovered
+                    ToolTip.text: drillProjectContext.currentSetIndex > 0
+                        ? "Author the selected performers' incoming paths"
+                        : "Choose a destination set first"
+                    onClicked: if (!drillProjectContext.transitionEditActive) drillProjectContext.beginTransitionEdit()
+                }
                 AppToolButton { text: "Snap"; enabled: drillProjectContext.selectedCount > 0; ToolTip.text: "Snap selection to one-step grid"; ToolTip.visible: hovered; onClicked: drillProjectContext.snapSelected(1) }
                 AppToolButton { text: "Mirror"; enabled: drillProjectContext.selectedCount > 0; ToolTip.text: "Mirror selection side-to-side"; ToolTip.visible: hovered; onClicked: drillProjectContext.mirrorSelected(true) }
                 Item { Layout.fillWidth: true }
+                AppToolButton { visible: drillProjectContext.transitionEditActive; text: "Cancel"; onClicked: drillProjectContext.cancelTransitionEdit() }
+                AppButton { visible: drillProjectContext.transitionEditActive; text: "Apply paths"; highlighted: true; onClicked: drillProjectContext.applyTransitionEdit() }
                 AppToolButton { text: "Paths"; checkable: true; checked: drillProjectContext.showTransitionPaths; onToggled: drillProjectContext.showTransitionPaths = checked }
                 AppToolButton { text: "Guides"; checkable: true; checked: drillProjectContext.showShapeGuides; onToggled: drillProjectContext.showShapeGuides = checked }
                 AppToolButton { text: "Grid"; enabled: drillProjectContext.fieldStyle !== "editor"; checkable: true; checked: drillProjectContext.showFieldGrid; onToggled: drillProjectContext.showFieldGrid = checked }

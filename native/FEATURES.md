@@ -3,7 +3,7 @@
 ## Shape editing and freehand formations
 
 - Persistent formations expose image-editor-style uniform resize handles and a visible rotation control when the complete shape is selected.
-- Freehand field drawing supports organic forms and letter-like strokes, automatic line/circle recognition, handwriting smoothing, equal arc-length spacing, collision-aware placement, and three performer-assignment strategies.
+- Freehand field drawing supports organic forms and letter-like strokes, automatic line/circle recognition, handwriting smoothing, equal arc-length spacing, collision-aware placement, and six documented performer-assignment strategies.
 - The inspector reports selection size, average/minimum spacing, average move, dimensions, and collisions. Configure can display distances in marching steps or yards.
 - The application opens to a professional native welcome workspace with New/Open actions, a pinned editable sample, current-project resume, and eight persisted recent projects.
 - A restrained graphite visual system standardizes controls, disabled states, dialogs, panels, menus, and workspace motion; the quiet launch sound is optional and suppressed during QA.
@@ -15,10 +15,10 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | --- | --- |
 | Field types | High-school, college, professional, and indoor presets |
 | Canvas | GPU-backed native Qt view, zoom, pan, regulation ten-yard end zones, realistic turf mowing bands, five-yard lines, front/back yard numbers, regulation HS/NCAA/NFL hash placement, and four vertical one-yard inserts per five-yard interval |
-| Animation | Set-to-set or continuous whole-show playback with visible marcher paths and per-set count/BPM timing |
+| Animation | Set-to-set or continuous whole-show playback with visible, constant-speed authored marcher paths and per-set count/BPM timing |
 | Roster | Add, edit, remove, batch-create, search, multi-select, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, mark subsets, directly retime incoming transitions, and ripple later timing without rebuilding formations |
-| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and equal-distance distribution |
+| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, equal-distance distribution, and transactional transition authoring for curves, FTL, gate/pivot, and stagger/ripple timing |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
 | Music | Native MIDI/MusicXML timing, meter, tempo, note-activity, and track import; unified marker/drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent set/transition/time/measure selection; persistent landmarks, movements and parts; deterministic impact/phrase set-plan suggestions; built-in FluidSynth playback; previewed set generation; step-mode overrides; waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; redesigned landscape performer sheets with movement analytics, repeated headers, pagination, and full CSV export |
@@ -29,7 +29,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 
 ## Prototype boundaries
 
-- Transition paths are currently direct interpolations. The domain boundary is ready for curved, follow-the-leader, gate, and counter-march path implementations.
+- Transition authoring supports direct and multi-control-point curves, persisted Follow the Leader routes, gate/pivot arcs, individual correction/copy/mirror operations, and explicit stagger/ripple starts. Group tools resolve to per-performer path data; automatic counter-march vocabulary beyond these authored routes remains a future extension.
 - Audio can be attached, previewed, offset, and aligned with anchors. Set-plan analysis uses authoritative MIDI/MusicXML structure and explicit user markers; arbitrary rehearsal audio is not presented as reliable phrase understanding.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
@@ -48,6 +48,10 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - The model delegates domain implementation to focused persistence, music, formation,
   transition, and Clinic units, supported by stateless geometry and storage interfaces.
 - Shared transition tables avoid rebuilding paths for every rendering/analysis query.
+- Transition previews are isolated from project data, update only the selected subset,
+  expose live distance/step/timing/collision metrics, and commit as one undoable action.
+- Schema 12 adds optional `pathStartCount` and `pathDurationCounts`; missing values use
+  full-transition timing and legacy delayed paths retain the former 25% start.
 - Asynchronous MIDI imports and formation previews are discarded after intervening
   project changes. Generated previews still require Apply.
 - Playback updates only motion roles; performer editing is one undoable operation.
@@ -70,12 +74,13 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 - Drag guides and performer dots use the same field-fitted geometry as placement. Circle/arc drags start at the center; other shapes use the dragged bounds (regular polygons retain their proportions).
 - Releasing a drag opens an asynchronous assignment preview. Apply creates one undoable formation; Cancel leaves the project unchanged.
 - Escape, Enter, right-click, selection changes, and switching drawing tools discard an unfinished drag. Choosing a shape opens the 2D field.
-- Editing any advanced-builder option invalidates the previous preview, including assignment mode and grouping. The builder scrolls within the supported minimum window size.
+- Editing any formation-builder option invalidates the previous preview, including assignment mode and grouping. The non-modal floating builder scrolls within the supported minimum window, leaves the editor interactive, and has an explicit close control.
 
 Verification: `shapeDrawerGeometryAndTransactions` covers every shape with all six assignment modes and 1/7/24 performers, field fitting, preview immutability, Apply, cancellation, and undo/redo. `shapeDrawerMouseGestures` exercises real Qt input in both directions at three zoom levels. `tst_shapedrawer.qml` covers all drag option mappings and each advanced control's preview invalidation. Use `--qa-formation --screenshot output.png` for the advanced builder, optionally with `--qa-minimum`.
 
 - Performer assignment preference is saved across builder reopenings and app restarts, and is also used by drawn shapes. Changing the preference still requires a fresh preview before Apply.
-- The advanced builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape/Close still cancels it.
+- Preserve spatial order compares normalized two-dimensional form coordinates and never selects a mirrored assignment. Rehearsal safe compares shortest, topology-preserving, minimax, and roster candidates before removing avoidable crossings. Shortest, Even effort, Feature move, and fixed Roster slots retain distinct documented objectives.
+- The formation builder and formation-review dialogs can be moved by dragging their title bars. The field stays undimmed; moving a dialog retains the pending preview. Escape or × still cancels it.
 
 ### Field presentation
 

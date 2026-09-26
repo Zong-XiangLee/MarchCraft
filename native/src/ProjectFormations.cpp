@@ -72,6 +72,7 @@ QVariantMap DrillProject::assignmentMetrics(const QVector<int> &rows, const QVec
 QVector<int> DrillProject::assignedTargetIndices(const QVector<int> &rows, const QVector<QPointF> &targets,
                                                   bool closed, const QString &requestedMode) const
 {
+    Q_UNUSED(closed)
     const int count = rows.size(); QVector<int> roster(count); std::iota(roster.begin(), roster.end(), 0);
     if (count < 2 || targets.size() != count) return roster;
     // There is no incoming transition to optimize for the opening formation.
@@ -81,23 +82,121 @@ QVector<int> DrillProject::assignedTargetIndices(const QVector<int> &rows, const
     const int sourceSet = m_formationPreviewSourceSet >= 0 ? m_formationPreviewSourceSet
         : (m_currentSet > 0 ? m_currentSet - 1 : m_currentSet);
     QVector<QPointF> sources; for (int row : rows) sources.push_back(placementAt(row, sourceSet).position);
-    auto hungarianForPower = [&](double power, bool feature) {
+    const int availableCounts = m_formationPreviewInsertsNext ? 8
+        : qMax(1, m_currentSet > 0 ? m_sets[m_currentSet].counts : 8);
+    const double reachable = availableCounts * m_capability.maximumStepsPerCount;
+    QVector<QVector<double>> distances(count, QVector<double>(count));
+    double farthestAvailable = 0.0;
+    for (int source = 0; source < count; ++source) for (int target = 0; target < count; ++target) {
+        distances[source][target] = pointDistance(sources[source], targets[target]);
+        farthestAvailable = qMax(farthestAvailable, distances[source][target]);
+    }
+
+    auto hungarianForPower = [&](double power) {
         QVector<QVector<double>> costs(count, QVector<double>(count));
-        const double reachable = qMax(1, m_currentSet > 0 ? m_sets[m_currentSet].counts : 8)
-            * m_capability.maximumStepsPerCount;
         for (int i = 0; i < count; ++i) for (int j = 0; j < count; ++j) {
-            const double distance = pointDistance(sources[i], targets[j]);
-            double cost = std::pow(distance, power);
-            if (feature) cost = distance <= reachable ? -cost : 1e9 + distance * 1000.0;
-            costs[i][j] = cost + i * 1e-9 + j * 1e-12;
+            costs[i][j] = std::pow(distances[i][j], power) + i * 1e-9 + j * 1e-12;
         }
         return minimumCostAssignment(costs);
     };
+
+    // Preserve is a spatial contract, not a distance heuristic.  Comparing
+    // normalized coordinates in independently derived, canonically oriented
+    // frames keeps left/right and front/back relationships while allowing the
+    // destination shape to translate, rotate, and scale.  Canonical axes are
+    // essential: choosing the cheaper reversed order silently mirrors a form.
+    struct SpatialFrame {
+        QPointF center;
+        QPointF major{1.0, 0.0};
+        QPointF minor{0.0, 1.0};
+        double majorScale = 1.0;
+        double minorScale = 1.0;
+    };
+    auto spatialFrame = [](const QVector<QPointF> &points) {
+        SpatialFrame frame;
+        for (const auto &point : points) frame.center += point;
+        frame.center /= qMax(1, points.size());
+        double xx = 0.0, xy = 0.0, yy = 0.0;
+        for (const auto &point : points) {
+            const QPointF relative = point - frame.center;
+            xx += relative.x() * relative.x();
+            xy += relative.x() * relative.y();
+            yy += relative.y() * relative.y();
+        }
+        const double angle = 0.5 * std::atan2(2.0 * xy, xx - yy);
+        frame.major = {std::cos(angle), std::sin(angle)};
+        if (frame.major.x() < -1e-9
+            || (qAbs(frame.major.x()) <= 1e-9 && frame.major.y() < 0.0))
+            frame.major = -frame.major;
+        frame.minor = {-frame.major.y(), frame.major.x()};
+        double majorSquared = 0.0, minorSquared = 0.0;
+        for (const auto &point : points) {
+            const QPointF relative = point - frame.center;
+            const double along = QPointF::dotProduct(relative, frame.major);
+            const double across = QPointF::dotProduct(relative, frame.minor);
+            majorSquared += along * along; minorSquared += across * across;
+        }
+        frame.majorScale = qMax(1e-6, std::sqrt(majorSquared / qMax(1, points.size())));
+        frame.minorScale = qMax(1e-6, std::sqrt(minorSquared / qMax(1, points.size())));
+        return frame;
+    };
+    auto preserveSpatialOrder = [&] {
+        const SpatialFrame sourceFrame = spatialFrame(sources);
+        const SpatialFrame targetFrame = spatialFrame(targets);
+        QVector<QVector<double>> costs(count, QVector<double>(count));
+        for (int source = 0; source < count; ++source) {
+            const QPointF sourceRelative = sources[source] - sourceFrame.center;
+            const double sourceAlong = QPointF::dotProduct(sourceRelative, sourceFrame.major)
+                / sourceFrame.majorScale;
+            const double sourceAcross = sourceFrame.minorScale > 1e-5
+                ? QPointF::dotProduct(sourceRelative, sourceFrame.minor) / sourceFrame.minorScale : 0.0;
+            for (int target = 0; target < count; ++target) {
+                const QPointF targetRelative = targets[target] - targetFrame.center;
+                const double targetAlong = QPointF::dotProduct(targetRelative, targetFrame.major)
+                    / targetFrame.majorScale;
+                const double targetAcross = targetFrame.minorScale > 1e-5
+                    ? QPointF::dotProduct(targetRelative, targetFrame.minor) / targetFrame.minorScale : 0.0;
+                const double alongDelta = sourceAlong - targetAlong;
+                const double acrossDelta = sourceAcross - targetAcross;
+                costs[source][target] = (alongDelta * alongDelta + acrossDelta * acrossDelta) * 10000.0
+                    + distances[source][target] * 0.001 + source * 1e-9 + target * 1e-12;
+            }
+        }
+        return minimumCostAssignment(costs);
+    };
+    const QVector<int> preserved = preserveSpatialOrder();
+
+    // Remove an avoidable pair crossing only when doing so does not introduce
+    // a worse capability violation and stays close to the mode's primary
+    // distance objective.  This is deliberately not applied to Preserve or
+    // Roster modes because their ordering contracts are strict.
+    auto removeAvoidableCrossings = [&](QVector<int> assignment, double distanceTolerance) {
+        for (int pass = 0; pass < 3; ++pass) {
+            bool changed = false;
+            for (int left = 0; left < count; ++left) for (int right = left + 1; right < count; ++right) {
+                if (!segmentsCross(sources[left], targets[assignment[left]],
+                                   sources[right], targets[assignment[right]])) continue;
+                const double oldLeft = distances[left][assignment[left]];
+                const double oldRight = distances[right][assignment[right]];
+                const double newLeft = distances[left][assignment[right]];
+                const double newRight = distances[right][assignment[left]];
+                const double oldOver = qMax(0.0, oldLeft - reachable) + qMax(0.0, oldRight - reachable);
+                const double newOver = qMax(0.0, newLeft - reachable) + qMax(0.0, newRight - reachable);
+                const bool capabilityImproves = newOver + 1e-9 < oldOver;
+                const bool comparable = newOver <= oldOver + 1e-9
+                    && newLeft + newRight <= (oldLeft + oldRight) * (1.0 + distanceTolerance) + 1e-9;
+                if (capabilityImproves || comparable) {
+                    std::swap(assignment[left], assignment[right]); changed = true;
+                }
+            }
+            if (!changed) break;
+        }
+        return assignment;
+    };
+
     auto evenEffort = [&] {
-        QVector<QVector<double>> distances(count, QVector<double>(count));
         QVector<double> thresholds; thresholds.reserve(count * count);
         for (int source = 0; source < count; ++source) for (int target = 0; target < count; ++target) {
-            distances[source][target] = pointDistance(sources[source], targets[target]);
             thresholds.push_back(distances[source][target]);
         }
         std::sort(thresholds.begin(), thresholds.end());
@@ -129,44 +228,36 @@ QVector<int> DrillProject::assignedTargetIndices(const QVector<int> &rows, const
         }
         return minimumCostAssignment(costs);
     };
-    auto preserveOrder = [&] {
-        QVector<int> sourceOrder = roster, targetOrder = roster, result(count, -1);
-        QPointF sourceCenter, targetCenter; for (const auto &p : sources) sourceCenter += p; for (const auto &p : targets) targetCenter += p;
-        sourceCenter /= count; targetCenter /= count;
-        if (closed) {
-            auto angleSource = [&](int i) { return std::atan2(sources[i].y() - sourceCenter.y(), sources[i].x() - sourceCenter.x()); };
-            auto angleTarget = [&](int i) { return std::atan2(targets[i].y() - targetCenter.y(), targets[i].x() - targetCenter.x()); };
-            std::stable_sort(sourceOrder.begin(), sourceOrder.end(), [&](int a, int b){ return angleSource(a) < angleSource(b); });
-            std::stable_sort(targetOrder.begin(), targetOrder.end(), [&](int a, int b){ return angleTarget(a) < angleTarget(b); });
-            double best = std::numeric_limits<double>::max(); int bestOffset = 0; bool reverse = false;
-            for (int reversed = 0; reversed < 2; ++reversed) for (int offset = 0; offset < count; ++offset) {
-                double score = 0.0; for (int n = 0; n < count; ++n) {
-                    const int targetAt = reversed ? (offset - n + count * 2) % count : (offset + n) % count;
-                    score += pointDistance(sources[sourceOrder[n]], targets[targetOrder[targetAt]]);
-                }
-                if (score < best) { best = score; bestOffset = offset; reverse = reversed; }
-            }
-            for (int n = 0; n < count; ++n) result[sourceOrder[n]] = targetOrder[reverse ? (bestOffset - n + count * 2) % count : (bestOffset + n) % count];
-        } else {
-            QPointF axis = targets.last() - targets.first();
-            if (pointDistance({}, axis) < 0.001) axis = QPointF(1, 0);
-            auto projection = [&](QPointF p, QPointF center){ return (p.x()-center.x())*axis.x() + (p.y()-center.y())*axis.y(); };
-            std::stable_sort(sourceOrder.begin(), sourceOrder.end(), [&](int a,int b){return projection(sources[a],sourceCenter)<projection(sources[b],sourceCenter);});
-            std::stable_sort(targetOrder.begin(), targetOrder.end(), [&](int a,int b){return projection(targets[a],targetCenter)<projection(targets[b],targetCenter);});
-            double forward = 0, reverse = 0; for (int n=0;n<count;++n){forward+=pointDistance(sources[sourceOrder[n]],targets[targetOrder[n]]);reverse+=pointDistance(sources[sourceOrder[n]],targets[targetOrder[count-1-n]]);}
-            for(int n=0;n<count;++n)result[sourceOrder[n]]=targetOrder[forward<=reverse?n:count-1-n];
+
+    auto featureMove = [&] {
+        const double desired = qMin(reachable * 0.72, farthestAvailable * 0.78);
+        QVector<QVector<double>> costs(count, QVector<double>(count));
+        for (int source = 0; source < count; ++source) for (int target = 0; target < count; ++target) {
+            const double distance = distances[source][target];
+            const double over = qMax(0.0, distance - reachable);
+            const double topologyPenalty = target == preserved[source] ? 0.0 : desired * desired * 0.08;
+            costs[source][target] = over > 0.0
+                ? 1e9 + over * over * 1e6 + distance
+                : (distance - desired) * (distance - desired) + topologyPenalty
+                    + source * 1e-9 + target * 1e-12;
         }
-        return result;
+        return removeAvoidableCrossings(minimumCostAssignment(costs), 0.12);
     };
+
     if (mode == MarchCraft::FormationAssignmentMode::RosterOrder) return roster;
-    if (mode == MarchCraft::FormationAssignmentMode::ShortestTotal) return hungarianForPower(1.0, false);
+    if (mode == MarchCraft::FormationAssignmentMode::ShortestTotal) return hungarianForPower(1.0);
     if (mode == MarchCraft::FormationAssignmentMode::EvenEffort) return evenEffort();
-    if (mode == MarchCraft::FormationAssignmentMode::FeatureMove) return hungarianForPower(1.0, true);
-    if (mode == MarchCraft::FormationAssignmentMode::PreserveOrder) return preserveOrder();
-    // Safe mode needs one globally optimal solution plus two inexpensive
-    // structural alternatives. Even-effort remains available explicitly, but
-    // running a second cubic solve here needlessly doubles preview latency.
-    const QVector<QVector<int>> candidates{hungarianForPower(1.0, false), preserveOrder(), roster};
+    if (mode == MarchCraft::FormationAssignmentMode::FeatureMove) return featureMove();
+    if (mode == MarchCraft::FormationAssignmentMode::PreserveOrder) return preserved;
+
+    // Safe mode evaluates distinct contracts, then lightly uncrosses only the
+    // optimizable candidates.  Capability and collision failures dominate the
+    // score; spatial preservation wins close calls.
+    const QVector<QVector<int>> candidates{
+        removeAvoidableCrossings(hungarianForPower(1.0), 0.03),
+        preserved,
+        removeAvoidableCrossings(evenEffort(), 0.03),
+        removeAvoidableCrossings(roster, 0.08)};
     double bestScore = std::numeric_limits<double>::max(); QVector<int> best = candidates.first();
     for (int candidateIndex = 0; candidateIndex < candidates.size(); ++candidateIndex) {
         const auto metrics = assignmentMetrics(rows, targets, candidates[candidateIndex]);
@@ -743,35 +834,33 @@ void DrillProject::faceSelected(double degrees)
 
 void DrillProject::setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints)
 {
-    if (m_currentSet <= 0 || selectedCount() == 0) return;
-    static const QSet<QString> supported{QStringLiteral("direct"), QStringLiteral("curved"),
-        QStringLiteral("follow"), QStringLiteral("gate"), QStringLiteral("pivot"), QStringLiteral("delayed")};
-    const QString actual = supported.contains(type) ? type : QStringLiteral("direct");
-    QVector<QPointF> points;
-    for (const auto &value : controlPoints) {
-        const QPointF point = value.toPointF();
-        if (!point.isNull() || value.canConvert<QPointF>()) points.push_back(clampPosition(point));
-    }
-    const auto before = toJson();
-    for (const auto &person : m_performers) if (person.selected) {
-        auto &placement = m_sets[m_currentSet].activeVariant().placements[person.id];
-        placement.pathType = actual; placement.pathPoints = points;
-        if (actual == QStringLiteral("curved") && placement.pathPoints.isEmpty()) {
-            const QPointF from = m_sets[m_currentSet - 1].activeVariant().placements.value(person.id).position;
-            const QPointF mid = (from + placement.position) / 2.0;
-            placement.pathPoints.push_back(clampPosition(mid + QPointF(0, -8)));
+    if (!beginTransitionEdit()) return;
+    setTransitionEditType(type);
+    if (!controlPoints.isEmpty()) {
+        QVector<QPointF> points;
+        for (const auto &value : controlPoints)
+            if (value.canConvert<QPointF>()) points.push_back(clampPosition(value.toPointF()));
+        for (const auto &id : m_transitionEdit.performerIds) {
+            auto &placement = m_transitionEdit.previewPlacements[id];
+            placement.pathType = m_transitionEdit.type;
+            placement.pathPoints = points;
         }
     }
-    emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Edit transition path"));
+    applyTransitionEdit();
 }
 
 QVariantList DrillProject::transitionPathSamples(int performerRow, int samples) const
 {
     QVariantList result;
-    if (performerRow < 0 || performerRow >= m_performers.size() || playbackSetIndex() <= 0) return result;
+    if (performerRow < 0 || performerRow >= m_performers.size()) return result;
     samples = qBound(2, samples, 128);
-    for (int i = 0; i <= samples; ++i)
-        result.push_back(pathPosition(performerRow, playbackSetIndex(), double(i) / samples));
+    const int destination = m_transitionEdit.active ? m_transitionEdit.destinationSet : playbackSetIndex();
+    if (destination <= 0 || destination >= m_sets.size()) return result;
+    const Placement placement = m_transitionEdit.active
+        ? transitionEditPlacement(performerRow) : placementAt(performerRow, destination);
+    const MarchCraft::TransitionPath path(placementAt(performerRow, destination - 1).position,
+                                         placement, qMax(1, m_sets[destination].counts));
+    for (int i = 0; i <= samples; ++i) result.push_back(path.position(double(i) / samples));
     return result;
 }
 

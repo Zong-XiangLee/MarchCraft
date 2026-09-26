@@ -153,7 +153,7 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     connect(&m_undo, &QUndoStack::canUndoChanged, this, &DrillProject::historyChanged);
     connect(&m_undo, &QUndoStack::canRedoChanged, this, &DrillProject::historyChanged);
     connect(this, &QAbstractItemModel::modelAboutToBeReset, this, [this] {
-        ++m_projectRevision; cancelFormationPreview();
+        ++m_projectRevision; cancelFormationPreview(); cancelTransitionEdit();
     });
     connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelFormationPreview);
     connect(&m_undo, &QUndoStack::cleanChanged, this, [this](bool clean) {
@@ -571,7 +571,7 @@ void DrillProject::setCurrentSetIndex(int value)
     emit currentSetChanged();
     emit playheadChanged();
     emitAllDataChanged();
-    cancelFormationPreview();
+    cancelFormationPreview(); cancelTransitionEdit();
     m_clinicIssues.clear(); analyzeTransition(m_currentSet);
 }
 
@@ -1814,7 +1814,8 @@ QVariantMap DrillProject::performerInfo(int row) const
     const auto &person = m_performers[row];
     const double incoming = m_currentSet > 0 ? transitionDistance(row, m_currentSet) : 0.0;
     const double outgoing = m_currentSet + 1 < m_sets.size() ? transitionDistance(row, m_currentSet + 1) : 0.0;
-    const int incomingCounts = m_currentSet > 0 ? qMax(1, m_sets[m_currentSet].counts) : 1;
+    const double incomingCounts = m_currentSet > 0
+        ? transitionPath(row, m_currentSet).durationCounts() : 1.0;
     double directionChange = 0.0;
     if (m_currentSet > 0 && m_currentSet + 1 < m_sets.size()) {
         const QPointF incomingVector = placementAt(row, m_currentSet).position - placementAt(row, m_currentSet - 1).position;
@@ -1824,7 +1825,9 @@ QVariantMap DrillProject::performerInfo(int row) const
             directionChange = std::acos(qBound(-1.0, QPointF::dotProduct(incomingVector, outgoingVector) / lengths, 1.0))
                 * 180.0 / std::numbers::pi;
     }
-    const double stepsPerCount = incoming / incomingCounts;
+    const double stepsPerCount = incoming / qMax(0.001, incomingCounts);
+    const auto incomingPath = m_currentSet > 0 ? transitionPath(row, m_currentSet)
+        : MarchCraft::TransitionPath{};
     const QString warning = stepsPerCount > m_capability.maximumStepsPerCount ? QStringLiteral("critical")
         : stepsPerCount >= m_capability.maximumStepsPerCount * 0.85 ? QStringLiteral("caution") : QStringLiteral("none");
     return {{QStringLiteral("label"), person.label}, {QStringLiteral("name"), person.name},
@@ -1843,6 +1846,9 @@ QVariantMap DrillProject::performerInfo(int row) const
             {QStringLiteral("incomingDistance"), incoming}, {QStringLiteral("outgoingDistance"), outgoing},
             {QStringLiteral("stepsPerCount"), stepsPerCount}, {QStringLiteral("directionChange"), directionChange},
             {QStringLiteral("pathType"), m_currentSet > 0 ? placementAt(row, m_currentSet).pathType : QStringLiteral("direct")},
+            {QStringLiteral("pathStartCount"), incomingPath.startCount()},
+            {QStringLiteral("pathDurationCounts"), incomingPath.durationCounts()},
+            {QStringLiteral("pathArrivalCount"), incomingPath.arrivalCount()},
             {QStringLiteral("warning"), warning},
             {QStringLiteral("distance"), performerTotalDistance(row)}};
 }
@@ -1930,6 +1936,7 @@ void DrillProject::markDirty(const QString &message)
     ++m_projectRevision;
     if (!m_backgroundWorkerClone) {
         cancelFormationPreview();
+        cancelTransitionEdit();
         if (!m_applyingSetPlan) cancelSetPlanPreview();
     }
     if (!m_dirty) {

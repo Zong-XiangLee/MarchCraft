@@ -52,6 +52,17 @@ Item {
 
     focus: true
     Keys.onPressed: function(event) {
+        if (event.key === Qt.Key_Escape && drillProject.transitionEditActive) {
+            drillProject.cancelTransitionEdit()
+            event.accepted = true
+            return
+        }
+        if ((event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
+                && drillProject.transitionEditActive) {
+            drillProject.applyTransitionEdit()
+            event.accepted = true
+            return
+        }
         if ((event.key === Qt.Key_Escape || event.key === Qt.Key_Return || event.key === Qt.Key_Enter)
                 && (root.shapeDrawMode.length > 0 || root.drawMode)) {
             root.cancelDrawing()
@@ -349,20 +360,63 @@ Item {
                             ctx.lineTo(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y))
                         ctx.stroke()
                     }
-                    if (!root.showPaths || drillProject.playbackSetIndex <= 0) return
+                    if ((!root.showPaths && !drillProject.transitionEditActive)
+                            || drillProject.playbackSetIndex <= 0) return
                     for (let row = 0; row < performerRepeater.count; ++row) {
                         const marcher = performerRepeater.itemAt(row)
                         if (!marcher) continue
                         const points = drillProject.transitionPathSamples(row, 24)
                         if (points.length < 2) continue
-                        ctx.strokeStyle = marcher.isSelected ? "#fbbf24" : "#d2e5da"
-                        ctx.globalAlpha = marcher.isSelected ? 0.9 : 0.25
-                        ctx.lineWidth = marcher.isSelected ? 2.5 : 1
+                        const info = drillProject.transitionEditActive
+                            ? drillProject.transitionEditPathInfo(row) : ({})
+                        const editing = drillProject.transitionEditActive && info.selected
+                        const active = editing && info.active
+                        ctx.strokeStyle = active ? "#22d3ee" : editing ? "#fbbf24"
+                            : marcher.isSelected ? "#fbbf24" : "#d2e5da"
+                        ctx.globalAlpha = editing ? 0.96 : marcher.isSelected ? 0.9 : 0.25
+                        ctx.lineWidth = active ? 3.5 : editing || marcher.isSelected ? 2.5 : 1
+                        if (editing) ctx.setLineDash([8, 3])
                         ctx.beginPath()
                         ctx.moveTo(root.toCanvasX(points[0].x), root.toCanvasY(points[0].y))
                         for (let i = 1; i < points.length; ++i)
                             ctx.lineTo(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y))
                         ctx.stroke()
+                        ctx.setLineDash([])
+
+                        if (editing) {
+                            const startX = root.toCanvasX(points[0].x)
+                            const startY = root.toCanvasY(points[0].y)
+                            const endX = root.toCanvasX(points[points.length - 1].x)
+                            const endY = root.toCanvasY(points[points.length - 1].y)
+                            ctx.globalAlpha = 1
+                            ctx.fillStyle = "#07110d"
+                            ctx.strokeStyle = active ? "#22d3ee" : "#fbbf24"
+                            ctx.lineWidth = 2
+                            ctx.beginPath(); ctx.arc(startX, startY, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+                            ctx.beginPath(); ctx.arc(endX, endY, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+
+                            const arrowIndex = Math.max(1, Math.min(points.length - 1,
+                                Math.floor(points.length * 0.68)))
+                            const arrowFrom = points[arrowIndex - 1]
+                            const arrowTo = points[arrowIndex]
+                            const ax = root.toCanvasX(arrowTo.x), ay = root.toCanvasY(arrowTo.y)
+                            const angle = Math.atan2(ay - root.toCanvasY(arrowFrom.y),
+                                                     ax - root.toCanvasX(arrowFrom.x))
+                            const arrowSize = active ? 9 : 7
+                            ctx.fillStyle = active ? "#22d3ee" : "#fbbf24"
+                            ctx.beginPath(); ctx.moveTo(ax, ay)
+                            ctx.lineTo(ax - Math.cos(angle - 0.55) * arrowSize,
+                                       ay - Math.sin(angle - 0.55) * arrowSize)
+                            ctx.lineTo(ax - Math.cos(angle + 0.55) * arrowSize,
+                                       ay - Math.sin(angle + 0.55) * arrowSize)
+                            ctx.closePath(); ctx.fill()
+                            if (Number(info.startCount || 0) > 0.001) {
+                                ctx.fillStyle = "#fde68a"
+                                ctx.font = "600 10px sans-serif"
+                                ctx.textAlign = "left"; ctx.textBaseline = "bottom"
+                                ctx.fillText("start +" + Number(info.startCount).toFixed(1), startX + 7, startY - 6)
+                            }
+                        }
                     }
                 }
                 Connections {
@@ -372,6 +426,7 @@ Item {
                     function onPlaybackFrameChanged() { geometryCanvas.requestPaint() }
                     function onProjectChanged() { geometryCanvas.requestPaint() }
                     function onSelectionChanged() { geometryCanvas.requestPaint() }
+                    function onTransitionEditChanged() { geometryCanvas.requestPaint() }
                 }
                 onWidthChanged: requestPaint()
                 onHeightChanged: requestPaint()
@@ -379,6 +434,43 @@ Item {
                     target: root
                     function onShowPathsChanged() { geometryCanvas.requestPaint() }
                     function onShowShapeGuidesChanged() { geometryCanvas.requestPaint() }
+                }
+            }
+
+            Repeater {
+                model: drillProject.transitionEditActive ? drillProject.transitionEditControlPoints : []
+                delegate: Rectangle {
+                    required property var modelData
+                    z: 9
+                    width: 15; height: 15; radius: 3
+                    x: root.toCanvasX(modelData.x) - width / 2
+                    y: root.toCanvasY(modelData.y) - height / 2
+                    color: "#082f49"
+                    border.color: "#67e8f9"
+                    border.width: 2
+                    Rectangle { anchors.centerIn: parent; width: 4; height: 4; radius: 2; color: "#ecfeff" }
+                    MouseArea {
+                        id: handleMouse
+                        anchors.fill: parent
+                        acceptedButtons: Qt.LeftButton | Qt.RightButton
+                        hoverEnabled: true
+                        cursorShape: Qt.CrossCursor
+                        preventStealing: true
+                        onPressed: function(mouse) {
+                            if (mouse.button === Qt.RightButton) {
+                                drillProject.removeTransitionControlPoint(modelData.row, modelData.index)
+                                mouse.accepted = true
+                            }
+                        }
+                        onPositionChanged: function(mouse) {
+                            if (!pressed || pressedButtons === Qt.RightButton) return
+                            const point = mapToItem(field, mouse.x, mouse.y)
+                            drillProject.moveTransitionControlPoint(modelData.row, modelData.index,
+                                root.toFieldX(point.x), root.toFieldY(point.y))
+                        }
+                    }
+                    ToolTip.visible: handleMouse.containsMouse
+                    ToolTip.text: "Drag control point · right-click to remove"
                 }
             }
 
@@ -528,6 +620,15 @@ Item {
                     const dx = currentPoint.x - startPoint.x
                     const dy = currentPoint.y - startPoint.y
                     const additive = (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0
+                    if (drillProject.transitionEditActive) {
+                        if (Math.hypot(dx, dy) < 4)
+                            drillProject.selectTransitionPathAt(root.toFieldX(currentPoint.x),
+                                root.toFieldY(currentPoint.y), 9 / Math.max(field.sx, field.sy), additive)
+                        selecting = false
+                        lassoPoints = []
+                        lassoCanvas.requestPaint()
+                        return
+                    }
                     if (Math.hypot(dx, dy) < 4) {
                         if (!additive) drillProject.clearSelection()
                     } else if (lasso && lassoPoints.length >= 3) {
@@ -552,6 +653,11 @@ Item {
                     if (root.shapeDrawMode.length > 0 || root.drawMode) return
                     const fx = root.toFieldX(mouse.x)
                     const fy = root.toFieldY(mouse.y)
+                    if (drillProject.transitionEditActive) {
+                        drillProject.insertTransitionControlPoint(drillProject.transitionEditActiveRow,
+                            drillProject.transitionEditControlPoints.length, fx, fy)
+                        return
+                    }
                     drillProject.addPerformer("P" + (drillProject.performerCount + 1), "Unassigned", "Unassigned", fx, fy)
                 }
             }
@@ -613,7 +719,7 @@ Item {
 
             Rectangle {
                 id: selectionBox; z: 5; color: "transparent"; border.color: "#fbbf24"; border.width: 1
-                visible: root.shapeDrawMode.length === 0 && !root.drawMode && root.selectedShapeIndex >= 0 && Object.keys(root.selectionBounds).length > 0
+                visible: !drillProject.transitionEditActive && root.shapeDrawMode.length === 0 && !root.drawMode && root.selectedShapeIndex >= 0 && Object.keys(root.selectionBounds).length > 0
                 x: root.toCanvasX(root.selectionBounds.left || 0) - 7
                 y: root.toCanvasY(root.selectionBounds.bottom || 0) - 7
                 width: (root.selectionBounds.right - root.selectionBounds.left) * field.sx + 14
@@ -792,6 +898,7 @@ Item {
                         preventStealing: true
                         property point pressField
                         property point startPosition
+                        property bool transitionSelection: false
                         onPressed: {
                             if (mouse.button === Qt.RightButton) {
                                 const group = drillProject.performerGroupInfo(marcher.index)
@@ -803,6 +910,14 @@ Item {
                                 root.contextMenuRequested(p.x, p.y, marcher.index)
                                 return
                             }
+                            if (drillProject.transitionEditActive) {
+                                transitionSelection = true
+                                drillProject.selectTransitionEditPerformer(marcher.index,
+                                    (mouse.modifiers & (Qt.ShiftModifier | Qt.ControlModifier)) !== 0)
+                                root.performerActivated(marcher.index)
+                                return
+                            }
+                            transitionSelection = false
                             transport.editSet(drillProject.currentSetIndex)
                             const p = mapToItem(field, mouse.x, mouse.y)
                             pressField = Qt.point(root.toFieldX(p.x), root.toFieldY(p.y))
@@ -811,7 +926,7 @@ Item {
                             root.performerActivated(marcher.index)
                         }
                         onPositionChanged: {
-                            if (!pressed) return
+                            if (!pressed || transitionSelection) return
                             const p = mapToItem(field, mouse.x, mouse.y)
                             let dx = root.toFieldX(p.x) - pressField.x
                             let dy = root.toFieldY(p.y) - pressField.y
@@ -823,8 +938,14 @@ Item {
                                                      (mouse.modifiers & Qt.ShiftModifier) !== 0,
                                                      (mouse.modifiers & Qt.ControlModifier) !== 0)
                         }
-                        onReleased: drillProject.endMove()
-                        onCanceled: drillProject.endMove()
+                        onReleased: {
+                            if (transitionSelection) transitionSelection = false
+                            else drillProject.endMove()
+                        }
+                        onCanceled: {
+                            if (transitionSelection) transitionSelection = false
+                            else drillProject.endMove()
+                        }
                     }
                 }
             }
@@ -892,5 +1013,5 @@ Item {
             event.accepted = true
         }
     }
-    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds(true);root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){root.cancelDrawing();refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} }
+    Connections { target: drillProject; function refreshSelection(){root.selectionBounds=drillProject.selectedBounds(true);root.selectedShapeIndex=drillProject.selectedShapeIndex()} function onSelectionChanged(){root.cancelDrawing();refreshSelection()} function onDataChanged(){refreshSelection()} function onShapesChanged(){refreshSelection()} function onTransitionEditChanged(){geometryCanvas.requestPaint()} }
 }
