@@ -466,7 +466,7 @@ ApplicationWindow {
                 if (workspaceSettings.compactTimelineDefaultApplied && workspaceSettings.verticalSplitState)
                     restoreState(workspaceSettings.verticalSplitState)
                 else {
-                    timelinePanel.SplitView.preferredHeight = 220
+                    timelinePanel.SplitView.preferredHeight = 190
                     workspaceSettings.verticalSplitState = undefined
                     workspaceSettings.compactTimelineDefaultApplied = true
                 }
@@ -475,7 +475,7 @@ ApplicationWindow {
             handle: Rectangle {
                 implicitHeight: 6; color: SplitHandle.pressed ? MarchCraftTheme.accent : SplitHandle.hovered ? MarchCraftTheme.dividerStrong : MarchCraftTheme.divider
                 TapHandler { onDoubleTapped: {
-                    timelinePanel.SplitView.preferredHeight = 220
+                    timelinePanel.SplitView.preferredHeight = 190
                     workspaceSettings.timelineMaximized = false
                     workspaceSettings.verticalSplitState = undefined
                 } }

@@ -83,8 +83,8 @@ Frame {
 
     visible: !workspaceSettingsContext.timelineCollapsed
     SplitView.preferredHeight: workspaceSettingsContext.timelineMaximized
-        ? Math.max(380, verticalSplitContext.height - 210) : 220
-    SplitView.minimumHeight: 180
+        ? Math.max(380, verticalSplitContext.height - 210) : 190
+    SplitView.minimumHeight: 170
     SplitView.maximumHeight: Math.max(380, verticalSplitContext.height - 170)
     padding: 8
     background: Rectangle { color: MarchCraftTheme.panel; border.color: MarchCraftTheme.divider }
