@@ -56,6 +56,7 @@ void DrillProject::applyMusicDocument(MarchCraft::MusicDocument document, const 
         m_timelineRangeEnd = m_music.measures.first().endTick;
         m_timelineSelectionKind = QStringLiteral("measure");
         m_selectedTransition = -1;
+        m_selectedTimelineMarkerId.clear();
         m_selectedTimelineSets.clear();
     }
     rebuildTimingFromMusic();
@@ -199,6 +200,7 @@ void DrillProject::setMusicSelection(int startMeasure, int endMeasure)
     m_timelineRangeEnd = m_music.measures[last].endTick;
     m_timelineSelectionKind = QStringLiteral("measure");
     m_selectedTransition = -1;
+    m_selectedTimelineMarkerId.clear();
     m_selectedTimelineSets.clear();
     emit musicChanged();
     emit timelineSelectionChanged();
