@@ -449,7 +449,10 @@ Item {
                         }
                         Label {
                             text: "m" + (modelData.measure || "—") + " b" + (modelData.beat || "—")
-                                + "\n" + (Number(modelData.timeMs || 0) / 1000).toFixed(2) + " s"
+                                + "\n" + (Number(modelData.showTimeMs !== undefined
+                                    ? modelData.showTimeMs
+                                    : Number(modelData.timeMs || 0) + Number(drillProject.openingDurationMs || 0))
+                                    / 1000).toFixed(2) + " s show"
                             color: MarchCraftTheme.textSecondary
                             font.pixelSize: 10
                             Layout.preferredWidth: 120

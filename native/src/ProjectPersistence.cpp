@@ -81,6 +81,7 @@ QJsonObject DrillProject::toJson() const
             {QStringLiteral("selectedSetIndices"), selectedSets},
             {QStringLiteral("timelineSelectionKind"), m_timelineSelectionKind},
             {QStringLiteral("selectedTransition"), m_selectedTransition},
+            {QStringLiteral("selectedTimelineMarkerId"), m_selectedTimelineMarkerId},
             {QStringLiteral("timelineRangeStart"), m_timelineRangeStart},
             {QStringLiteral("timelineRangeEnd"), m_timelineRangeEnd},
             {QStringLiteral("playbackSource"), m_playbackSource},
@@ -263,9 +264,31 @@ bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
     m_selectedTransition = qBound(-1, object.value(QStringLiteral("selectedTransition")).toInt(-1), m_sets.size() - 1);
     if (m_selectedTransition <= 0 && m_timelineSelectionKind == QStringLiteral("transition"))
         m_timelineSelectionKind = QStringLiteral("set");
+    m_selectedTimelineMarkerId = object.value(QStringLiteral("selectedTimelineMarkerId")).toString();
+    qint64 selectedMarkerTick = -1;
+    if (m_timelineSelectionKind == QStringLiteral("marker")) {
+        const auto authoredMarker = std::find_if(m_timelineMarkers.cbegin(), m_timelineMarkers.cend(),
+            [this](const auto &marker) { return marker.id == m_selectedTimelineMarkerId; });
+        if (authoredMarker != m_timelineMarkers.cend()) {
+            selectedMarkerTick = authoredMarker->tick;
+        } else if (m_selectedTimelineMarkerId.startsWith(QStringLiteral("score:"))) {
+            bool markerIndexValid = false;
+            const int markerIndex = m_selectedTimelineMarkerId.sliced(6).toInt(&markerIndexValid);
+            if (markerIndexValid && markerIndex >= 0 && markerIndex < m_music.markers.size())
+                selectedMarkerTick = m_music.markers.at(markerIndex).tick;
+        }
+        if (selectedMarkerTick < 0) {
+            m_selectedTimelineMarkerId.clear();
+            m_timelineSelectionKind = QStringLiteral("none");
+        }
+    } else {
+        m_selectedTimelineMarkerId.clear();
+    }
     m_timelineRangeStart = qMax<qint64>(0, object.value(QStringLiteral("timelineRangeStart")).toVariant().toLongLong());
     m_timelineRangeEnd = qMax(m_timelineRangeStart,
         object.value(QStringLiteral("timelineRangeEnd")).toVariant().toLongLong());
+    if (selectedMarkerTick >= 0)
+        m_timelineRangeStart = m_timelineRangeEnd = selectedMarkerTick;
     m_playbackSource = object.value(QStringLiteral("playbackSource")).toString(
         m_audioSource.isEmpty() ? QStringLiteral("midi") : QStringLiteral("rehearsal"));
     m_midiMasterVolume = qBound(0.0, object.value(QStringLiteral("midiMasterVolume")).toDouble(0.75), 1.0);
@@ -840,6 +863,7 @@ QJsonObject DrillProject::movementState(const QJsonObject &project)
         QStringLiteral("musicSelectionStart"), QStringLiteral("musicSelectionEnd"),
         QStringLiteral("timelineMarkers"), QStringLiteral("selectedSetIndices"),
         QStringLiteral("timelineSelectionKind"), QStringLiteral("selectedTransition"),
+        QStringLiteral("selectedTimelineMarkerId"),
         QStringLiteral("timelineRangeStart"), QStringLiteral("timelineRangeEnd"),
         QStringLiteral("audioSource"), QStringLiteral("audioOffsetMs"), QStringLiteral("bpm"),
         QStringLiteral("meterRegions"), QStringLiteral("tempoRegions"),

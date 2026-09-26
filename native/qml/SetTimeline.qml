@@ -26,11 +26,21 @@ Frame {
     property alias exposedTimelineActionsButton: pageToolsButton
     property int inspectorRevision: 0
     readonly property bool compactLayout: height < 285
+    readonly property bool narrowToolbar: width < 1450
     property var transitionDetails: ({})
     property var selectedSetDetails: {
         inspectorRevision
         return drillProjectContext.selectedSetIndices.length === 1
             ? drillProjectContext.setInfo(drillProjectContext.selectedSetIndices[0]) : ({})
+    }
+    property var selectedMarkerDetails: {
+        inspectorRevision
+        const markers = drillProjectContext.timelineMarkers || []
+        for (let index = 0; index < markers.length; ++index) {
+            if (markers[index].id === drillProjectContext.selectedTimelineMarkerId)
+                return markers[index]
+        }
+        return ({})
     }
 
     function showMusic() {
@@ -94,6 +104,7 @@ Frame {
         function onTimelineSelectionChanged() { timelinePanel.refreshInspector() }
         function onTimingChanged() { timelinePanel.refreshInspector() }
         function onSetsChanged() { timelinePanel.refreshInspector() }
+        function onTimelineMarkersChanged() { timelinePanel.refreshInspector() }
     }
 
     Component.onCompleted: refreshInspector()
@@ -135,6 +146,7 @@ Frame {
                 text: drillProjectContext.timelineSelectionKind === "transition" ? "Transition selected"
                     : drillProjectContext.timelineSelectionKind === "time" ? "Time range selected"
                     : drillProjectContext.timelineSelectionKind === "measure" ? "Measure range selected"
+                    : drillProjectContext.timelineSelectionKind === "marker" ? "Marker selected"
                     : drillProjectContext.timelineSelectionKind === "none" ? "No timeline selection"
                     : (drillProjectContext.selectedSetIndices.length + " set" + (drillProjectContext.selectedSetIndices.length === 1 ? "" : "s") + " selected")
                 color: MarchCraftTheme.textSecondary
@@ -162,17 +174,37 @@ Frame {
                 ToolTip.visible: hovered
                 onClicked: timeline.snapEnabled = !timeline.snapEnabled
             }
-            AppButton { text: "Music tools…"; onClicked: musicTools.openMenu() }
-            AppButton { text: "Analyze music…"; onClicked: musicTools.openSetPlan() }
-            AppButton { text: "Markers…"; onClicked: musicTools.openMarkers() }
-            AppButton { text: "Production sheet…"; onClicked: productionSheet.open() }
+            RowLayout {
+                visible: timelinePanel.compactLayout
+                    && drillProjectContext.timelineSelectionKind === "transition"
+                    && drillProjectContext.selectedTransitionIndex > 0
+                spacing: 3
+                Label { text: "Counts"; color: MarchCraftTheme.textSecondary; font.pixelSize: 10 }
+                SpinBox {
+                    id: compactTransitionCounts
+                    objectName: "compactTransitionCountsEditor"
+                    Layout.preferredWidth: 76
+                    implicitHeight: 28
+                    from: 1
+                    to: 2048
+                    editable: true
+                    value: timelinePanel.transitionDetails.counts || 1
+                    onValueModified: drillProjectContext.setTransitionCounts(
+                        drillProjectContext.selectedTransitionIndex, value)
+                }
+            }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Music tools…"; onClicked: musicTools.openMenu() }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Analyze music…"; onClicked: musicTools.openSetPlan() }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Markers…"; onClicked: musicTools.openMarkers() }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Production sheet…"; onClicked: productionSheet.open() }
             Item { Layout.fillWidth: true }
             AppToolButton { text: "−"; ToolTip.text: "Zoom out"; ToolTip.visible: hovered; onClicked: timeline.zoomBy(1 / 1.25, timeline.viewportWidth / 2) }
             AppToolButton { text: "+"; ToolTip.text: "Zoom in"; ToolTip.visible: hovered; onClicked: timeline.zoomBy(1.25, timeline.viewportWidth / 2) }
-            AppButton { text: "Fit selection"; onClicked: timeline.fitSelection() }
-            AppButton { text: "Fit show"; onClicked: timeline.fitShow() }
-            AppToolButton { text: "◎"; ToolTip.text: "Reveal editing set"; ToolTip.visible: hovered; onClicked: timeline.revealCurrentSet() }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Fit selection"; onClicked: timeline.fitSelection() }
+            AppButton { visible: !timelinePanel.narrowToolbar; text: "Fit show"; onClicked: timeline.fitShow() }
+            AppToolButton { visible: !timelinePanel.narrowToolbar; text: "◎"; ToolTip.text: "Reveal editing set"; ToolTip.visible: hovered; onClicked: timeline.revealCurrentSet() }
             AppButton {
+                visible: !timelinePanel.narrowToolbar
                 text: "Follow"
                 checkable: true
                 checked: timeline.followPlayhead
@@ -181,6 +213,12 @@ Frame {
                     if (timeline.followPlayhead)
                         timeline.revealMs(transportContext.currentMs)
                 }
+            }
+            AppButton {
+                id: timelineOverflowButton
+                visible: timelinePanel.narrowToolbar
+                text: "More…"
+                onClicked: timelineOverflowMenu.popup(timelineOverflowButton, 0, timelineOverflowButton.height)
             }
         }
 
@@ -212,6 +250,7 @@ Frame {
             background: Rectangle {
                 color: MarchCraftTheme.panelHeader
                 border.color: drillProjectContext.timelineSelectionKind === "transition"
+                    || drillProjectContext.timelineSelectionKind === "marker"
                     ? MarchCraftTheme.accent : MarchCraftTheme.divider
                 radius: 4
             }
@@ -319,6 +358,31 @@ Frame {
                     }
                 }
 
+                RowLayout {
+                    visible: drillProjectContext.timelineSelectionKind === "marker"
+                    spacing: 7
+                    Label {
+                        text: "MARKER · " + (timelinePanel.selectedMarkerDetails.name || "")
+                        color: MarchCraftTheme.textPrimary
+                        font.bold: true
+                    }
+                    Label {
+                        text: (timelinePanel.selectedMarkerDetails.type || "Marker")
+                            + " · count " + (timelinePanel.selectedMarkerDetails.absoluteCount || 0)
+                            + (timelinePanel.selectedMarkerDetails.measure
+                                ? " · m" + timelinePanel.selectedMarkerDetails.measure
+                                    + " b" + Number(timelinePanel.selectedMarkerDetails.beat || 1).toFixed(2) : "")
+                            + " · " + timeline.formatTime(timelinePanel.selectedMarkerDetails.timeMs || 0)
+                            + (timelinePanel.selectedMarkerDetails.readOnly ? " · imported, read only" : " · drag pin to move")
+                        color: MarchCraftTheme.textSecondary
+                        font.pixelSize: 10
+                    }
+                    AppButton {
+                        text: "Edit markers…"
+                        onClicked: musicTools.openMarkers()
+                    }
+                }
+
                 Item { Layout.fillWidth: true }
                 AppToolButton {
                     visible: drillProjectContext.timelineSelectionKind !== "none"
@@ -347,6 +411,26 @@ Frame {
                     onActivated: drillProjectContext.playbackSource = currentIndex === 1 ? "rehearsal"
                         : currentIndex === 2 ? "mute" : "midi"
                 }
+            }
+        }
+    }
+
+    Menu {
+        id: timelineOverflowMenu
+        AppMenuItem { text: "Music tools…"; onTriggered: musicTools.openMenu() }
+        AppMenuItem { text: "Analyze music…"; onTriggered: musicTools.openSetPlan() }
+        AppMenuItem { text: "Timeline markers…"; onTriggered: musicTools.openMarkers() }
+        AppMenuItem { text: "Production sheet…"; onTriggered: productionSheet.open() }
+        MenuSeparator {}
+        AppMenuItem { text: "Fit selection"; onTriggered: timeline.fitSelection() }
+        AppMenuItem { text: "Fit show"; onTriggered: timeline.fitShow() }
+        AppMenuItem { text: "Reveal editing set"; onTriggered: timeline.revealCurrentSet() }
+        AppMenuItem {
+            text: timeline.followPlayhead ? "Stop following playhead" : "Follow playhead"
+            onTriggered: {
+                timeline.followPlayhead = !timeline.followPlayhead
+                if (timeline.followPlayhead)
+                    timeline.revealMs(transportContext.currentMs)
             }
         }
     }

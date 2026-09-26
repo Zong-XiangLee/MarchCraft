@@ -225,15 +225,43 @@ private slots:
         const QString firstId = project.setInfo(1).value(QStringLiteral("id")).toString();
         const QString thirdCoordinate = project.coordinateFor(0, 2);
 
+        project.setCurrentSetIndex(1);
+        project.selectPerformer(0, false);
+        project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(44, 34)});
+        QVERIFY(project.beginTransitionEdit());
+        project.setTransitionEditType(QStringLiteral("stagger"),
+            {{QStringLiteral("baseDelayCounts"), 2.0},
+             {QStringLiteral("arriveTogether"), true}});
+        QVERIFY(project.applyTransitionEdit());
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(),
+                 QStringLiteral("curved"));
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathStartCount")).toDouble(), 2.0);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathDurationCounts")).toDouble(), 14.0);
+        QVERIFY(project.beginTransitionEdit());
+        const auto authoredControlPoints = project.transitionEditControlPoints();
+        project.cancelTransitionEdit();
+
         QVERIFY(project.setTransitionCounts(1, 24));
         QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 24);
         QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 8);
         QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 32);
         QCOMPARE(project.coordinateFor(0, 2), thirdCoordinate);
         QCOMPARE(project.setInfo(1).value(QStringLiteral("id")).toString(), firstId);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(),
+                 QStringLiteral("curved"));
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathStartCount")).toDouble(), 2.0);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathDurationCounts")).toDouble(), 14.0);
+        QVERIFY(project.beginTransitionEdit());
+        QCOMPARE(project.transitionEditControlPoints(), authoredControlPoints);
+        project.cancelTransitionEdit();
         project.undo();
         QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 16);
         QCOMPARE(project.setInfo(2).value(QStringLiteral("absoluteCount")).toInt(), 24);
+        project.setCurrentSetIndex(1);
+        project.selectPerformer(0, false);
+        QVERIFY(project.beginTransitionEdit());
+        QCOMPARE(project.transitionEditControlPoints(), authoredControlPoints);
+        project.cancelTransitionEdit();
         project.redo();
 
         QVERIFY(project.setTransitionCounts(1, 8));
@@ -273,12 +301,41 @@ private slots:
         QCOMPARE(project.timelineSelectionKind(), QStringLiteral("transition"));
         QCOMPARE(project.transitionInfo(1).value(QStringLiteral("sourceNumber")).toString(), QStringLiteral("1"));
 
+        project.selectTimelineMarker(markerId);
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("marker"));
+        QCOMPARE(project.selectedTimelineMarkerId(), markerId);
+        QCOMPARE(project.timelineRangeStartTick(), qint64(12 * MarchCraft::TicksPerQuarter));
+        const qint64 movedMarkerTick = 14 * MarchCraft::TicksPerQuarter;
+        QVERIFY(project.updateTimelineMarker(markerId, movedMarkerTick, QStringLiteral("Brass impact"),
+            QStringLiteral("impact"), QStringLiteral("#ff6600"),
+            QStringLiteral("Manual synchronization landmark")));
+        QCOMPARE(project.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong(), movedMarkerTick);
+        QCOMPARE(project.timelineRangeStartTick(), movedMarkerTick);
+        project.undo();
+        QCOMPARE(project.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong(),
+                 qint64(12 * MarchCraft::TicksPerQuarter));
+        QCOMPARE(project.selectedTimelineMarkerId(), markerId);
+        project.redo();
+        QCOMPARE(project.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong(), movedMarkerTick);
+        QVERIFY(project.removeTimelineMarker(markerId));
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("none"));
+        QVERIFY(project.selectedTimelineMarkerId().isEmpty());
+        QCOMPARE(project.timelineRangeStartTick(), qint64(0));
+        project.undo();
+        QCOMPARE(project.timelineMarkerCount(), 1);
+        QCOMPARE(project.timelineSelectionKind(), QStringLiteral("marker"));
+        QCOMPARE(project.selectedTimelineMarkerId(), markerId);
+
         const QString path = temporary.filePath(QStringLiteral("timeline-v12.marchcraft"));
         QVERIFY(project.saveProject(path));
         DrillProject restored; QVERIFY(restored.loadProject(path));
         QCOMPARE(restored.timelineMarkerCount(), 1);
         QCOMPARE(restored.timelineMarkerInfo(0).value(QStringLiteral("notes")).toString(),
                  QStringLiteral("Manual synchronization landmark"));
+        QCOMPARE(restored.timelineMarkerInfo(0).value(QStringLiteral("tick")).toLongLong(), movedMarkerTick);
+        QCOMPARE(restored.timelineSelectionKind(), QStringLiteral("marker"));
+        QCOMPARE(restored.selectedTimelineMarkerId(), markerId);
+        QCOMPARE(restored.timelineRangeStartTick(), movedMarkerTick);
         QCOMPARE(restored.setInfo(1).value(QStringLiteral("counts")).toInt(), 11);
         QCOMPARE(restored.setInfo(2).value(QStringLiteral("counts")).toInt(), 7);
         QCOMPARE(restored.coordinateFor(0, 2), thirdCoordinate);
@@ -292,6 +349,7 @@ private slots:
         midi.write(impactMidiFixture()); midi.close();
 
         DrillProject project; project.newProject(); QVERIFY(project.importMidi(midiPath));
+        project.setOpeningBehavior(QStringLiteral("hold"), 8);
         project.addSet(QStringLiteral("Early set"), 10);
         project.addTimelineMarker(24 * MarchCraft::TicksPerQuarter,
             QStringLiteral("Designer hit"), QStringLiteral("impact"), QStringLiteral("#f97316"));
@@ -318,6 +376,9 @@ private slots:
         int alignmentIndex = -1;
         for (int index = 0; index < project.setPlanCandidateCount(); ++index) {
             const auto candidate = project.setPlanCandidateInfo(index);
+            QVERIFY(qAbs(candidate.value(QStringLiteral("showTimeMs")).toDouble()
+                         - candidate.value(QStringLiteral("timeMs")).toDouble()
+                         - project.openingDurationMs()) < 0.01);
             const QString kind = candidate.value(QStringLiteral("kind")).toString();
             if (kind == QStringLiteral("regular"))
                 QVERIFY2(candidate.value(QStringLiteral("accepted")).toBool(),

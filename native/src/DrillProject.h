@@ -45,6 +45,7 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList selectedSetIndices READ selectedSetIndices NOTIFY timelineSelectionChanged)
     Q_PROPERTY(QString timelineSelectionKind READ timelineSelectionKind NOTIFY timelineSelectionChanged)
     Q_PROPERTY(int selectedTransitionIndex READ selectedTransitionIndex NOTIFY timelineSelectionChanged)
+    Q_PROPERTY(QString selectedTimelineMarkerId READ selectedTimelineMarkerId NOTIFY timelineSelectionChanged)
     Q_PROPERTY(qint64 timelineRangeStartTick READ timelineRangeStartTick NOTIFY timelineSelectionChanged)
     Q_PROPERTY(qint64 timelineRangeEndTick READ timelineRangeEndTick NOTIFY timelineSelectionChanged)
     Q_PROPERTY(int setCount READ setCount NOTIFY setsChanged)
@@ -235,6 +236,7 @@ public:
     QVariantList selectedSetIndices() const;
     QString timelineSelectionKind() const { return m_timelineSelectionKind; }
     int selectedTransitionIndex() const { return m_selectedTransition; }
+    QString selectedTimelineMarkerId() const { return m_selectedTimelineMarkerId; }
     qint64 timelineRangeStartTick() const { return m_timelineRangeStart; }
     qint64 timelineRangeEndTick() const { return m_timelineRangeEnd; }
     int setCount() const { return m_sets.size(); }
@@ -385,6 +387,7 @@ public:
     Q_INVOKABLE void selectTimelineSet(int index, int mode = 0);
     Q_INVOKABLE bool isSetSelected(int index) const;
     Q_INVOKABLE void selectTimelineTransition(int destinationSet);
+    Q_INVOKABLE void selectTimelineMarker(const QString &id);
     Q_INVOKABLE void selectTimelineRange(qint64 startTick, qint64 endTick);
     Q_INVOKABLE void clearTimelineSelection();
     Q_INVOKABLE void setMusicSelection(int startMeasure, int endMeasure);
@@ -719,6 +722,7 @@ private:
     QSet<int> m_selectedTimelineSets{0};
     QString m_timelineSelectionKind{QStringLiteral("set")};
     int m_selectedTransition = -1;
+    QString m_selectedTimelineMarkerId;
     qint64 m_timelineRangeStart = 0;
     qint64 m_timelineRangeEnd = 0;
     bool m_dirty = false;
