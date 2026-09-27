@@ -69,6 +69,7 @@ void DrillProject::selectTimelineSet(int index, int mode)
     m_selectedSetEnd = ordered.isEmpty() ? index : ordered.last();
     m_timelineSelectionKind = QStringLiteral("set");
     m_selectedTransition = -1;
+    m_selectedTimelineMarkerId.clear();
     const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
     m_musicSelectionStart = m_musicSelectionEnd = -1;
     setCurrentSetIndex(index);
@@ -84,7 +85,34 @@ void DrillProject::selectTimelineTransition(int destinationSet)
         && m_selectedTransition == destinationSet) return;
     m_timelineSelectionKind = QStringLiteral("transition");
     m_selectedTransition = destinationSet;
+    m_selectedTimelineMarkerId.clear();
     m_selectedTimelineSets.clear();
+    const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
+    m_musicSelectionStart = m_musicSelectionEnd = -1;
+    emit timelineSelectionChanged();
+    if (hadMusicSelection) emit musicChanged();
+}
+
+void DrillProject::selectTimelineMarker(const QString &id)
+{
+    QVariantMap selected;
+    for (int index = 0; index < timelineMarkerCount(); ++index) {
+        const auto marker = timelineMarkerInfo(index);
+        if (marker.value(QStringLiteral("id")).toString() == id) {
+            selected = marker;
+            break;
+        }
+    }
+    if (selected.isEmpty()) return;
+    if (m_timelineSelectionKind == QStringLiteral("marker")
+        && m_selectedTimelineMarkerId == id) return;
+
+    m_timelineSelectionKind = QStringLiteral("marker");
+    m_selectedTimelineMarkerId = id;
+    m_selectedTransition = -1;
+    m_selectedTimelineSets.clear();
+    m_timelineRangeStart = m_timelineRangeEnd
+        = selected.value(QStringLiteral("tick")).toLongLong();
     const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
     m_musicSelectionStart = m_musicSelectionEnd = -1;
     emit timelineSelectionChanged();
@@ -99,6 +127,7 @@ void DrillProject::selectTimelineRange(qint64 startTick, qint64 endTick)
     m_timelineRangeEnd = qMax(startTick, endTick);
     m_timelineSelectionKind = QStringLiteral("time");
     m_selectedTransition = -1;
+    m_selectedTimelineMarkerId.clear();
     m_selectedTimelineSets.clear();
     const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
     m_musicSelectionStart = m_musicSelectionEnd = -1;
@@ -109,10 +138,12 @@ void DrillProject::selectTimelineRange(qint64 startTick, qint64 endTick)
 void DrillProject::clearTimelineSelection()
 {
     if (m_timelineSelectionKind == QStringLiteral("none") && m_selectedTimelineSets.isEmpty()
+        && m_selectedTimelineMarkerId.isEmpty()
         && m_musicSelectionStart < 0 && m_musicSelectionEnd < 0) return;
     const bool hadMusicSelection = m_musicSelectionStart >= 0 || m_musicSelectionEnd >= 0;
     m_timelineSelectionKind = QStringLiteral("none");
     m_selectedTransition = -1;
+    m_selectedTimelineMarkerId.clear();
     m_selectedTimelineSets.clear();
     m_musicSelectionStart = m_musicSelectionEnd = -1;
     m_timelineRangeStart = m_timelineRangeEnd = 0;
@@ -157,6 +188,7 @@ bool DrillProject::applyTransitionCounts(int destinationSet, int counts, const Q
     recalculateCounts();
     m_selectedTransition = destinationSet;
     m_timelineSelectionKind = QStringLiteral("transition");
+    m_selectedTimelineMarkerId.clear();
     m_selectedTimelineSets.clear();
     emit timingChanged();
     emit timelineSelectionChanged();
@@ -478,6 +510,7 @@ bool DrillProject::updateTimelineMarker(const QString &id, qint64 tick, const QS
     if (found == m_timelineMarkers.end() || cleanName.isEmpty()) return false;
     const auto before = toJson();
     found->tick = qMax<qint64>(0, tick);
+    const qint64 updatedTick = found->tick;
     found->name = cleanName;
     found->type = type.simplified().isEmpty() ? QStringLiteral("user") : type.simplified().left(32);
     const QColor parsed(color);
@@ -487,6 +520,10 @@ bool DrillProject::updateTimelineMarker(const QString &id, qint64 tick, const QS
         return a.tick < b.tick;
     });
     emit timelineMarkersChanged(); emit musicChanged();
+    if (m_selectedTimelineMarkerId == id) {
+        m_timelineRangeStart = m_timelineRangeEnd = updatedTick;
+        emit timelineSelectionChanged();
+    }
     commitSnapshot(before, QStringLiteral("Edit timeline marker"));
     return true;
 }
@@ -499,6 +536,12 @@ bool DrillProject::removeTimelineMarker(const QString &id)
     const auto before = toJson();
     m_timelineMarkers.erase(found);
     emit timelineMarkersChanged(); emit musicChanged();
+    if (m_selectedTimelineMarkerId == id) {
+        m_selectedTimelineMarkerId.clear();
+        m_timelineSelectionKind = QStringLiteral("none");
+        m_timelineRangeStart = m_timelineRangeEnd = 0;
+        emit timelineSelectionChanged();
+    }
     commitSnapshot(before, QStringLiteral("Remove timeline marker"));
     return true;
 }
@@ -507,7 +550,11 @@ QVariantList DrillProject::setPlanCandidates() const
 {
     QVariantList result;
     result.reserve(m_setPlanCandidates.size());
-    for (const auto &candidate : m_setPlanCandidates) result.push_back(candidate.toVariant());
+    for (const auto &candidate : m_setPlanCandidates) {
+        auto view = candidate.toVariant();
+        view.insert(QStringLiteral("showTimeMs"), openingDurationMs() + candidate.timeMs);
+        result.push_back(view);
+    }
     return result;
 }
 
@@ -521,8 +568,10 @@ int DrillProject::setPlanAcceptedNewSetCount() const
 
 QVariantMap DrillProject::setPlanCandidateInfo(int index) const
 {
-    return index >= 0 && index < m_setPlanCandidates.size()
-        ? m_setPlanCandidates[index].toVariant() : QVariantMap{};
+    if (index < 0 || index >= m_setPlanCandidates.size()) return {};
+    auto view = m_setPlanCandidates[index].toVariant();
+    view.insert(QStringLiteral("showTimeMs"), openingDurationMs() + m_setPlanCandidates[index].timeMs);
+    return view;
 }
 
 bool DrillProject::analyzeMusicForSetPlan(const QString &density, const QString &priority,
@@ -737,6 +786,7 @@ bool DrillProject::applySetPlan()
     m_selectedTimelineSets = {m_currentSet};
     m_timelineSelectionKind = QStringLiteral("set");
     m_selectedTransition = -1;
+    m_selectedTimelineMarkerId.clear();
     m_setPlanPreviewActive = false;
     m_setPlanCandidates.clear();
     m_applyingSetPlan = false;

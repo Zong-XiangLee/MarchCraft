@@ -16,6 +16,7 @@ TestCase {
         property var selectedSetIndices: [0]
         property string timelineSelectionKind: "set"
         property int selectedTransitionIndex: -1
+        property string selectedTimelineMarkerId: ""
         property int timelineRangeStartTick: 0
         property int timelineRangeEndTick: 0
         property int currentSetIndex: 0
@@ -23,7 +24,8 @@ TestCase {
         property bool loopEnabled: false
         property int waveformPeakCount: 0
         property int timelineMarkerCount: 1
-        property var timelineMarkers: [{id: "mark", tick: 8000, name: "Impact", type: "impact", color: "#f97316", absoluteCount: 8, measure: 3, beat: 1}]
+        property var timelineMarkers: [{id: "mark", tick: 8000, name: "Impact", type: "impact", color: "#f97316",
+            notes: "Brass entrance", readOnly: false, absoluteCount: 8, measure: 3, beat: 1, timeMs: 9000}]
         property bool setPlanPreviewActive: false
         property int setPlanCandidateCount: 0
         property var setPlanCandidates: []
@@ -34,6 +36,8 @@ TestCase {
         property int movedTo: -1
         property int resizedTransition: -1
         property int resizedCounts: -1
+        property string movedMarkerId: ""
+        property int movedMarkerTick: -1
         property int movedCandidate: -1
         property int movedCandidateTick: -1
         signal movementsChanged()
@@ -53,6 +57,7 @@ TestCase {
             timelineRangeStartTick = Math.min(a, b) * 4000
             timelineRangeEndTick = (Math.max(a, b) + 1) * 4000
             timelineSelectionKind = "measure"; selectedSetIndices = []; selectedTransitionIndex = -1
+            selectedTimelineMarkerId = ""
             musicChanged(); timelineSelectionChanged()
         }
         function moveSet(a, b) { movedFrom = a; movedTo = b; setsChanged() }
@@ -79,11 +84,18 @@ TestCase {
             selectedSetStartIndex = Math.min.apply(Math, selectedSetIndices)
             selectedSetEndIndex = Math.max.apply(Math, selectedSetIndices)
             currentSetIndex = index; timelineSelectionKind = "set"; selectedTransitionIndex = -1
+            selectedTimelineMarkerId = ""
             setRangeChanged(); timelineSelectionChanged()
         }
-        function selectTimelineTransition(index) { selectedTransitionIndex = index; timelineSelectionKind = "transition"; selectedSetIndices = []; timelineSelectionChanged() }
-        function selectTimelineRange(a, b) { timelineRangeStartTick = Math.min(a, b); timelineRangeEndTick = Math.max(a, b); timelineSelectionKind = "time"; selectedSetIndices = []; timelineSelectionChanged() }
-        function clearTimelineSelection() { timelineSelectionKind = "none"; selectedTransitionIndex = -1; selectedSetIndices = []; timelineSelectionChanged() }
+        function selectTimelineTransition(index) { selectedTransitionIndex = index; selectedTimelineMarkerId = ""; timelineSelectionKind = "transition"; selectedSetIndices = []; timelineSelectionChanged() }
+        function selectTimelineMarker(id) {
+            if (timelineSelectionKind === "marker" && selectedTimelineMarkerId === id)
+                return
+            selectedTimelineMarkerId = id; selectedTransitionIndex = -1
+            timelineSelectionKind = "marker"; selectedSetIndices = []; timelineSelectionChanged()
+        }
+        function selectTimelineRange(a, b) { timelineRangeStartTick = Math.min(a, b); timelineRangeEndTick = Math.max(a, b); timelineSelectionKind = "time"; selectedSetIndices = []; selectedTimelineMarkerId = ""; timelineSelectionChanged() }
+        function clearTimelineSelection() { timelineSelectionKind = "none"; selectedTransitionIndex = -1; selectedTimelineMarkerId = ""; selectedSetIndices = []; timelineSelectionChanged() }
         function transitionInfo(index) { return {counts: 8, measure: index + 1, beat: 1, averageDistance: 3.2, maximumDistance: 5.5} }
         function previewTransitionResize(index, tick, snapping) {
             const start = (index - 1) * 4000
@@ -93,6 +105,14 @@ TestCase {
                 snapType: snapping ? "measure" : "count", snapLabel: snapping ? "Measure " + (index + 1) : "Count"}
         }
         function setTransitionCounts(index, counts) { resizedTransition = index; resizedCounts = counts; timingChanged(); return true }
+        function updateTimelineMarker(id, tick, name, type, color, notes) {
+            movedMarkerId = id; movedMarkerTick = tick
+            timelineMarkers = [{id: id, tick: tick, name: name, type: type, color: color,
+                notes: notes, readOnly: false, absoluteCount: absoluteCountAtTick(tick),
+                measure: Math.floor(tick / 4000) + 1, beat: Math.floor((tick % 4000) / 1000) + 1,
+                timeMs: 1000 + tick}]
+            return true
+        }
         function moveSetPlanCandidate(index, tick) { movedCandidate = index; movedCandidateTick = tick; return true }
     }
     QtObject {
@@ -133,11 +153,16 @@ TestCase {
         mockTransport.playing = false; mockTransport.currentMs = 0; mockTransport.lastPage = -1
         mockProject.selectedSetStartIndex = 0; mockProject.selectedSetEndIndex = 0
         mockProject.selectedSetIndices = [0]; mockProject.timelineSelectionKind = "set"; mockProject.selectedTransitionIndex = -1
+        mockProject.selectedTimelineMarkerId = ""
         mockProject.musicStart = 0; mockProject.musicEnd = 0; mockProject.movedFrom = -1; mockProject.movedTo = -1
         mockProject.resizedTransition = -1; mockProject.resizedCounts = -1
+        mockProject.movedMarkerId = ""; mockProject.movedMarkerTick = -1
+        mockProject.timelineMarkers = [{id: "mark", tick: 8000, name: "Impact", type: "impact", color: "#f97316",
+            notes: "Brass entrance", readOnly: false, absoluteCount: 8, measure: 3, beat: 1, timeMs: 9000}]
         mockProject.movedCandidate = -1; mockProject.movedCandidateTick = -1
         mockProject.setPlanPreviewActive = false; mockProject.setPlanCandidateCount = 0; mockProject.setPlanCandidates = []
         timeline.cancelDrag(); timeline.followPlayhead = true; timeline.fitShow()
+        timeline.cancelTransitionResize()
         editSpy.clear(); menuSpy.clear(); wait(20)
     }
     function test_openingMarkerNavigatesToFirstPage() {
@@ -252,15 +277,70 @@ TestCase {
     }
     function test_transitionBoundaryResizesWithoutReordering() {
         const handle = findChild(timeline, "transitionHandle1")
+        const downstream = findChild(timeline, "pageMarker2").parent
+        const musicMeasure = findChild(timeline, "measureHit1").parent
+        const downstreamBefore = downstream.x
+        const musicBefore = musicMeasure.x
         verify(handle !== null)
         mousePress(handle, 6, 9)
         mouseMove(handle, 80, 9, 30)
         verify(timeline.resizingTransition >= 0)
+        verify(Math.abs(timeline.resizeDeltaMs) > 1)
+        verify(Math.abs(downstream.x - downstreamBefore) > 1)
+        fuzzyCompare(musicMeasure.x, musicBefore, 0.01)
+        compare(mockProject.resizedTransition, -1)
         mouseRelease(handle, 80, 9)
         compare(mockProject.resizedTransition, 1)
         verify(mockProject.resizedCounts > 0)
         compare(mockProject.movedFrom, -1)
         compare(timeline.resizingTransition, -1)
+    }
+    function test_transitionResizeCancelRestoresPreviewWithoutMutation() {
+        const downstream = findChild(timeline, "pageMarker3").parent
+        const before = downstream.x
+        timeline.resizingTransition = 1
+        timeline.previewResize(1, timeline.timeX(9000), false)
+        compare(timeline.resizeDeltaMs, 4000)
+        compare(downstream.positionMs, mockTransport.setPositionMs(3) + 4000)
+        verify(Math.abs(downstream.x - before) > 1)
+        compare(mockProject.resizedTransition, -1)
+        timeline.cancelTransitionResize()
+        fuzzyCompare(downstream.x, before, 0.01)
+        compare(mockProject.resizedTransition, -1)
+    }
+    function test_timelineMarkerSelectsAndSeeks() {
+        const marker = findChild(timeline, "timelineMarkerHit0")
+        verify(marker !== null)
+        mouseClick(marker, marker.width / 2, marker.height / 2)
+        compare(mockProject.timelineSelectionKind, "marker")
+        compare(mockProject.selectedTimelineMarkerId, "mark")
+        compare(mockTransport.currentMs, 9000)
+    }
+    function test_authoredTimelineMarkerCommitsOneMoveOnRelease() {
+        const dragMarker = findChild(timeline, "timelineMarkerHit0")
+        verify(dragMarker !== null)
+        mousePress(dragMarker, dragMarker.width / 2, dragMarker.height / 2)
+        mouseMove(dragMarker, dragMarker.width / 2 + 80, dragMarker.height / 2, 30)
+        compare(mockProject.movedMarkerId, "")
+        compare(timeline.draggingTimelineMarker, 0)
+        mouseRelease(dragMarker, dragMarker.width / 2 + 80, dragMarker.height / 2)
+        compare(mockProject.movedMarkerId, "mark")
+        verify(mockProject.movedMarkerTick > 8000)
+        compare(timeline.draggingTimelineMarker, -1)
+    }
+    function test_importedTimelineMarkerRemainsReadOnly() {
+        mockProject.timelineMarkers = [{id: "score:0", tick: 6000, name: "Rehearsal A", type: "score",
+            color: "#38bdf8", notes: "", readOnly: true, absoluteCount: 6, measure: 2, beat: 3, timeMs: 7000}]
+        wait(0)
+        const marker = findChild(timeline, "timelineMarkerHit0")
+        verify(marker !== null)
+        mousePress(marker, marker.width / 2, marker.height / 2)
+        mouseMove(marker, marker.width / 2 + 80, marker.height / 2, 30)
+        mouseRelease(marker, marker.width / 2 + 80, marker.height / 2)
+        compare(mockProject.movedMarkerId, "")
+        compare(mockProject.selectedTimelineMarkerId, "score:0")
+        compare(mockTransport.currentMs, 7000)
+        compare(timeline.draggingTimelineMarker, -1)
     }
     function test_markerLaneSelectsTimeRangeAndFitSelection() {
         const range = findChild(timeline, "timelineRangeSurface")

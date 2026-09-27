@@ -30,7 +30,20 @@ Item {
     property int resizingTransition: -1
     property var resizePreview: ({})
     property real resizePointerX: 0
+    property int draggingTimelineMarker: -1
     property int draggingPlanCandidate: -1
+
+    readonly property real resizeOriginalEndMs: resizingTransition > 0
+        ? transport.setPositionMs(resizingTransition) : 0
+    readonly property real resizePreviewEndMs: resizingTransition > 0 && resizePreview
+        && resizePreview.timeMs !== undefined ? resizePreview.timeMs : resizeOriginalEndMs
+    readonly property real resizeDeltaMs: resizingTransition > 0
+        ? resizePreviewEndMs - resizeOriginalEndMs : 0
+    readonly property real resizeDeltaTick: resizingTransition > 0 && resizePreview
+        && resizePreview.tick !== undefined
+        ? resizePreview.tick - Number(project.setInfo(resizingTransition).startTick || 0) : 0
+    readonly property real resizePreviewDurationMs: resizingTransition > 0 && project.setCount > 0
+        ? previewedSetPositionMs(project.setCount - 1) : transport.durationMs
 
     readonly property bool compactLanes: height < 180
     readonly property real labelWidth: compactLanes ? 62 : 78
@@ -62,6 +75,16 @@ Item {
 
     function xTime(x) {
         return Math.max(0, Math.min(transport.durationMs, (x - 12) * 1000 / scale))
+    }
+
+    function previewedSetPositionMs(index) {
+        const position = transport.setPositionMs(index)
+        if (resizingTransition <= 0 || index < resizingTransition)
+            return position
+        const details = project.setInfo(index)
+        if (details.startTick !== undefined && resizePreview && resizePreview.tick !== undefined)
+            return transport.showMsAtTick(Math.max(0, Number(details.startTick) + resizeDeltaTick))
+        return position + resizeDeltaMs
     }
 
     function formatTime(ms) {
@@ -189,7 +212,8 @@ Item {
 
     function previewResize(index, contentX, temporarySnapDisabled) {
         resizePointerX = contentX
-        resizePreview = project.previewTransitionResize(index, transport.tickAtShowMs(xTime(contentX)),
+        const showMs = Math.max(0, (contentX - 12) * 1000 / scale)
+        resizePreview = project.previewTransitionResize(index, transport.tickAtShowMs(showMs),
                                                         snapEnabled && !temporarySnapDisabled)
         if (snapEnabled && !temporarySnapDisabled)
             showSnapFeedback(resizePreview)
@@ -197,10 +221,15 @@ Item {
 
     function commitResize(index) {
         const preview = resizePreview
-        resizingTransition = -1
-        resizePreview = ({})
+        cancelTransitionResize()
         if (preview && preview.counts !== undefined)
             project.setTransitionCounts(index, preview.counts)
+    }
+
+    function cancelTransitionResize() {
+        resizingTransition = -1
+        resizePreview = ({})
+        resizePointerX = 0
     }
 
     Connections {
@@ -216,7 +245,7 @@ Item {
         function onMovementsChanged() {
             root.selectionAnchor = 0
             root.cancelDrag()
-            root.resizingTransition = -1
+            root.cancelTransitionResize()
             root.scrollTo(0, false)
             drawing.requestPaint()
         }
@@ -237,6 +266,12 @@ Item {
         id: snapFeedbackTimer
         interval: 900
         onTriggered: root.snapFeedback = ({})
+    }
+
+    Shortcut {
+        sequence: "Escape"
+        enabled: root.resizingTransition >= 0
+        onActivated: root.cancelTransitionResize()
     }
 
     Rectangle {
@@ -284,7 +319,8 @@ Item {
         anchors.bottom: parent.bottom
         clip: true
         interactive: false
-        contentWidth: Math.max(width, root.timeX(root.transport.durationMs) + 18)
+        contentWidth: Math.max(width, root.timeX(root.transport.durationMs) + 18,
+                               root.timeX(root.resizePreviewDurationMs) + 18)
         contentHeight: height
         boundsBehavior: Flickable.StopAtBounds
         onContentXChanged: drawing.requestPaint()
@@ -463,8 +499,14 @@ Item {
                 objectName: "timelinePage" + index
                 required property int index
                 property var info: { root.revision; return root.project.setInfo(index) }
-                property real startMs: { root.revision; return index > 0 ? root.transport.setPositionMs(index - 1) : 0 }
-                property real endMs: { root.revision; return root.transport.setPositionMs(index) }
+                property real startMs: {
+                    root.revision; root.resizingTransition; root.resizeDeltaMs
+                    return index > 0 ? root.previewedSetPositionMs(index - 1) : 0
+                }
+                property real endMs: {
+                    root.revision; root.resizingTransition; root.resizeDeltaMs
+                    return root.previewedSetPositionMs(index)
+                }
                 property bool selected: root.project.selectedTransitionIndex === index
                 property real intervalWidth: Math.max(1, (endMs - startMs) * root.scale / 1000)
                 x: root.timeX(startMs)
@@ -555,9 +597,12 @@ Item {
                 id: setMarker
                 required property int index
                 property var info: { root.revision; return root.project.setInfo(index) }
-                property real positionMs: { root.revision; return root.transport.setPositionMs(index) }
+                property real positionMs: {
+                    root.revision; root.resizingTransition; root.resizeDeltaMs
+                    return root.previewedSetPositionMs(index)
+                }
                 property real spacingBefore: index > 0
-                    ? Math.max(1, (positionMs - root.transport.setPositionMs(index - 1)) * root.scale / 1000)
+                    ? Math.max(1, (positionMs - root.previewedSetPositionMs(index - 1)) * root.scale / 1000)
                     : 1000
                 property int labelStride: Math.max(1, Math.ceil(28 / spacingBefore))
                 x: root.timeX(positionMs) - 10
@@ -639,6 +684,8 @@ Item {
                         anchors.fill: parent
                         cursorShape: Qt.SizeHorCursor
                         onPressed: function(mouse) {
+                            root.project.selectTimelineTransition(setMarker.index)
+                            root.transitionSelected(setMarker.index)
                             root.resizingTransition = setMarker.index
                             const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
                             root.previewResize(setMarker.index, p.x, (mouse.modifiers & Qt.AltModifier) !== 0)
@@ -650,7 +697,7 @@ Item {
                             root.previewResize(setMarker.index, p.x, (mouse.modifiers & Qt.AltModifier) !== 0)
                         }
                         onReleased: root.commitResize(setMarker.index)
-                        onCanceled: { root.resizingTransition = -1; root.resizePreview = ({}) }
+                        onCanceled: root.cancelTransitionResize()
                     }
                 }
 
@@ -704,35 +751,97 @@ Item {
             model: root.project.timelineMarkers || []
             Item {
                 id: markerPin
+                objectName: "timelineMarker" + index
                 required property int index
                 required property var modelData
                 property real markerMs: root.transport.showMsAtTick(modelData.tick || 0)
-                x: root.timeX(markerMs) - 6
+                property real dragPosition: -1
+                property real pressContentX: 0
+                property bool dragged: false
+                property var dragInfo: ({})
+                property bool selected: root.project.selectedTimelineMarkerId === modelData.id
+                x: dragPosition >= 0 ? dragPosition : root.timeX(markerMs) - width / 2
                 y: root.rulerHeight
-                width: 12
+                width: 16
                 height: root.markerLaneHeight
                 z: 12
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
-                    width: 2
+                    width: markerPin.selected ? 3 : 2
                     height: parent.height
                     color: markerPin.modelData.color || "#d89b5b"
                 }
                 Rectangle {
                     anchors.horizontalCenter: parent.horizontalCenter
                     y: 2
-                    width: 9
-                    height: 9
+                    width: markerPin.selected ? 11 : 9
+                    height: width
                     rotation: 45
                     color: markerPin.modelData.color || "#d89b5b"
+                    border.width: markerPin.selected ? 2 : 0
+                    border.color: MarchCraftTheme.textPrimary
                 }
                 MouseArea {
+                    objectName: "timelineMarkerHit" + markerPin.index
                     anchors.fill: parent
                     hoverEnabled: true
-                    onClicked: root.transport.seekTick(markerPin.modelData.tick || 0)
-                    ToolTip.visible: containsMouse
+                    preventStealing: true
+                    cursorShape: markerPin.modelData.readOnly ? Qt.PointingHandCursor : Qt.SizeHorCursor
+                    onPressed: function(mouse) {
+                        root.project.selectTimelineMarker(markerPin.modelData.id)
+                        root.draggingTimelineMarker = markerPin.modelData.readOnly ? -1 : markerPin.index
+                        const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
+                        markerPin.pressContentX = p.x
+                        markerPin.dragged = false
+                        markerPin.dragInfo = ({})
+                    }
+                    onPositionChanged: function(mouse) {
+                        if (!pressed || markerPin.modelData.readOnly)
+                            return
+                        const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
+                        if (Math.abs(p.x - markerPin.pressContentX) > 3)
+                            markerPin.dragged = true
+                        if (!markerPin.dragged)
+                            return
+                        root.draggingTimelineMarker = markerPin.index
+                        markerPin.dragInfo = root.snappedPosition(p.x, (mouse.modifiers & Qt.AltModifier) !== 0)
+                        markerPin.dragPosition = root.timeX(markerPin.dragInfo.timeMs) - markerPin.width / 2
+                        root.showSnapFeedback(markerPin.dragInfo)
+                    }
+                    onReleased: function(mouse) {
+                        const markerId = markerPin.modelData.id
+                        const markerName = markerPin.modelData.name
+                        const markerType = markerPin.modelData.type
+                        const markerColor = markerPin.modelData.color
+                        const markerNotes = markerPin.modelData.notes || ""
+                        const originalTick = markerPin.modelData.tick || 0
+                        const targetTick = markerPin.dragInfo.tick
+                        const timelineProject = root.project
+                        const timelineTransport = root.transport
+                        const shouldCommit = markerPin.dragged && !markerPin.modelData.readOnly
+                            && targetTick !== undefined
+                        markerPin.dragPosition = -1
+                        markerPin.dragInfo = ({})
+                        markerPin.dragged = false
+                        root.draggingTimelineMarker = -1
+                        if (shouldCommit) {
+                            timelineProject.updateTimelineMarker(markerId, targetTick, markerName, markerType,
+                                                                 markerColor, markerNotes)
+                            timelineTransport.seekTick(targetTick)
+                        } else {
+                            timelineTransport.seekTick(originalTick)
+                        }
+                    }
+                    onCanceled: {
+                        markerPin.dragPosition = -1
+                        markerPin.dragInfo = ({})
+                        markerPin.dragged = false
+                        root.draggingTimelineMarker = -1
+                    }
+                    ToolTip.visible: containsMouse && !pressed
                     ToolTip.text: markerPin.modelData.name + (markerPin.modelData.type ? " · " + markerPin.modelData.type : "")
                         + "\n" + root.formatTime(markerPin.markerMs)
+                        + (markerPin.modelData.readOnly ? " · Imported (read only)" : " · Drag to move")
                 }
             }
         }
@@ -825,7 +934,8 @@ Item {
                 objectName: "planGhost" + index
                 required property int index
                 required property var modelData
-                property real planMs: modelData.timeMs !== undefined ? modelData.timeMs + root.project.openingDurationMs
+                property real planMs: modelData.showTimeMs !== undefined ? modelData.showTimeMs
+                    : modelData.timeMs !== undefined ? modelData.timeMs + root.project.openingDurationMs
                     : root.transport.showMsAtTick(modelData.tick || 0)
                 property real dragPosition: -1
                 x: dragPosition >= 0 ? dragPosition : root.timeX(planMs) - 7
@@ -854,7 +964,7 @@ Item {
                     anchors.fill: parent
                     cursorShape: Qt.SizeHorCursor
                     hoverEnabled: true
-                    onPressed: {
+                    onPressed: function(mouse) {
                         root.draggingPlanCandidate = planGhost.index
                         const p = mapToItem(viewport.contentItem, mouse.x, mouse.y)
                         planGhost.dragPosition = p.x - planGhost.width / 2
@@ -886,9 +996,9 @@ Item {
 
         Rectangle {
             visible: root.resizingTransition >= 0 && root.resizePreview && root.resizePreview.counts !== undefined
-            x: root.timeX(root.transport.setPositionMs(Math.max(0, root.resizingTransition - 1)))
+            x: root.timeX(root.previewedSetPositionMs(Math.max(0, root.resizingTransition - 1)))
             y: root.drillY + 4
-            width: Math.max(1, root.resizePointerX - x)
+            width: Math.max(1, root.timeX(root.resizePreviewEndMs) - x)
             height: root.drillLaneHeight - 8
             color: "#284c7377"
             border.color: MarchCraftTheme.accentHover
