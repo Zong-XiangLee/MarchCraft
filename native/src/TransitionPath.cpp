@@ -5,16 +5,40 @@
 
 namespace MarchCraft {
 
-TransitionPath::TransitionPath(QPointF origin, const Placement &destination)
-    : m_delayed(destination.pathType == QStringLiteral("delayed"))
+namespace {
+
+QPointF bezierPoint(const QVector<QPointF> &controlPolygon, double progress)
 {
+    QVector<QPointF> work = controlPolygon;
+    for (int level = work.size() - 1; level > 0; --level)
+        for (int index = 0; index < level; ++index)
+            work[index] = work[index] * (1.0 - progress) + work[index + 1] * progress;
+    return work.isEmpty() ? QPointF{} : work.first();
+}
+
+}
+
+TransitionPath::TransitionPath(QPointF origin, const Placement &destination, double transitionCounts)
+{
+    m_transitionCounts = std::max(0.001, transitionCounts);
+    const double legacyStart = destination.pathType == QStringLiteral("delayed")
+        ? m_transitionCounts * 0.25 : 0.0;
+    m_startCount = destination.pathStartCount >= 0.0
+        ? std::clamp(destination.pathStartCount, 0.0, std::max(0.0, m_transitionCounts - 0.001))
+        : legacyStart;
+    const double availableCounts = std::max(0.001, m_transitionCounts - m_startCount);
+    m_durationCounts = destination.pathDurationCounts >= 0.0
+        ? std::clamp(destination.pathDurationCounts, 0.001, availableCounts)
+        : availableCounts;
+
     m_points.push_back(origin);
     if (destination.pathType == QStringLiteral("curved") && !destination.pathPoints.isEmpty()) {
-        const QPointF control = destination.pathPoints.first();
-        for (int sample = 1; sample < 32; ++sample) {
-            const double t = sample / 32.0, u = 1.0 - t;
-            m_points.push_back(origin * (u * u) + control * (2 * u * t) + destination.position * (t * t));
-        }
+        QVector<QPointF> controlPolygon{origin};
+        controlPolygon += destination.pathPoints;
+        controlPolygon.push_back(destination.position);
+        const int samples = std::clamp(int(controlPolygon.size() - 1) * 24, 32, 256);
+        for (int sample = 1; sample < samples; ++sample)
+            m_points.push_back(bezierPoint(controlPolygon, double(sample) / samples));
     } else if (destination.pathType == QStringLiteral("follow")
                || destination.pathType == QStringLiteral("gate")
                || destination.pathType == QStringLiteral("pivot")) {
@@ -32,7 +56,8 @@ QPointF TransitionPath::position(double progress) const
 {
     if (m_points.isEmpty()) return {};
     progress = std::clamp(progress, 0.0, 1.0);
-    if (m_delayed) progress = progress < 0.25 ? 0.0 : (progress - 0.25) / 0.75;
+    const double elapsedCounts = progress * m_transitionCounts;
+    progress = std::clamp((elapsedCounts - m_startCount) / m_durationCounts, 0.0, 1.0);
     if (progress >= 1.0) return m_points.last();
     const double target = progress * distance();
     const auto found = std::lower_bound(m_cumulative.cbegin() + 1, m_cumulative.cend(), target);

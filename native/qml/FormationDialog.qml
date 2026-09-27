@@ -4,13 +4,14 @@ import QtQuick.Layouts
 
 MovableDialog {
     id: dialog
-    title: "Smart shape builder"
-    modal: true
-    standardButtons: Dialog.Close
-    width: 500
+    title: "Formation builder"
+    headerHint: "Move this panel anywhere in the editor"
+    modal: false
+    standardButtons: Dialog.NoButton
+    width: 560
     signal settingsRequested()
 
-    height: Math.min(700, parent ? parent.height - 32 : 700)
+    height: Math.min(640, parent ? parent.height - 24 : 640)
     property var shapeOptions: ({
         placementMode: drillProject.shapePlacementMode,
         centerX: centerX.value, centerY: centerY.value,
@@ -24,6 +25,20 @@ MovableDialog {
     property string previewSignature: JSON.stringify([kind.currentValue, shapeOptions, assignmentMode.currentValue])
     onPreviewSignatureChanged: if (visible) drillProject.cancelFormationPreview()
     property var estimate: drillProject.formationEstimate(kind.currentValue || "line", shapeOptions)
+
+    function assignmentDescription(mode) {
+        if (mode === "shortest")
+            return "Minimizes total ensemble travel. Individual move lengths can vary."
+        if (mode === "preserveOrder")
+            return "Keeps performers in the same left/right and front/back relationships. Never mirrors the form."
+        if (mode === "evenEffort")
+            return "Minimizes the longest move first, then balances the remaining effort."
+        if (mode === "featureMove")
+            return "Builds substantial, readable moves within the capability limit while removing avoidable crossings."
+        if (mode === "rosterOrder")
+            return "Maps roster order directly to shape slots. Stable and predictable, with no spatial optimization."
+        return "Compares safe alternatives and prioritizes reachable paths, collision clearance, then fewer crossings."
+    }
 
     function reloadDefaults() {
         const defaults = drillProject.formationDefaults(kind.currentValue || "line", drillProject.shapePlacementMode)
@@ -61,7 +76,12 @@ MovableDialog {
         ColumnLayout {
             width: parent.width
             spacing: 10
-            Label { text: drillProject.selectedCount + " selected performers"; color: "#a9bbb1" }
+            RowLayout {
+                Layout.fillWidth: true
+                Label { text: "Shape"; font.bold: true; font.pixelSize: 15 }
+                Item { Layout.fillWidth: true }
+                Label { text: drillProject.selectedCount + " performers"; color: MarchCraftTheme.textSecondary }
+            }
             ComboBox {
                 id: kind; objectName: "kind"
                 Layout.fillWidth: true
@@ -132,18 +152,33 @@ MovableDialog {
                 SpinBox { id: rotation; objectName: "rotation"; from: -360; to: 360; editable: true; Layout.fillWidth: true; visible: !["circle", "arc", "block"].includes(kind.currentValue) }
             }
 
-            Label { text: "Performer assignment"; font.bold: true }
-            ComboBox {
-                id: assignmentMode; objectName: "assignmentMode"; Layout.fillWidth: true; textRole: "text"; valueRole: "value"
-                onActivated: drillProject.formationAssignmentMode = currentValue
-                model: [
-                    {text:"Rehearsal safe (recommended)",value:"rehearsalSafe"},
-                    {text:"Shortest total distance",value:"shortest"},
-                    {text:"Preserve form order / morph",value:"preserveOrder"},
-                    {text:"Even effort",value:"evenEffort"},
-                    {text:"Feature move",value:"featureMove"},
-                    {text:"Roster order (legacy)",value:"rosterOrder"}
-                ]
+            Frame {
+                Layout.fillWidth: true
+                padding: 10
+                background: Rectangle { color: MarchCraftTheme.panel; border.color: MarchCraftTheme.divider; radius: MarchCraftTheme.radiusLarge }
+                ColumnLayout {
+                    anchors.fill: parent; spacing: 7
+                    Label { text: "Performer assignment"; font.bold: true; font.pixelSize: 14 }
+                    ComboBox {
+                        id: assignmentMode; objectName: "assignmentMode"; Layout.fillWidth: true; textRole: "text"; valueRole: "value"
+                        onActivated: drillProject.formationAssignmentMode = currentValue
+                        model: [
+                            {text:"Rehearsal safe (recommended)",value:"rehearsalSafe"},
+                            {text:"Shortest total travel",value:"shortest"},
+                            {text:"Preserve spatial order (no flip)",value:"preserveOrder"},
+                            {text:"Even individual effort",value:"evenEffort"},
+                            {text:"Readable feature move",value:"featureMove"},
+                            {text:"Fixed roster slots",value:"rosterOrder"}
+                        ]
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: dialog.assignmentDescription(assignmentMode.currentValue)
+                        wrapMode: Text.Wrap
+                        color: MarchCraftTheme.textSecondary
+                        font.pixelSize: 11
+                    }
+                }
             }
             CheckBox { id: advanced; text: "Advanced position" }
             GridLayout {
@@ -176,16 +211,33 @@ MovableDialog {
                 Layout.fillWidth: true; wrapMode: Text.Wrap; color: MarchCraftTheme.textSecondary
                 text: "The entire formation is fitted onto the field before performers are placed, so points never collapse at a sideline or corner."
             }
-            RowLayout {
-                Layout.fillWidth: true
-                AppButton { text: "Cancel preview"; visible: drillProject.formationPreviewActive || drillProject.formationPreviewBusy; onClicked: drillProject.cancelFormationPreview() }
-                Item { Layout.fillWidth: true }
-                AppButton {
-                    text: drillProject.formationPreviewBusy ? "Optimizing..." : drillProject.formationPreviewActive ? "Try another mode" : "Preview formation"
-                    enabled: drillProject.selectedCount > 0 && !drillProject.formationPreviewBusy
-                    onClicked: drillProject.requestFormationPreview(kind.currentValue, dialog.shapeOptions, assignmentMode.currentValue)
-                }
-                AppButton { objectName: "applyFormation"; text: "Apply"; highlighted: true; enabled: drillProject.formationPreviewActive; onClicked: { if (drillProject.commitFormationPreview()) dialog.close() } }
+        }
+    }
+
+    footer: Rectangle {
+        implicitHeight: 54
+        color: MarchCraftTheme.surfaceRaised
+        border.color: MarchCraftTheme.divider
+        RowLayout {
+            anchors.fill: parent
+            anchors.leftMargin: 12; anchors.rightMargin: 12
+            AppButton {
+                text: "Clear preview"
+                visible: drillProject.formationPreviewActive || drillProject.formationPreviewBusy
+                onClicked: drillProject.cancelFormationPreview()
+            }
+            Item { Layout.fillWidth: true }
+            AppButton {
+                text: drillProject.formationPreviewBusy ? "Optimizing…" : drillProject.formationPreviewActive ? "Preview again" : "Preview"
+                enabled: drillProject.selectedCount > 0 && !drillProject.formationPreviewBusy
+                onClicked: drillProject.requestFormationPreview(kind.currentValue, dialog.shapeOptions, assignmentMode.currentValue)
+            }
+            AppButton {
+                objectName: "applyFormation"
+                text: "Apply formation"
+                highlighted: true
+                enabled: drillProject.formationPreviewActive
+                onClicked: { if (drillProject.commitFormationPreview()) dialog.close() }
             }
         }
     }

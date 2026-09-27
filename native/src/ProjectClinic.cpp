@@ -62,14 +62,19 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
             {QStringLiteral("affectedCount"), rows.size()}, {QStringLiteral("actions"), actions}});
     };
 
-    QVector<int> strideRows, cautionStrideRows; double maximumStride = 0.0;
+    QVector<int> strideRows, cautionStrideRows; double maximumStride = 0.0, requiredCounts = 0.0;
     for (int row = 0; row < m_performers.size(); ++row) {
-        const double stride = transitionDistance(row, destinationSet) / counts; maximumStride = qMax(maximumStride, stride);
+        const double distance = transitionDistance(row, destinationSet);
+        const double stride = distance
+            / qMax(0.001, transitionPath(row, destinationSet).durationCounts());
+        maximumStride = qMax(maximumStride, stride);
+        requiredCounts = qMax(requiredCounts, transitionPath(row, destinationSet).startCount()
+            + distance / m_capability.maximumStepsPerCount);
         if (stride > m_capability.maximumStepsPerCount) strideRows.push_back(row);
         else if (stride >= m_capability.maximumStepsPerCount * 0.85) cautionStrideRows.push_back(row);
     }
     if (!strideRows.isEmpty()) {
-        const int recommended = qCeil(maximumStride * counts / m_capability.maximumStepsPerCount);
+        const int recommended = qCeil(requiredCounts);
         addIssue(QStringLiteral("stride"), QStringLiteral("critical"), QStringLiteral("Move exceeds capability profile"),
             QStringLiteral("%1 need more than %2 steps per count. %3 counts would make the longest move achievable.")
                 .arg(issueLabelList(strideRows)).arg(m_capability.maximumStepsPerCount, 0, 'f', 2).arg(recommended),
@@ -203,6 +208,39 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
         {action(QStringLiteral("insertSubset"), QStringLiteral("Preview directional subset")),
          action(QStringLiteral("reroute"), QStringLiteral("Round the approach")),
          action(QStringLiteral("gate"), QStringLiteral("Try gate / pivot"))});
+
+    QVector<int> complexPathRows; double sharpestPathTurn = 0.0, firstPathTurnCount = -1.0;
+    const int directionSamples = qBound(12, counts * 4, 96);
+    for (int row = 0; row < m_performers.size(); ++row) {
+        QPointF previous = pathPosition(row, destinationSet, 0.0), previousDirection;
+        bool hasDirection = false;
+        for (int sample = 1; sample <= directionSamples; ++sample) {
+            const QPointF current = pathPosition(row, destinationSet, double(sample) / directionSamples);
+            const QPointF direction = current - previous;
+            previous = current;
+            const double length = pointDistance({}, direction);
+            if (length < 0.01) continue;
+            if (hasDirection) {
+                const double previousLength = pointDistance({}, previousDirection);
+                const double cosine = qBound(-1.0, QPointF::dotProduct(previousDirection, direction)
+                    / (previousLength * length), 1.0);
+                const double angle = std::acos(cosine) * 180.0 / std::numbers::pi;
+                sharpestPathTurn = qMax(sharpestPathTurn, angle);
+                if (angle > m_capability.directionChangeDegrees) {
+                    if (!complexPathRows.contains(row)) complexPathRows.push_back(row);
+                    if (firstPathTurnCount < 0.0) firstPathTurnCount = double(sample) / directionSamples * counts;
+                }
+            }
+            previousDirection = direction; hasDirection = true;
+        }
+    }
+    if (!complexPathRows.isEmpty()) addIssue(QStringLiteral("complexPath"), QStringLiteral("caution"),
+        QStringLiteral("Authored path turns too sharply"),
+        QStringLiteral("%1 change direction by up to %2° inside the transition.")
+            .arg(issueLabelList(complexPathRows)).arg(sharpestPathTurn, 0, 'f', 0),
+        complexPathRows, sharpestPathTurn, m_capability.directionChangeDegrees, firstPathTurnCount,
+        {action(QStringLiteral("simplifyPath"), QStringLiteral("Simplify control points")),
+         action(QStringLiteral("reroute"), QStringLiteral("Round the route"))});
 
     QVector<int> spacingRows; double worstSpacingVariation = 0.0;
     const auto &destinationVariant = m_sets[destinationSet].activeVariant();
@@ -390,6 +428,13 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
         const qint64 oldTick = m_sets[destination].startTick;
         const qint64 newTick = advancePulses(m_sets[destination - 1].startTick, recommended); const qint64 delta = newTick - oldTick;
         for (int set = destination; set < m_sets.size(); ++set) m_sets[set].startTick += delta; recalculateCounts(); emit timingChanged(); emit setsChanged();
+        for (const auto &performer : m_performers) if (affected.contains(performer.id)) {
+            auto &placement = m_sets[destination].activeVariant().placements[performer.id];
+            if (placement.pathDurationCounts >= 0.0) {
+                const double startCount = qMax(0.0, placement.pathStartCount);
+                placement.pathDurationCounts = qMax(placement.pathDurationCounts, recommended - startCount);
+            }
+        }
     } else if (type == QStringLiteral("reroute")) {
         const bool propIssue = m_pendingSuggestion.value(QStringLiteral("type")).toString().startsWith(QStringLiteral("prop"));
         QSet<QString> propIds; for (const auto &id : m_pendingSuggestion.value(QStringLiteral("propIds")).toList()) propIds.insert(id.toString());
@@ -415,11 +460,13 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
             }
             placement.pathType = propIssue ? QStringLiteral("follow") : QStringLiteral("curved");
             placement.pathPoints = {clampPosition(waypoint)};
+            placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
         }
     } else if (type == QStringLiteral("delayed")) {
         for (const auto &performer : m_performers) if (affected.contains(performer.id)) {
             auto &placement = m_sets[destination].activeVariant().placements[performer.id];
             placement.pathType = QStringLiteral("delayed"); placement.pathPoints.clear();
+            placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
         }
     } else if (type == QStringLiteral("follow") || type == QStringLiteral("gate")) {
         int ordinal = 0;
@@ -430,6 +477,7 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
             placement.pathPoints = {type == QStringLiteral("gate")
                 ? QPointF(source.x(), placement.position.y())
                 : source + (placement.position - source) * (0.35 + 0.3 * (ordinal++ % 3) / 2.0)};
+            placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
         }
     } else if (type == QStringLiteral("reflow")) {
         auto &variant = m_sets[destination].activeVariant();

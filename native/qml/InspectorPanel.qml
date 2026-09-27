@@ -24,8 +24,13 @@ Frame {
     padding: 0
     background: Rectangle { color: MarchCraftTheme.panel; radius: 0; border.color: MarchCraftTheme.divider }
     ScrollView {
+        id: inspectorScroll
         anchors.fill: parent
         contentWidth: availableWidth
+        Component.onCompleted: if (drillProjectContext.transitionEditActive)
+            Qt.callLater(function() {
+                inspectorScroll.contentItem.contentY = Math.max(0, transitionHeading.y - 8)
+            })
         ColumnLayout {
             id: inspector
             width: parent.width
@@ -36,9 +41,23 @@ Frame {
             property string clinicSeverityFilter: "critical"
             property string clinicTypeFilter: "all"
             property bool nextSetSuggestionsExpanded: false
+            property bool transitionWasActive: false
             property var nextSetCandidates: []
             function refresh() { person = drillProjectContext.performerInfo(windowContext.activePerformer) }
             function refreshNextSetCandidates() { nextSetCandidates = drillProjectContext.suggestNextSet() }
+            function transitionTypeIndex(type) {
+                return type === "curved" ? 1 : type === "follow" ? 2
+                    : (type === "gate" || type === "pivot") ? 3 : type === "stagger" ? 4 : 0
+            }
+            function transitionOrder(index) {
+                return index === 1 ? "formation" : index === 2 ? "leftToRight"
+                    : index === 3 ? "rightToLeft" : index === 4 ? "roster" : "selection"
+            }
+            function chooseTransitionType(index) {
+                const types = ["direct", "curved", "follow", "gate", "stagger"]
+                drillProjectContext.setTransitionEditType(types[index])
+            }
+            Component.onCompleted: transitionWasActive = drillProjectContext.transitionEditActive
             Connections {
                 target: drillProjectContext
                 function onCurrentSetChanged() {
@@ -48,6 +67,14 @@ Frame {
                 function onSelectionChanged() {
                     inspector.refresh()
                     if (inspector.nextSetSuggestionsExpanded) inspector.refreshNextSetCandidates()
+                }
+                function onTransitionEditChanged() {
+                    const becameActive = drillProjectContext.transitionEditActive && !inspector.transitionWasActive
+                    inspector.transitionWasActive = drillProjectContext.transitionEditActive
+                    if (becameActive)
+                        Qt.callLater(function() {
+                            inspectorScroll.contentItem.contentY = Math.max(0, transitionHeading.y - 8)
+                        })
                 }
             }
 
@@ -143,13 +170,160 @@ Frame {
                 Label { text: "Size"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(parent.metrics.width || 0) + " x " + drillProjectContext.formatDistance(parent.metrics.height || 0); font.bold: true; Layout.alignment: Qt.AlignRight }
             }
-            Label { text: "TRANSITION PATH"; visible: drillProjectContext.selectedCount > 0; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12 }
-            RowLayout {
-                visible: drillProjectContext.selectedCount > 0
-                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                AppButton { Layout.minimumWidth: 0; text: "Direct"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("direct") }
-                AppButton { Layout.minimumWidth: 0; text: "Curve"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("curved") }
-                AppButton { Layout.minimumWidth: 0; text: "Delayed"; enabled: drillProjectContext.selectedCount > 0 && drillProjectContext.currentSetIndex > 0; onClicked: drillProjectContext.setSelectedTransitionPath("delayed") }
+            Label {
+                id: transitionHeading
+                text: drillProjectContext.transitionEditActive ? "TRANSITION AUTHORING" : "TRANSITION PATH"
+                visible: drillProjectContext.selectedCount > 0 || drillProjectContext.transitionEditActive
+                font.bold: true; color: drillProjectContext.transitionEditActive ? "#67e8f9" : MarchCraftTheme.textSecondary
+                Layout.leftMargin: 12
+            }
+            AppButton {
+                Layout.minimumWidth: 0; Layout.fillWidth: true
+                Layout.leftMargin: 12; Layout.rightMargin: 12
+                visible: !drillProjectContext.transitionEditActive && drillProjectContext.selectedCount > 0
+                text: drillProjectContext.currentSetIndex > 0 ? "Edit incoming transition…" : "Choose a destination set"
+                enabled: drillProjectContext.currentSetIndex > 0
+                highlighted: enabled
+                onClicked: drillProjectContext.beginTransitionEdit()
+            }
+            Frame {
+                id: transitionEditor
+                visible: drillProjectContext.transitionEditActive
+                Layout.fillWidth: true; Layout.leftMargin: 10; Layout.rightMargin: 10
+                padding: 10
+                background: Rectangle { color: "#111e24"; border.color: "#245263"; radius: 10 }
+                ColumnLayout {
+                    anchors.fill: parent; spacing: 8
+                    Label {
+                        text: "Editing " + Number(drillProjectContext.transitionEditMetrics.pathCount || 0)
+                            + " path(s) · endpoints stay fixed"
+                        color: "#b9dce5"; font.pixelSize: 10; wrapMode: Text.Wrap
+                        Layout.minimumWidth: 0; Layout.fillWidth: true
+                    }
+                    ComboBox {
+                        id: transitionType
+                        Layout.fillWidth: true
+                        model: ["Direct", "Editable curve", "Follow the Leader", "Gate / pivot", "Stagger / ripple"]
+                        currentIndex: inspector.transitionTypeIndex(drillProjectContext.transitionEditType)
+                        onActivated: inspector.chooseTransitionType(currentIndex)
+                    }
+
+                    ColumnLayout {
+                        visible: drillProjectContext.transitionEditType === "follow"
+                        Layout.fillWidth: true; spacing: 6
+                        Label { text: "FOLLOW THE LEADER"; color: MarchCraftTheme.textSecondary; font.bold: true; font.pixelSize: 9 }
+                        RowLayout { Layout.fillWidth: true
+                            Label { text: "Leader"; color: MarchCraftTheme.textSecondary }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: drillProjectContext.transitionEditPerformers
+                                textRole: "label"
+                                currentIndex: {
+                                    for (let i = 0; i < model.length; ++i)
+                                        if (model[i].row === drillProjectContext.transitionEditActiveRow) return i
+                                    return 0
+                                }
+                                onActivated: drillProjectContext.updateTransitionEditOptions({"leaderRow": model[currentIndex].row})
+                            }
+                        }
+                        RowLayout { Layout.fillWidth: true
+                            ComboBox {
+                                id: followOrder
+                                Layout.fillWidth: true
+                                model: ["Selected order", "Formation order", "Left to right", "Right to left", "Roster order"]
+                                onActivated: drillProjectContext.updateTransitionEditOptions({"order": inspector.transitionOrder(currentIndex)})
+                            }
+                            CheckBox {
+                                text: "Reverse"
+                                onToggled: drillProjectContext.updateTransitionEditOptions({"reversed": checked})
+                            }
+                        }
+                        Label { text: "Followers reuse the leader route with arc-length count offsets."; color: MarchCraftTheme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
+                    }
+
+                    ColumnLayout {
+                        visible: drillProjectContext.transitionEditType === "gate" || drillProjectContext.transitionEditType === "pivot"
+                        Layout.fillWidth: true; spacing: 6
+                        Label { text: "GATE / PIVOT"; color: MarchCraftTheme.textSecondary; font.bold: true; font.pixelSize: 9 }
+                        RowLayout { Layout.fillWidth: true
+                            Label { text: "Pivot"; color: MarchCraftTheme.textSecondary }
+                            ComboBox {
+                                Layout.fillWidth: true
+                                model: drillProjectContext.transitionEditPerformers
+                                textRole: "label"
+                                onActivated: drillProjectContext.updateTransitionEditOptions({"pivotRow": model[currentIndex].row})
+                            }
+                        }
+                        ComboBox {
+                            Layout.fillWidth: true
+                            model: ["Clockwise", "Counterclockwise"]
+                            onActivated: drillProjectContext.updateTransitionEditOptions({"direction": currentIndex === 0 ? "clockwise" : "counterclockwise"})
+                        }
+                    }
+
+                    ColumnLayout {
+                        visible: drillProjectContext.transitionEditType === "stagger"
+                        Layout.fillWidth: true; spacing: 6
+                        Label { text: "STAGGER / RIPPLE"; color: MarchCraftTheme.textSecondary; font.bold: true; font.pixelSize: 9 }
+                        ComboBox {
+                            id: staggerOrder
+                            Layout.fillWidth: true
+                            model: ["Selected order", "Formation order", "Left to right", "Right to left", "Roster order"]
+                            onActivated: drillProjectContext.updateTransitionEditOptions({"order": inspector.transitionOrder(currentIndex)})
+                        }
+                        GridLayout { columns: 2; Layout.fillWidth: true
+                            Label { text: "Interval"; color: MarchCraftTheme.textSecondary }
+                            SpinBox {
+                                id: staggerInterval
+                                from: 0; to: 128; value: 4; stepSize: 1; editable: true
+                                textFromValue: function(value) { return (value / 4).toFixed(value % 4 ? 2 : 0) + " counts" }
+                                valueFromText: function(text) { return Math.round(Number(text.replace(/[^0-9.]/g, "")) * 4) }
+                                onValueModified: drillProjectContext.updateTransitionEditOptions({"intervalCounts": value / 4})
+                            }
+                            Label { text: "Pod size"; color: MarchCraftTheme.textSecondary }
+                            SpinBox {
+                                from: 1; to: Math.max(1, drillProjectContext.transitionEditPerformers.length); value: 1
+                                onValueModified: drillProjectContext.updateTransitionEditOptions({"groupSize": value})
+                            }
+                        }
+                        CheckBox {
+                            text: "Synchronized arrival"
+                            checked: true
+                            onToggled: drillProjectContext.updateTransitionEditOptions({"arriveTogether": checked})
+                        }
+                    }
+
+                    GridLayout {
+                        columns: 2; Layout.fillWidth: true
+                        property var metrics: drillProjectContext.transitionEditMetrics
+                        Label { text: "Active distance"; color: MarchCraftTheme.textSecondary }
+                        Label { text: drillProjectContext.formatDistance(parent.metrics.activeDistance || 0); Layout.alignment: Qt.AlignRight; font.bold: true }
+                        Label { text: "Start / arrival"; color: MarchCraftTheme.textSecondary }
+                        Label { text: Number(parent.metrics.activeStartCount || 0).toFixed(1) + " / " + Number(parent.metrics.activeArrivalCount || 0).toFixed(1); Layout.alignment: Qt.AlignRight }
+                        Label { text: "Max steps / count"; color: MarchCraftTheme.textSecondary }
+                        Label { text: Number(parent.metrics.maximumStepsPerCount || 0).toFixed(2); Layout.alignment: Qt.AlignRight; color: (parent.metrics.warningCount || 0) > 0 ? MarchCraftTheme.danger : MarchCraftTheme.success }
+                        Label { text: "Preview conflicts"; color: MarchCraftTheme.textSecondary }
+                        Label { text: parent.metrics.collisionCount || 0; Layout.alignment: Qt.AlignRight; color: (parent.metrics.collisionCount || 0) > 0 ? MarchCraftTheme.danger : MarchCraftTheme.success }
+                    }
+
+                    RowLayout {
+                        Layout.fillWidth: true
+                        AppToolButton { text: "+ Point"; enabled: drillProjectContext.transitionEditActiveRow >= 0; onClicked: drillProjectContext.addTransitionControlPoint() }
+                        AppToolButton { text: "− Point"; enabled: drillProjectContext.transitionEditControlPoints.length > 0; onClicked: drillProjectContext.removeTransitionControlPoint(drillProjectContext.transitionEditActiveRow, drillProjectContext.transitionEditControlPoints.length - 1) }
+                        AppToolButton { text: "Reset"; onClicked: drillProjectContext.resetTransitionPath() }
+                    }
+                    RowLayout {
+                        Layout.fillWidth: true
+                        AppToolButton { text: "Mirror curve"; enabled: drillProjectContext.transitionEditControlPoints.length > 0; onClicked: drillProjectContext.mirrorActiveTransitionPath(true) }
+                        AppToolButton { text: "Copy style"; enabled: drillProjectContext.transitionEditPerformers.length > 1; onClicked: drillProjectContext.copyActiveTransitionPathToSelection(false) }
+                    }
+                    Label { text: "Drag cyan handles on the field. Double-click the field to insert a point; right-click a handle to remove it. Escape cancels."; color: MarchCraftTheme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
+                    RowLayout { Layout.fillWidth: true
+                        AppButton { Layout.minimumWidth: 0; text: "Cancel"; onClicked: drillProjectContext.cancelTransitionEdit() }
+                        Item { Layout.fillWidth: true }
+                        AppButton { Layout.minimumWidth: 0; text: "Apply"; highlighted: true; onClicked: drillProjectContext.applyTransitionEdit() }
+                    }
+                }
             }
             RowLayout {
                 visible: drillProjectContext.selectedCount > 0

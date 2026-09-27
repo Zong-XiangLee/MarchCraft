@@ -130,6 +130,11 @@ struct Placement {
     double facing = 0.0;
     QString pathType{QStringLiteral("direct")};
     QVector<QPointF> pathPoints;
+    // Negative values mean "use the transition default".  This keeps older
+    // projects compatible while allowing every authored path type to carry an
+    // explicit count-based step-off and travel duration.
+    double pathStartCount = -1.0;
+    double pathDurationCounts = -1.0;
 
     QJsonObject toJson() const
     {
@@ -139,7 +144,9 @@ struct Placement {
         return {{QStringLiteral("x"), position.x()},
                 {QStringLiteral("y"), position.y()},
                 {QStringLiteral("facing"), facing},
-                {QStringLiteral("pathType"), pathType}, {QStringLiteral("pathPoints"), points}};
+                {QStringLiteral("pathType"), pathType}, {QStringLiteral("pathPoints"), points},
+                {QStringLiteral("pathStartCount"), pathStartCount},
+                {QStringLiteral("pathDurationCounts"), pathDurationCounts}};
     }
 
     static Placement fromJson(const QJsonObject &object)
@@ -149,6 +156,8 @@ struct Placement {
         result.position.setY(object.value(QStringLiteral("y")).toDouble(28.0));
         result.facing = object.value(QStringLiteral("facing")).toDouble();
         result.pathType = object.value(QStringLiteral("pathType")).toString(QStringLiteral("direct"));
+        result.pathStartCount = qMax(-1.0, object.value(QStringLiteral("pathStartCount")).toDouble(-1.0));
+        result.pathDurationCounts = qMax(-1.0, object.value(QStringLiteral("pathDurationCounts")).toDouble(-1.0));
         for (const auto &value : object.value(QStringLiteral("pathPoints")).toArray()) {
             const auto p = value.toObject();
             result.pathPoints.push_back({p.value(QStringLiteral("x")).toDouble(), p.value(QStringLiteral("y")).toDouble()});

@@ -63,6 +63,16 @@ TestCase {
         compare(builder.dim, false)
     }
 
+    function test_builder_is_nonmodal_editor_popup_with_close_button() {
+        builder.open(); tryCompare(builder, "opened", true)
+        compare(builder.modal, false)
+        compare(builder.title, "Formation builder")
+        const closeButton = findChild(builder, "dialogCloseButton")
+        verify(closeButton !== null)
+        mouseClick(closeButton)
+        tryCompare(builder, "visible", false)
+    }
+
     function test_placement_settings_refresh_center() {
         builder.open(); tryCompare(builder, "opened", true)
         drillProject.formationPreviewActive = true
