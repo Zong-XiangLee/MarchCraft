@@ -33,6 +33,12 @@ sets still match coordinate-sheet rows; a hold is represented by consecutive set
 Formation and freehand optimization still run in the background and require an explicit
 Apply action before project data changes.
 
+The editor workflow is now field-first: a compact command bar keeps frequent formation
+actions visible while complete Edit, Set, Formation, Transition, View, and Tools menus
+hold secondary commands. Formation copy/cut/paste, Paste Special, alignment, distribution,
+set navigation, contextual field/set menus, and persistent panel/toolbar preferences share
+the same actions and transaction layer.
+
 Advanced transition authoring adds direct field editing for multi-control-point curves,
 Follow the Leader routes, gate/pivot arcs, and count-based stagger/ripple timing. These
 tools share the same persisted path data used by 2D/3D playback, gait, video export,
@@ -52,6 +58,7 @@ path data and selection.
 - Audience-perspective coordinates: Side 1 is left, Side 2 is right, front is the near/bottom side of the editor, and back is the far/top side
 - Roster, section, label, uniform-color, and instrument assignments
 - Set/subset event timeline with directly editable transition counts, ripple insertion/deletion, variant-local performer groups, single-transition and whole-show playback, editable curves, Follow the Leader, gate/pivot, stagger/ripple timing, formations, snapping, axis locking, and undo/redo
+- Stable-ID formation clipboard for full or partial ensembles, with atomic cut/paste, cross-set/variant/movement reuse, mirrored/offset Paste Special, and safe preservation of destination transition timing and paths
 - Adaptive equal-distance spirals with half-step turns and direction controls, plus optional shape-created groups
 - Persisted colored-symbol, compact-dot, and black-dot marker presets with adjustable sizing
 - Constant-speed arc-length playback with uninterrupted whole-show timing
@@ -83,12 +90,17 @@ Run `build-worktree-mingw/marchcraft.exe` (or the configuration-specific executa
 
 Worktree builds use `build-worktree-mingw` and disable production-preview synchronization. Use `scripts/build-and-run.ps1` for the configured Windows toolchain; do not create a second build directory.
 
-For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for Home, `--qa-new-project` for project setup, `--qa-roster-workspace`, `--qa-music-workspace`, `--qa-review-workspace`, and `--qa-export-workspace` for the major destinations, `--qa-shapes` for the editor shape palette, or `--qa-transition-authoring` for an active curve-edit session with Clinic metrics. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Timeline states are `--qa-timeline`, `--qa-timeline-zoom`, `--qa-timeline-fit`, `--qa-timeline-selection`, `--qa-selected-transition`, `--qa-transition-resize`, `--qa-set-plan`, and `--qa-music-impacts`. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
+For automated visual verification, pass `--screenshot output.png`; existing screenshot QA opens the bundled sample directly so scene baselines remain stable. Add `--qa-home` for Home, `--qa-new-project` for project setup, and `--qa-roster-workspace`, `--qa-music-workspace`, `--qa-review-workspace`, or `--qa-export-workspace` for the major destinations. Editor states are `--qa-editor-clean`, `--qa-editor-selected`, `--qa-editor-expanded`, `--qa-paste-special`, `--qa-field-context`, `--qa-edit-menu`, `--qa-view-menu`, `--qa-previous-formation`, `--qa-shapes`, and `--qa-transition-authoring`. Combine any state with `--qa-minimum` to render the supported 1120 × 720 layout. Timeline states are `--qa-timeline`, `--qa-timeline-zoom`, `--qa-timeline-fit`, `--qa-timeline-selection`, `--qa-selected-transition`, `--qa-transition-resize`, `--qa-set-plan`, and `--qa-music-impacts`. Add `--3d` to capture the 3D viewport, or use `--3d-view overhead` / `--3d-view field`. Scene QA can also set `--venue venue.high_school`, `--lighting lighting.sunset`, `--graphics-profile presentation`. The native playback smoke check is `--qa-current-transition`; add `--qa-set-drag-preview` to capture the timeline insertion line and reorder preview. Use `--midi score.mid --audio rehearsal.wav` with screenshot QA to inspect aligned music and waveform lanes. Add `--qa-movements` to verify movement tabs with long names. `--midi score.mid --qa-midi-synth` runs four seconds of animated MIDI playback and fails on audio underruns. Automated QA never plays the launch sound.
 
 ## Controls
 
 - Use the persistent project header or **Alt+1** through **Alt+5** to open Roster, Music, Editor, Review, or Export. **Ctrl+1** and **Ctrl+2** continue to switch the editor between 2D and 3D.
 - Press **Ctrl+L** to open Roster and focus its search field.
+- The command bar starts in compact mode. Use its caret or **View → Expanded toolbar** for the second row; **View** and **Editor preferences** also choose compact Transform/View groups. Toolbar mode, panel visibility, labels, snapping, previous-formation opacity, and collapsed Inspector sections are local machine preferences and never enter project undo history.
+- **Copy** (`Ctrl+C`) captures the selected performers, or the full current formation when nothing is selected. **Paste** (`Ctrl+V`) applies positions and facing by stable performer ID, skips missing or locked performers with a status message, fits the result to the field by translation only, and preserves every destination transition path and timing value. The clipboard survives set, variant, and movement navigation but is cleared by New, Open/Load, sample replacement, and coordinate import.
+- **Paste Special** (`Ctrl+Shift+V`) can paste positions only, include safe group/shape metadata, mirror side-to-side or front-to-back, and apply quarter-step offsets. Only groups and shapes wholly contained in the copied selection are transferred; new IDs prevent collisions. The entire paste is one undoable transaction and archived variants are never modified.
+- **Cut** (`Ctrl+X`) copies a selection and resets its unlocked performers to their preceding-set positions while preserving the destination transition definition. It is intentionally unavailable on the opening set. Alignment and horizontal/vertical distribution are also single undoable selection-wide commands.
+- **Page Up / Page Down** moves to the previous/next set without discarding the performer selection. **View → Show previous formation** adds adjustable hollow reference markers for dressing the current form. Movement changes still clear transient selection and tool previews by design.
 - Double-click an empty field location to add a performer.
 - Click a grouped performer to select its group; Ctrl-click targets an individual member.
 - Click or right-click a grouped performer to select its full group. The context menu offers Group, Remove from group, and Ungroup only when their selection requirements are satisfied.
@@ -110,6 +122,20 @@ For automated visual verification, pass `--screenshot output.png`; existing scre
 - Use **Music tools** to import MIDI/MusicXML, attach rehearsal audio, adjust offsets/synchronization, map sets, manage colored music sections/parts, author typed timeline markers, and open the MIDI track mixer. Click a marker pin to select and seek it; drag an authored pin to preview a snapped location and release to create one undoable move. Imported score pins are selectable but read-only. Drag or Shift-click musical measures to select them; double-click a measure to seek to its start. Explicit seeks retarget editing to the most recently reached drill set; rectangular and lasso selection hit-test the displayed positions. Legacy fixed-subdivision generation retains its preview and explicit **Create sets** step.
 - **Analyze music** proposes a non-destructive set plan from meter/tempo events, phrase-sized measure boundaries, authored sections/markers, MIDI ensemble/percussion attacks, MusicXML note activity, preferred transition lengths, and existing-set alignment. Sparse/Balanced/Detailed density, musical priority, and a maximum total page budget are configurable. The 112-page default is calibrated to the supplied 2025 full-show coordinate reference (1,178 counts, about 10.6 counts per page); ordinary eight-count grid points remain guides unless regular structure is explicitly prioritized. Every suggestion reports evidence and confidence, and review timestamps use show time including any opening hold. Accepted ghost markers can be toggled, added, removed, dragged, or given exact counts. **Apply** is one undoable command and **Cancel** leaves the project untouched. Existing sets are never moved automatically.
 - MIDI plays through bundled FluidSynth and the GeneralUser GS bank. The waveform uses decoded audio timestamps and the same offset/anchor mapping as playback. The sequence spans the longest of drill, imported music, and rehearsal audio: final formations hold after drill ends and drill continues silently after audio ends.
+
+### Editor shortcuts
+
+| Action | Shortcut |
+| --- | --- |
+| Undo / Redo | `Ctrl+Z` / `Ctrl+Y` |
+| Cut / Copy / Paste / Paste Special | `Ctrl+X` / `Ctrl+C` / `Ctrl+V` / `Ctrl+Shift+V` |
+| Select all / Clear selection / Delete selection | `Ctrl+A` / `Esc` / `Delete` |
+| Duplicate current set | `Ctrl+D` |
+| Previous / next set | `Page Up` / `Page Down` |
+| 2D editor / 3D preview | `Ctrl+1` / `Ctrl+2` |
+| Roster / Inspector / Timeline panels | `Ctrl+Shift+R` / `Ctrl+Shift+I` / `Ctrl+Shift+T` |
+| Project setup | `Ctrl+,` |
+| Play / pause | `Ctrl+Space` |
 
 ## Licensing note
 

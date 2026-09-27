@@ -8,6 +8,8 @@ Item {
     property bool showPaths: true
     property bool showShapeGuides: false
     property bool showLabels: true
+    property bool showPreviousFormation: false
+    property real previousFormationOpacity: 0.28
     property bool snapEnabled: true
     property real gridSize: 1.0
     property string hoverCoordinate: ""
@@ -787,6 +789,27 @@ Item {
                         ctx.lineTo(root.toCanvasX(points[i].x), root.toCanvasY(points[i].y))
                     if (!root.drawMode) { ctx.closePath(); ctx.fill() }
                     ctx.stroke()
+                }
+            }
+
+            Repeater {
+                id: previousFormationRepeater
+                model: drillProject
+                delegate: Rectangle {
+                    required property real fromX
+                    required property real fromY
+                    required property bool performerVisible
+                    visible: root.showPreviousFormation && drillProject.currentSetIndex > 0 && performerVisible
+                    z: 1
+                    width: Math.max(8, drillProject.performerMarkerSize * root.zoom * 0.8)
+                    height: width
+                    radius: width / 2
+                    x: root.toCanvasX(fromX) - width / 2
+                    y: root.toCanvasY(fromY) - height / 2
+                    color: "transparent"
+                    border.width: 1.5
+                    border.color: MarchCraftTheme.textSecondary
+                    opacity: root.previousFormationOpacity
                 }
             }
 

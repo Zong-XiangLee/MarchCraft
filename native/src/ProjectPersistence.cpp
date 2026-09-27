@@ -327,6 +327,7 @@ void DrillProject::loadDemo()
 {
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     resetMovements();
     m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     m_musicSections.clear();
@@ -425,6 +426,7 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
         return false;
     }
 
+    clearFormationClipboard();
     beginResetModel();
     resetMovements();
     // Coordinate sheets begin at a zero-count first set. A written hold is a
@@ -579,6 +581,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
         return false;
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     m_projectPath = legacyJson ? QString{} : path;
     m_autosaveTimer.stop();
     m_dirty = false;

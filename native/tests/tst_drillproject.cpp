@@ -1770,6 +1770,195 @@ private slots:
         QVERIFY(!project.commitFormationPreview()); QCOMPARE(state(), after);
     }
 
+    void formationClipboardPartialPastePreservesPathsAndUndo()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 10.0, 12.0);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 20.0, 18.0);
+        project.addPerformer(QStringLiteral("C"), QStringLiteral("Tuba"), QStringLiteral("Brass"), 70.0, 30.0);
+        project.selectPerformerMode(0, 0);
+        project.selectPerformerMode(1, 1);
+        project.faceSelected(90.0);
+        QVERIFY(project.copySelectedFormation());
+        QCOMPARE(project.formationClipboardCount(), 2);
+        QVERIFY(project.formationClipboardSummary().contains(QStringLiteral("2 performers")));
+
+        project.addSet(QStringLiteral("Destination"), 8);
+        project.nudgeSelected(14.0, 6.0);
+        project.faceSelected(180.0);
+        project.setSelectedTransitionPath(QStringLiteral("curved"), {QPointF(28.0, 28.0)});
+        const double movedX = project.data(project.index(0), DrillProject::XRole).toDouble();
+        const double untouchedX = project.data(project.index(2), DrillProject::XRole).toDouble();
+
+        QVERIFY(project.pasteFormation());
+        QCOMPARE(project.selectedCount(), 2);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+        QCOMPARE(project.data(project.index(1), DrillProject::YRole).toDouble(), 18.0);
+        QCOMPARE(project.data(project.index(2), DrillProject::XRole).toDouble(), untouchedX);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("facing")).toDouble(), 90.0);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("curved"));
+
+        project.undo();
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), movedX);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("curved"));
+        project.redo();
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+        QCOMPARE(project.performerInfo(0).value(QStringLiteral("pathType")).toString(), QStringLiteral("curved"));
+    }
+
+    void formationClipboardFullPasteIncludesEveryPerformer()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 12.0, 10.0);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Clarinet"),
+                             QStringLiteral("Woodwinds"), 34.0, 20.0);
+        project.addPerformer(QStringLiteral("C"), QStringLiteral("Sabre"),
+                             QStringLiteral("Guard"), 56.0, 30.0);
+        project.selectAll();
+        project.faceSelected(135.0);
+        project.clearSelection();
+
+        QVERIFY(project.copyFormation());
+        QCOMPARE(project.formationClipboardCount(), 3);
+        project.addSet(QStringLiteral("Destination"), 8);
+        project.selectAll();
+        project.nudgeSelected(11.0, 7.0);
+        project.faceSelected(270.0);
+        QVERIFY(project.pasteFormation());
+
+        const QVector<QPointF> expected{{12.0, 10.0}, {34.0, 20.0}, {56.0, 30.0}};
+        for (int row = 0; row < expected.size(); ++row) {
+            const QPointF actual{project.data(project.index(row), DrillProject::XRole).toDouble(),
+                                 project.data(project.index(row), DrillProject::YRole).toDouble()};
+            QCOMPARE(actual, expected[row]);
+            QCOMPARE(project.performerInfo(row).value(QStringLiteral("facing")).toDouble(), 135.0);
+        }
+    }
+
+    void formationClipboardVariantsMovementsAndPersistence()
+    {
+        QTemporaryDir temporary;
+        QVERIFY(temporary.isValid());
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 10.0, 12.0);
+        project.selectAll();
+        QVERIFY(project.copyCurrentFormation());
+        QVERIFY(project.hasFormationClipboard());
+        project.addSet(QStringLiteral("Destination"), 8);
+        project.nudgeSelected(10.0, 0.0); // Variant A: x=20.
+        project.createVariant(QStringLiteral("Variant B"), QStringLiteral("Clipboard isolation"));
+        project.nudgeSelected(5.0, 0.0); // Variant B: x=25.
+        project.archiveCurrentVariant();
+        QCOMPARE(project.currentVariantCount(), 1);
+        QCOMPARE(project.currentArchivedVariantCount(), 1);
+
+        QVERIFY(project.pasteFormation()); // Only active Variant A changes.
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+        project.restoreArchivedVariant(0);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 25.0);
+
+        project.activateMovement(0);
+        QVERIFY(project.copySetFormation(0));
+        QVERIFY(project.createMovement(QStringLiteral("Second movement")));
+        QCOMPARE(project.currentMovementIndex(), 1);
+        QVERIFY(project.pasteFormation());
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+
+        project.nudgeSelected(7.0, 3.0);
+        const QString path = temporary.filePath(QStringLiteral("clipboard-paste.marchcraft"));
+        QVERIFY(project.saveProject(path));
+        DrillProject restored;
+        QVERIFY(restored.loadProject(path));
+        restored.activateMovement(1);
+        QCOMPARE(restored.data(restored.index(0), DrillProject::XRole).toDouble(), 17.0);
+        QCOMPARE(restored.data(restored.index(0), DrillProject::YRole).toDouble(), 15.0);
+
+        QVERIFY(project.hasFormationClipboard());
+        project.newProject();
+        QVERIFY(!project.hasFormationClipboard());
+
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Clarinet"),
+                             QStringLiteral("Woodwinds"), 22.0, 18.0);
+        project.selectAll();
+        QVERIFY(project.copyCurrentFormation());
+        QVERIFY(project.loadProject(path));
+        QVERIFY(!project.hasFormationClipboard());
+    }
+
+    void formationPasteSpecialTransformsMetadataWithoutDeformation()
+    {
+        DrillProject project;
+        project.newProject();
+        project.batchAddPerformers(QStringLiteral("P"), 4, QStringLiteral("Trumpet"), QStringLiteral("Brass"));
+        project.selectAll();
+        project.groupSelected(QStringLiteral("Feature line"));
+        project.distributeLine(10.0, 20.0, 40.0, 20.0);
+        QCOMPARE(project.currentShapeCount(), 1);
+        QVERIFY(project.copySelectedFormation());
+
+        project.addSet(QStringLiteral("Destination"), 8);
+        project.nudgeSelected(20.0, 10.0);
+        QVERIFY(project.pasteFormation(QStringLiteral("positionsFacingMetadata"), true, false, 4.0, 0.0));
+        QCOMPARE(project.currentShapeCount(), 1);
+        QVERIFY(project.selectionIsExactGroup());
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 44.0);
+        QCOMPARE(project.data(project.index(3), DrillProject::XRole).toDouble(), 14.0);
+        for (int row = 0; row < project.performerCount(); ++row)
+            QCOMPARE(project.data(project.index(row), DrillProject::YRole).toDouble(), 20.0);
+        QCOMPARE(project.shapeInfo(0).value(QStringLiteral("memberCount")).toInt(), 4);
+    }
+
+    void cutAlignAndDistributeAreAtomic()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("A"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 10.0, 10.0);
+        project.addPerformer(QStringLiteral("B"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 23.0, 22.0);
+        project.addPerformer(QStringLiteral("C"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 50.0, 34.0);
+        project.selectAll();
+        project.addSet(QStringLiteral("Destination"), 8);
+        project.nudgeSelected(8.0, 4.0);
+        QVERIFY(project.cutSelectedFormation());
+        QCOMPARE(project.formationClipboardCount(), 3);
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+        project.undo();
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 18.0);
+        project.redo();
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+
+        project.selectAll();
+        QVERIFY(project.alignSelected(QStringLiteral("front")));
+        for (int row = 0; row < project.performerCount(); ++row)
+            QCOMPARE(project.data(project.index(row), DrillProject::YRole).toDouble(), 10.0);
+        project.undo();
+        QCOMPARE(project.data(project.index(1), DrillProject::YRole).toDouble(), 22.0);
+        project.selectAll();
+        QVERIFY(project.distributeSelected(QStringLiteral("horizontal")));
+        QCOMPARE(project.data(project.index(0), DrillProject::XRole).toDouble(), 10.0);
+        QCOMPARE(project.data(project.index(1), DrillProject::XRole).toDouble(), 30.0);
+        QCOMPARE(project.data(project.index(2), DrillProject::XRole).toDouble(), 50.0);
+        project.undo();
+        QCOMPARE(project.data(project.index(1), DrillProject::XRole).toDouble(), 23.0);
+    }
+
+    void filteredRosterRangeSkipsHiddenMatches()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("T1"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 10, 10);
+        project.addPerformer(QStringLiteral("W1"), QStringLiteral("Clarinet"), QStringLiteral("Woodwinds"), 20, 10);
+        project.addPerformer(QStringLiteral("T2"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 30, 10);
+        project.selectPerformerRangeFiltered(0, 2, false, QStringLiteral("Trumpet"));
+        QCOMPARE(project.selectedCount(), 2);
+        QVERIFY(project.data(project.index(0), DrillProject::SelectedRole).toBool());
+        QVERIFY(!project.data(project.index(1), DrillProject::SelectedRole).toBool());
+        QVERIFY(project.data(project.index(2), DrillProject::SelectedRole).toBool());
+    }
+
     void formationDistribution()
     {
         DrillProject project;

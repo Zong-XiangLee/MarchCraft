@@ -124,6 +124,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(double audioOffsetMs READ audioOffsetMs WRITE setAudioOffsetMs NOTIFY musicChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
+    Q_PROPERTY(bool hasFormationClipboard READ hasFormationClipboard NOTIFY formationClipboardChanged)
+    Q_PROPERTY(int formationClipboardCount READ formationClipboardCount NOTIFY formationClipboardChanged)
+    Q_PROPERTY(QString formationClipboardSummary READ formationClipboardSummary NOTIFY formationClipboardChanged)
     Q_PROPERTY(int selectedGroupedCount READ selectedGroupedCount NOTIFY selectionChanged)
     Q_PROPERTY(bool selectionIsExactGroup READ selectionIsExactGroup NOTIFY selectionChanged)
     Q_PROPERTY(bool canGroupSelection READ canGroupSelection NOTIFY selectionChanged)
@@ -332,6 +335,9 @@ public:
     void setAudioOffsetMs(double value);
     QString statusMessage() const { return m_statusMessage; }
     int selectedCount() const;
+    bool hasFormationClipboard() const;
+    int formationClipboardCount() const;
+    QString formationClipboardSummary() const;
     int selectedGroupedCount() const;
     bool selectionIsExactGroup() const;
     bool canGroupSelection() const;
@@ -507,10 +513,20 @@ public:
     Q_INVOKABLE void selectPerformer(int row, bool additive);
     Q_INVOKABLE void selectPerformerMode(int row, int mode);
     Q_INVOKABLE void selectPerformerRange(int anchorRow, int row, bool additive);
+    Q_INVOKABLE void selectPerformerRangeFiltered(int anchorRow, int row, bool additive,
+                                                   const QString &filter);
     Q_INVOKABLE void selectInRect(double x1, double y1, double x2, double y2, bool additive);
     Q_INVOKABLE void selectInPolygon(const QVariantList &points, bool additive);
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE bool copyFormation();
+    Q_INVOKABLE bool copySelectedFormation();
+    Q_INVOKABLE bool copyCurrentFormation();
+    Q_INVOKABLE bool copySetFormation(int setIndex);
+    Q_INVOKABLE bool cutSelectedFormation();
+    Q_INVOKABLE bool pasteFormation(const QString &mode = QStringLiteral("positionsFacing"),
+                                     bool mirrorHorizontal = false, bool mirrorVertical = false,
+                                     double offsetX = 0.0, double offsetY = 0.0);
     Q_INVOKABLE void groupSelected(const QString &name = {});
     Q_INVOKABLE void ungroupSelected();
     Q_INVOKABLE void removeSelectedFromGroup();
@@ -554,6 +570,8 @@ public:
     Q_INVOKABLE void mirrorSelected(bool horizontal);
     Q_INVOKABLE void snapSelected(double grid);
     Q_INVOKABLE void faceSelected(double degrees);
+    Q_INVOKABLE bool alignSelected(const QString &alignment);
+    Q_INVOKABLE bool distributeSelected(const QString &axis);
     Q_INVOKABLE bool beginTransitionEdit();
     Q_INVOKABLE void setTransitionEditType(const QString &type, const QVariantMap &options = {});
     Q_INVOKABLE void updateTransitionEditOptions(const QVariantMap &options);
@@ -622,6 +640,7 @@ signals:
     void formationPreviewChanged();
     void transitionEditChanged();
     void clinicChanged();
+    void formationClipboardChanged();
 
 private:
     friend class ExportController;
@@ -674,6 +693,12 @@ private:
                                   const QVector<int> &assignment) const;
     void invalidateClinic();
     QString issueLabelList(const QVector<int> &rows, int limit = 6) const;
+    bool copyFormationFromSet(int setIndex, bool selectionOnly);
+    QJsonObject availableFormationClipboard() const;
+    void setFormationClipboardPayload(const QJsonObject &payload);
+    void clearFormationClipboard();
+    void detachEditedPerformersFromShapes(MarchCraft::SetVariant &variant,
+                                          const QSet<QString> &performerIds);
 
     struct FormationPreviewState {
         bool active = false;
@@ -713,6 +738,7 @@ private:
     QString m_projectPath;
     QString m_ownedRecoveryPath;
     QString m_statusMessage{QStringLiteral("Ready")};
+    QJsonObject m_formationClipboard;
     double m_bpm = 120.0;
     double m_playhead = 0.0;
     int m_playbackSet = -1;

@@ -143,6 +143,24 @@ Frame {
             }
             AppButton { Layout.minimumWidth: 0; text: "Auto-label selection"; visible: false; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: drillProjectContext.autoLabel("P") }
             AppButton { Layout.minimumWidth: 0; text: "Bulk edit selection…"; visible: drillProjectContext.selectedCount > 0; enabled: visible; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; onClicked: bulkEditDialogContext.open() }
+            RowLayout {
+                visible: drillProjectContext.selectedCount > 0
+                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                AppButton { Layout.minimumWidth: 0; text: "Copy"; Layout.fillWidth: true; onClicked: drillProjectContext.copySelectedFormation() }
+                AppButton { Layout.minimumWidth: 0; text: "Paste"; Layout.fillWidth: true; enabled: drillProjectContext.hasFormationClipboard; onClicked: drillProjectContext.pasteFormation() }
+            }
+            GridLayout {
+                visible: drillProjectContext.selectedCount > 1
+                columns: 3; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                AppButton { Layout.minimumWidth: 0; text: "Align L"; onClicked: drillProjectContext.alignSelected("left") }
+                AppButton { Layout.minimumWidth: 0; text: "Center"; onClicked: drillProjectContext.alignSelected("centerX") }
+                AppButton { Layout.minimumWidth: 0; text: "Align R"; onClicked: drillProjectContext.alignSelected("right") }
+                AppButton { Layout.minimumWidth: 0; text: "Front"; onClicked: drillProjectContext.alignSelected("front") }
+                AppButton { Layout.minimumWidth: 0; text: "Middle"; onClicked: drillProjectContext.alignSelected("centerY") }
+                AppButton { Layout.minimumWidth: 0; text: "Back"; onClicked: drillProjectContext.alignSelected("back") }
+                AppButton { Layout.minimumWidth: 0; text: "Space H"; enabled: drillProjectContext.selectedCount > 2; onClicked: drillProjectContext.distributeSelected("horizontal") }
+                AppButton { Layout.minimumWidth: 0; text: "Space V"; enabled: drillProjectContext.selectedCount > 2; onClicked: drillProjectContext.distributeSelected("vertical") }
+            }
             GridLayout { columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; visible: drillProjectContext.selectedCount > 1
                 Label { text: "Facing at this set"; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true; Layout.columnSpan: 2 }
                 AppButton { Layout.minimumWidth: 0; Layout.fillWidth: true; text: "Front"; onClicked: drillProjectContext.faceSelected(0) }
@@ -332,8 +350,18 @@ Frame {
                 AppButton { Layout.minimumWidth: 0; text: "Bake last"; enabled: drillProjectContext.currentShapeCount > 0; onClicked: drillProjectContext.removeShape(drillProjectContext.currentShapeCount - 1, true) }
             }
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
-            Label { text: "SHOW ANALYTICS"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.leftMargin: 12 }
+            RowLayout {
+                Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+                Label { text: "SHOW ANALYTICS"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
+                AppToolButton {
+                    text: workspaceSettingsContext.inspectorAnalyticsExpanded ? "⌃" : "⌄"
+                    ToolTip.text: workspaceSettingsContext.inspectorAnalyticsExpanded ? "Collapse analytics" : "Expand analytics"
+                    ToolTip.visible: hovered
+                    onClicked: workspaceSettingsContext.inspectorAnalyticsExpanded = !workspaceSettingsContext.inspectorAnalyticsExpanded
+                }
+            }
             GridLayout {
+                visible: workspaceSettingsContext.inspectorAnalyticsExpanded
                 columns: 2; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12; rowSpacing: 10
                 Label { text: "Average / performer"; color: MarchCraftTheme.textSecondary }
                 Label { text: drillProjectContext.formatDistance(drillProjectContext.averageDistance); font.bold: true; Layout.alignment: Qt.AlignRight }
@@ -347,29 +375,36 @@ Frame {
             Rectangle { Layout.fillWidth: true; height: 1; color: "#293443" }
             RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 Label { text: "DRILL CLINIC"; font.bold: true; color: MarchCraftTheme.textSecondary; Layout.fillWidth: true }
-                Label { text: "ANALYSIS"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
+                Label { text: drillProjectContext.clinicIssueCount ? drillProjectContext.clinicIssueCount + " ISSUE" + (drillProjectContext.clinicIssueCount === 1 ? "" : "S") : "CLEAR"; color: drillProjectContext.clinicIssueCount ? MarchCraftTheme.warning : MarchCraftTheme.success; font.bold: true; font.pixelSize: 9; font.letterSpacing: 0.8 }
+                AppToolButton {
+                    text: workspaceSettingsContext.inspectorClinicExpanded ? "⌃" : "⌄"
+                    ToolTip.text: workspaceSettingsContext.inspectorClinicExpanded ? "Collapse Drill Clinic" : "Expand Drill Clinic"
+                    ToolTip.visible: hovered
+                    onClicked: workspaceSettingsContext.inspectorClinicExpanded = !workspaceSettingsContext.inspectorClinicExpanded
+                }
             }
             Label {
+                visible: workspaceSettingsContext.inspectorClinicExpanded
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 text: "Only real rehearsal risks are shown first. Dismiss a false alarm or preview a fix before changing the drill."
                 color: "#a9bbb1"; font.pixelSize: 11; wrapMode: Text.Wrap
             }
-            RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+            RowLayout { visible: workspaceSettingsContext.inspectorClinicExpanded; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 ComboBox { Layout.fillWidth: true; currentIndex: 0; model: ["critical","caution","all","info"]; onActivated: inspector.clinicSeverityFilter = currentText }
                 ComboBox { Layout.fillWidth: true; model: ["all","stride","collision","equipmentCollision","propCollision","crossing","direction","spacing","boundary","complexPath"]; onActivated: inspector.clinicTypeFilter = currentText }
             }
             Label {
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
-                visible: drillProjectContext.clinicIssueCount === 0
+                visible: workspaceSettingsContext.inspectorClinicExpanded && drillProjectContext.clinicIssueCount === 0
                 text: drillProjectContext.currentSetIndex > 0 ? "No active issues at this capability profile." : "Choose a destination set to analyze its incoming transition."
                 color: "#5ead83"
                 wrapMode: Text.Wrap
             }
             Repeater {
-                model: drillProjectContext.clinicIssues.filter(function(issue) {
+                model: workspaceSettingsContext.inspectorClinicExpanded ? drillProjectContext.clinicIssues.filter(function(issue) {
                     return (inspector.clinicSeverityFilter === "all" || issue.severity === inspector.clinicSeverityFilter)
                         && (inspector.clinicTypeFilter === "all" || issue.type === inspector.clinicTypeFilter)
-                })
+                }) : []
                 delegate: Frame {
                     Layout.minimumWidth: 0
                     required property var modelData
@@ -398,7 +433,7 @@ Frame {
                     }
                 }
             }
-            RowLayout { Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
+            RowLayout { visible: workspaceSettingsContext.inspectorClinicExpanded; Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 AppButton { Layout.minimumWidth: 0; text: "Scan show"; Layout.fillWidth: true; onClicked: drillProjectContext.scanShow() }
                 AppButton { Layout.minimumWidth: 0;
                     text: inspector.nextSetSuggestionsExpanded ? "Hide next-set ideas" : "Suggest next set"
@@ -411,7 +446,7 @@ Frame {
                 }
             }
             ColumnLayout {
-                visible: inspector.nextSetSuggestionsExpanded
+                visible: workspaceSettingsContext.inspectorClinicExpanded && inspector.nextSetSuggestionsExpanded
                 Layout.fillWidth: true; Layout.leftMargin: 12; Layout.rightMargin: 12
                 spacing: 6
                 RowLayout { Layout.fillWidth: true

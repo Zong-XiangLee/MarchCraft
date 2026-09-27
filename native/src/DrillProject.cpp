@@ -827,6 +827,7 @@ void DrillProject::newProject()
 {
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     resetMovements();
     if (m_audioDecoder) m_audioDecoder->stop();
     m_transitionPaths.clear();
@@ -1247,25 +1248,7 @@ void DrillProject::batchAddSets(int numberOfSets, int counts)
 
 void DrillProject::duplicateCurrentSet()
 {
-    if (m_currentSet < 0 || m_currentSet >= m_sets.size()) return;
-    const auto before = toJson();
-    DrillSet copy = m_sets[m_currentSet];
-    copy.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    for (auto &variant : copy.variants)
-        variant.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    copy.activeVariantId = copy.variants.first().id;
-    copy.activeVariant().name += QStringLiteral(" Copy");
-    m_sets.insert(m_currentSet + 1, copy);
-    ++m_currentSet;
-    QVector<int> durations;
-    for (const auto &set : std::as_const(m_sets)) durations.push_back(qMax(1, set.counts));
-    rebuildSetTicksFrom(m_currentSet, durations);
-    m_selectedSetStart = m_selectedSetEnd = m_currentSet;
-    m_selectedTimelineSets = {m_currentSet}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
-    m_selectedTimelineMarkerId.clear();
-    emit setsChanged(); emit currentSetChanged(); emit timingChanged(); emit setRangeChanged();
-    emit timelineSelectionChanged(); emitAllDataChanged();
-    commitSnapshot(before, QStringLiteral("Duplicate set"));
+    duplicateSetAt(m_currentSet);
 }
 
 void DrillProject::duplicateSetAt(int index)
@@ -1278,7 +1261,7 @@ void DrillProject::duplicateSetAt(int index)
     const int insert=index+1; const int counts=qMax(1,copy.counts); copy.startTick=advancePulses(m_sets[index].startTick,counts);
     m_sets.insert(insert,copy);QVector<int>durations;for(const auto&set:std::as_const(m_sets))durations.push_back(qMax(1,set.counts));
     rebuildSetTicksFrom(insert,durations);m_currentSet=insert;m_selectedSetStart=m_selectedSetEnd=insert;m_selectedTimelineSets={insert};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;m_selectedTimelineMarkerId.clear();
-    recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Copy set"));
+    recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Duplicate set"));
 }
 
 void DrillProject::insertSetAt(int index)
@@ -1547,6 +1530,32 @@ void DrillProject::selectPerformerRange(int anchorRow, int row, bool additive)
     for (int i = first; i <= last; ++i)
         if (m_performers[i].visible && !m_performers[i].locked)
             m_performers[i].selected = true;
+    emitAllDataChanged();
+    emit selectionChanged();
+}
+
+void DrillProject::selectPerformerRangeFiltered(int anchorRow, int row, bool additive,
+                                                const QString &filter)
+{
+    if (filter.trimmed().isEmpty()) {
+        selectPerformerRange(anchorRow, row, additive);
+        return;
+    }
+    if (m_performers.isEmpty()) return;
+    anchorRow = std::clamp(anchorRow, 0, static_cast<int>(m_performers.size()) - 1);
+    row = std::clamp(row, 0, static_cast<int>(m_performers.size()) - 1);
+    if (!additive)
+        for (auto &person : m_performers) person.selected = false;
+    const QString needle = filter.trimmed().toCaseFolded();
+    const int first = qMin(anchorRow, row);
+    const int last = qMax(anchorRow, row);
+    for (int i = first; i <= last; ++i) {
+        auto &performer = m_performers[i];
+        const QString searchable = QStringLiteral("%1 %2 %3 %4")
+            .arg(performer.label, performer.name, performer.instrument, performer.section).toCaseFolded();
+        if (searchable.contains(needle) && performer.visible && !performer.locked)
+            performer.selected = true;
+    }
     emitAllDataChanged();
     emit selectionChanged();
 }
