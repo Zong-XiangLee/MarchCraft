@@ -37,6 +37,20 @@ Frame {
         workspaceSettingsContext.timelineCollapsed = false
     }
 
+    function openMusicTool(tool) {
+        if (tool === "group") musicTools.openGroupSelection()
+        else if (tool === "sections") musicTools.openSections()
+        else if (tool === "markers") musicTools.openMarkers()
+        else if (tool === "timing") { transportContext.pause(); timingDialogContext.open() }
+        else if (tool === "offset") musicTools.openOffset()
+        else if (tool === "mapping") musicTools.openMapping()
+        else if (tool === "generation") musicTools.openGeneration()
+        else if (tool === "planning") musicTools.openSetPlan()
+        else if (tool === "diagnostics") musicTools.openDiagnostics()
+        else if (tool === "tracks") musicTools.openTracks()
+        else musicTools.openMenu()
+    }
+
     function showDragPreview() {
         timeline.dragFrom = 0
         timeline.dropSlot = Math.min(3, drillProjectContext.setCount)

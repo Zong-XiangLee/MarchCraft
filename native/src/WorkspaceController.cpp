@@ -1,8 +1,10 @@
 #include "WorkspaceController.h"
 
 #include <QBuffer>
+#include <QCryptographicHash>
 #include <QDateTime>
 #include <QDir>
+#include <QFile>
 #include <QFileInfo>
 #include <QJsonArray>
 #include <QJsonDocument>
@@ -19,6 +21,7 @@
 namespace {
 constexpr auto RecentProjectsKey = "workspace/recentProjects";
 constexpr auto StartupSoundKey = "workspace/startupSoundEnabled";
+constexpr auto ProjectWorkspacePrefix = "workspace/project/";
 constexpr int MaximumRecentProjects = 8;
 
 QByteArray startupWav()
@@ -63,6 +66,12 @@ QByteArray startupWav()
     buffer.write("data", 4); write32(pcm.size()); buffer.write(pcm);
     return wav;
 }
+
+QString projectWorkspaceKey(const QString &path)
+{
+    const QByteArray digest = QCryptographicHash::hash(path.toUtf8(), QCryptographicHash::Sha256).toHex();
+    return QString::fromLatin1(ProjectWorkspacePrefix) + QString::fromLatin1(digest);
+}
 }
 
 WorkspaceController::WorkspaceController(QObject *parent)
@@ -74,6 +83,7 @@ WorkspaceController::WorkspaceController(QObject *parent)
     m_startupSound.setVolume(0.34);
     refreshSystemPreferences();
     refreshRecentProjects();
+    refreshRecovery();
 }
 
 void WorkspaceController::refreshSystemPreferences()
@@ -108,6 +118,8 @@ QString WorkspaceController::localPath(const QString &urlOrPath)
 
 QString WorkspaceController::normalizedPath(const QString &urlOrPath)
 {
+    if (urlOrPath.trimmed().isEmpty())
+        return {};
     QFileInfo info(localPath(urlOrPath));
     const QString canonical = info.canonicalFilePath();
     return QDir::cleanPath(canonical.isEmpty() ? info.absoluteFilePath() : canonical);
@@ -179,6 +191,58 @@ void WorkspaceController::refreshRecentProjects()
     m_recentProjects = next;
     persistRecentProjects();
     if (changed) emit recentProjectsChanged();
+}
+
+void WorkspaceController::refreshRecovery()
+{
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/recovery.marchcraft");
+    const QFileInfo info(path);
+    const bool available = info.exists() && info.isFile() && info.size() > 0;
+    const QString description = available
+        ? QStringLiteral("Autosaved %1").arg(info.lastModified().toLocalTime().toString(QStringLiteral("MMM d, h:mm AP")))
+        : QString{};
+    if (available == m_recoveryAvailable && path == m_recoveryPath
+        && description == m_recoveryDescription)
+        return;
+    m_recoveryAvailable = available;
+    m_recoveryPath = path;
+    m_recoveryDescription = description;
+    emit recoveryChanged();
+}
+
+bool WorkspaceController::discardRecovery()
+{
+    const QString path = QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
+        + QStringLiteral("/recovery.marchcraft");
+    if (QFileInfo::exists(path) && !QFile::remove(path))
+        return false;
+    refreshRecovery();
+    return true;
+}
+
+QString WorkspaceController::workspaceForProject(const QString &urlOrPath) const
+{
+    const QString path = normalizedPath(urlOrPath);
+    if (path.isEmpty()) return QStringLiteral("editor");
+    QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
+                       QStringLiteral("MarchCraft"), QStringLiteral("MarchCraft"));
+    const QString workspace = settings.value(projectWorkspaceKey(path), QStringLiteral("editor")).toString();
+    static const QStringList valid{QStringLiteral("roster"), QStringLiteral("music"),
+                                   QStringLiteral("editor"), QStringLiteral("review")};
+    return valid.contains(workspace) ? workspace : QStringLiteral("editor");
+}
+
+void WorkspaceController::rememberWorkspace(const QString &urlOrPath, const QString &workspace)
+{
+    const QString path = normalizedPath(urlOrPath);
+    static const QStringList valid{QStringLiteral("roster"), QStringLiteral("music"),
+                                   QStringLiteral("editor"), QStringLiteral("review")};
+    if (path.isEmpty() || !valid.contains(workspace)) return;
+    QSettings settings(QSettings::NativeFormat, QSettings::UserScope,
+                       QStringLiteral("MarchCraft"), QStringLiteral("MarchCraft"));
+    settings.setValue(projectWorkspaceKey(path), workspace);
+    settings.sync();
 }
 
 void WorkspaceController::persistRecentProjects() const

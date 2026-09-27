@@ -29,10 +29,10 @@ Frame {
         RowLayout {
             Layout.fillWidth: true
             Layout.margins: 10
-            Label { text: "ROSTER"; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary }
+            Label { text: "PERFORMERS"; font.bold: true; font.pixelSize: 10; font.letterSpacing: 1; color: MarchCraftTheme.textSecondary }
             Item { Layout.fillWidth: true }
             Label { text: drillProjectContext.performerCount; color: MarchCraftTheme.textMuted; font.pixelSize: 11 }
-            AppToolButton { text: "‹"; ToolTip.text: "Collapse roster"; ToolTip.visible: hovered; onClicked: workspaceSettingsContext.rosterCollapsed = true }
+            AppToolButton { text: "‹"; ToolTip.text: "Hide performer picker"; ToolTip.visible: hovered; onClicked: workspaceSettingsContext.rosterCollapsed = true }
         }
         TextField {
                     placeholderTextColor: MarchCraftTheme.textMuted

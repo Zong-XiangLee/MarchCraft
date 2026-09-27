@@ -11,6 +11,8 @@ TestCase {
     function init() {
         logic.workspaceActive = false
         logic.hasCurrentProject = false
+        logic.currentWorkspace = "editor"
+        logic.lastUsefulWorkspace = "editor"
         logic.awaitingConfirmation = false
         logic.pendingAction = ""
         logic.pendingPath = ""
@@ -46,8 +48,24 @@ TestCase {
     }
 
     function test_entered_project_enables_resume_state() {
-        logic.enteredProject()
+        logic.enteredProject("music")
         verify(logic.workspaceActive)
         verify(logic.hasCurrentProject)
+        compare(logic.currentWorkspace, "music")
+        compare(logic.lastUsefulWorkspace, "music")
+    }
+
+    function test_workspace_switching_is_validated_and_export_is_not_reopened() {
+        verify(logic.switchWorkspace("roster"))
+        compare(logic.currentWorkspace, "roster")
+        compare(logic.lastUsefulWorkspace, "roster")
+
+        verify(logic.switchWorkspace("export"))
+        compare(logic.currentWorkspace, "export")
+        compare(logic.lastUsefulWorkspace, "roster")
+        compare(logic.reopenWorkspace("export"), "editor")
+
+        verify(!logic.switchWorkspace("timeline"))
+        compare(logic.currentWorkspace, "export")
     }
 }

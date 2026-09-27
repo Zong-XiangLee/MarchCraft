@@ -369,6 +369,7 @@ public:
     Q_INVOKABLE bool importCoordinateJson(const QString &urlOrPath);
     Q_INVOKABLE bool saveProject(const QString &urlOrPath = {});
     Q_INVOKABLE bool loadProject(const QString &urlOrPath);
+    Q_INVOKABLE bool loadRecoveryProject(const QString &urlOrPath);
     Q_INVOKABLE bool exportCsv(const QString &urlOrPath) const;
     Q_INVOKABLE bool exportCoordinatePdf(const QString &urlOrPath) const;
     Q_INVOKABLE bool importMusicXml(const QString &urlOrPath);
@@ -460,6 +461,7 @@ public:
                                   const QString &section, double x = 80.0, double y = 28.0);
     Q_INVOKABLE void batchAddPerformers(const QString &prefix, int count,
                                         const QString &instrument, const QString &section);
+    Q_INVOKABLE bool batchCreateRoster(const QVariantList &sections);
     Q_INVOKABLE void removeSelectedPerformers();
     Q_INVOKABLE void updatePerformer(int row, const QString &label, const QString &name,
                                      const QString &instrument, const QString &section,
@@ -706,6 +708,7 @@ private:
     QString m_fieldPreset{QStringLiteral("hs")};
     QString m_audioSource;
     QString m_projectPath;
+    QString m_ownedRecoveryPath;
     QString m_statusMessage{QStringLiteral("Ready")};
     double m_bpm = 120.0;
     double m_playhead = 0.0;
@@ -722,6 +725,7 @@ private:
     qint64 m_timelineRangeStart = 0;
     qint64 m_timelineRangeEnd = 0;
     bool m_dirty = false;
+    bool m_requiresExplicitSave = false;
     QVector<MarchCraft::Performer> m_performers;
     struct Movement {
         QString id;

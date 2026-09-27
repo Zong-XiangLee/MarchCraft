@@ -57,6 +57,11 @@ qt_add_qml_module(marchcraft
         qml/Main.qml
         qml/EditorCommandBars.qml
         qml/WelcomeWorkspace.qml
+        qml/WorkspaceHeader.qml
+        qml/RosterWorkspace.qml
+        qml/RosterBatchEditor.qml
+        qml/MusicWorkspace.qml
+        qml/ReviewPanel.qml
         qml/ExportWorkspace.qml
         qml/ExportVideoWindow.qml
         qml/EditorPreferences.qml
