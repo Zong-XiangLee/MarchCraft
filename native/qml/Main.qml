@@ -894,8 +894,7 @@ ApplicationWindow {
         onOpened: {
             const s = editing ? drillProject.setInfo(drillProject.currentSetIndex) : ({})
             setNumber.text = s.number || String(drillProject.setCount + 1)
-            const defaultNumber = s.number || String(drillProject.setCount + 1)
-            setName.text = !s.name || /^Set \\d+[A-Z]?$/i.test(s.name) || s.name === "New set" ? "Set " + defaultNumber : s.name
+            setName.text = s.name || ""
             setCaption.text = s.caption || ""
             setMeasure.text = s.measure || ""
             setCounts.value = s.opening ? drillProject.openingCounts : (s.counts || 8)
@@ -905,8 +904,8 @@ ApplicationWindow {
         contentItem: ColumnLayout {
             Label { text: "Set number" }
             TextField { id: setNumber; Layout.fillWidth: true; placeholderText: "1A" }
-            Label { text: "Set name (double-click a set card to customize)" }
-            TextField { id: setName; Layout.fillWidth: true }
+            Label { text: "Set name (optional)" }
+            TextField { id: setName; Layout.fillWidth: true; placeholderText: "Push to company front" }
             Label { text: "Caption" }
             ScrollView { Layout.fillWidth: true; Layout.preferredHeight: 90; TextArea { id: setCaption; placeholderText: "Chart instructions (multiple lines)"; wrapMode: TextEdit.Wrap } }
             Label { text: "Measures" }
@@ -944,7 +943,7 @@ ApplicationWindow {
         modal: true; anchors.centerIn: Overlay.overlay; width: 420
         onOpened: {
             const current = drillProject.setInfo(drillProject.currentSetIndex)
-            variantName.text = (current.name || "Set") + " alternate"
+            variantName.text = (current.displayName || "Set") + " alternate"
             variantCaption.text = ""
         }
         contentItem: ColumnLayout {

@@ -7,6 +7,7 @@
 #include <QJsonArray>
 #include <QJsonObject>
 #include <QPointF>
+#include <QRegularExpression>
 #include <QString>
 #include <QUuid>
 #include <QVector>
@@ -332,6 +333,10 @@ struct SetVariant {
 struct DrillSet {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QString number;
+    // Optional human-authored title for the set. Variant names remain a
+    // separate concept: a blank title is meaningful and must stay blank in
+    // printed material.
+    QString title;
     QString measure;
     int counts = 8;
     qint64 startTick = 0;
@@ -377,6 +382,7 @@ struct DrillSet {
         for (const auto &variant : archivedVariants) archivedVariantArray.push_back(variant.toJson());
         return {{QStringLiteral("id"), id},
                 {QStringLiteral("number"), number},
+                {QStringLiteral("title"), title},
                 {QStringLiteral("measure"), measure},
                 {QStringLiteral("counts"), counts},
                 {QStringLiteral("startTick"), startTick},
@@ -394,6 +400,7 @@ struct DrillSet {
         result.variants.clear();
         result.id = object.value(QStringLiteral("id")).toString(result.id);
         result.number = object.value(QStringLiteral("number")).toString();
+        result.title = object.value(QStringLiteral("title")).toString().simplified().left(120);
         result.measure = object.value(QStringLiteral("measure")).toString();
         result.counts = qMax(0, object.value(QStringLiteral("counts")).toInt(8));
         result.startTick = object.value(QStringLiteral("startTick")).toVariant().toLongLong();
@@ -418,6 +425,17 @@ struct DrillSet {
         result.activeVariantId = object.value(QStringLiteral("activeVariantId")).toString();
         if (result.activeVariantIndex() < 0)
             result.activeVariantId = result.variants.first().id;
+        // Schema 12 and earlier used the active variant name as the set title.
+        // Preserve a genuinely authored name while keeping generated labels
+        // ("Set 12", "New set") as an intentionally blank optional title.
+        if (!object.contains(QStringLiteral("title"))) {
+            const QString legacy = result.activeVariant().name.simplified();
+            const QRegularExpression generated(
+                QStringLiteral("^(?:Set\\s+\\d+[A-Z]?|New set)$"),
+                QRegularExpression::CaseInsensitiveOption);
+            if (!legacy.isEmpty() && !generated.match(legacy).hasMatch())
+                result.title = legacy.left(120);
+        }
         return result;
     }
 };

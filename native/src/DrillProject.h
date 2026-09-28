@@ -589,6 +589,7 @@ public:
     Q_INVOKABLE QVariantMap archivedSetInfo(int index) const;
     Q_INVOKABLE QVariantMap archivedVariantInfo(int index) const;
     Q_INVOKABLE QVariantMap performerInfo(int row) const;
+    Q_INVOKABLE QVariantMap coordinateDetails(int row, int setIndex = -1) const;
     Q_INVOKABLE QString coordinateFor(int row, int setIndex = -1) const;
     Q_INVOKABLE void undo();
     Q_INVOKABLE void redo();
@@ -625,6 +626,7 @@ signals:
 
 private:
     friend class ExportController;
+    friend class DrillProjectTest;
     QJsonObject m_exportBranding;
     bool m_exportRendering = false;
     DrillProject(bool backgroundWorker, QObject *parent);
