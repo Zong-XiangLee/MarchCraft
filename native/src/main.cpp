@@ -125,6 +125,7 @@ int main(int argc, char *argv[])
         project.addPerformer(QStringLiteral("T01"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 72, 42);
         project.setOpeningBehavior(QStringLiteral("hold"), 2);
         project.selectAll();project.addSet(QStringLiteral("Move"), 4);project.nudgeSelected(8, 0);
+        project.addSet(QStringLiteral("Set 3"), 8); // unnamed hold row
         project.clearSelection();
     }
     const int midiFlag = arguments.indexOf(QStringLiteral("--midi"));
@@ -162,7 +163,7 @@ int main(int argc, char *argv[])
         project.addPerformer(QStringLiteral("T01"), QStringLiteral("Trumpet"),
                              QStringLiteral("Brass"), 32.0, 20.0);
         project.selectPerformer(0, false);
-        for (int set = 2; set <= 42; ++set) {
+        for (int set = 2; set <= 10; ++set) {
             project.addSet(QStringLiteral("Set %1").arg(set), 8 + (set % 3) * 4);
             project.nudgeSelected(0.75, (set % 2 == 0) ? 0.25 : -0.25);
         }
@@ -288,12 +289,50 @@ int main(int argc, char *argv[])
     const int exportFlag = arguments.indexOf(QStringLiteral("--qa-export"));
     if (exportFlag >= 0 && exportFlag + 1 < arguments.size()) {
         QVariantMap options{{QStringLiteral("format"), QStringLiteral("pdf")}, {QStringLiteral("scope"), QStringLiteral("active")}, {QStringLiteral("sets"), QStringLiteral("1-2")}};
+        auto optionValue = [&](const QString &flag) {
+            const int index = arguments.indexOf(flag);
+            return index >= 0 && index + 1 < arguments.size() ? arguments[index + 1] : QString{};
+        };
         const int formatFlag = arguments.indexOf(QStringLiteral("--export-format"));
         if (formatFlag >= 0 && formatFlag + 1 < arguments.size()) options[QStringLiteral("format")] = arguments[formatFlag + 1];
         const int contentFlag=arguments.indexOf(QStringLiteral("--export-content"));
         if(contentFlag>=0 && contentFlag+1<arguments.size())options[QStringLiteral("content")]=arguments[contentFlag+1];
         const int soundFlag = arguments.indexOf(QStringLiteral("--export-audio"));
         if (soundFlag >= 0 && soundFlag + 1 < arguments.size()) options[QStringLiteral("audio")] = arguments[soundFlag + 1];
+        if (!optionValue(QStringLiteral("--export-sets")).isEmpty()) {
+            options[QStringLiteral("range")] = QStringLiteral("custom");
+            options[QStringLiteral("sets")] = optionValue(QStringLiteral("--export-sets"));
+        }
+        if (!optionValue(QStringLiteral("--export-range")).isEmpty())
+            options[QStringLiteral("range")] = optionValue(QStringLiteral("--export-range"));
+        if (!optionValue(QStringLiteral("--export-density")).isEmpty())
+            options[QStringLiteral("density")] = optionValue(QStringLiteral("--export-density"));
+        if (!optionValue(QStringLiteral("--export-scope")).isEmpty())
+            options[QStringLiteral("performerScope")] = optionValue(QStringLiteral("--export-scope"));
+        if (!optionValue(QStringLiteral("--export-movement-scope")).isEmpty())
+            options[QStringLiteral("scope")] = optionValue(QStringLiteral("--export-movement-scope"));
+        if (!optionValue(QStringLiteral("--export-section")).isEmpty()) {
+            options[QStringLiteral("performerScope")] = QStringLiteral("section");
+            options[QStringLiteral("sections")] = optionValue(QStringLiteral("--export-section"));
+        }
+        if (!optionValue(QStringLiteral("--export-instrument")).isEmpty()) {
+            options[QStringLiteral("performerScope")] = QStringLiteral("instrument");
+            options[QStringLiteral("instruments")] = optionValue(QStringLiteral("--export-instrument"));
+        }
+        if (!optionValue(QStringLiteral("--export-performer")).isEmpty()) {
+            options[QStringLiteral("performerScope")] = QStringLiteral("single");
+            options[QStringLiteral("performers")] = optionValue(QStringLiteral("--export-performer"));
+        }
+        if (!optionValue(QStringLiteral("--export-hold-mode")).isEmpty())
+            options[QStringLiteral("holdMode")] = optionValue(QStringLiteral("--export-hold-mode"));
+        if (arguments.contains(QStringLiteral("--export-monochrome")))
+            options[QStringLiteral("monochrome")] = true;
+        if (arguments.contains(QStringLiteral("--export-measures")))
+            options[QStringLiteral("measures")] = true;
+        if (arguments.contains(QStringLiteral("--export-no-notes")))
+            options[QStringLiteral("notes")] = false;
+        if (arguments.contains(QStringLiteral("--export-transition-paths")))
+            options[QStringLiteral("transitionPaths")] = true;
         const int encoderFlag = arguments.indexOf(QStringLiteral("--ffmpeg"));
         if (encoderFlag >= 0 && encoderFlag + 1 < arguments.size()) exportController.setFfmpeg(arguments[encoderFlag + 1]);
         QObject::connect(&exportController, &ExportController::finished, &application, [&application](bool ok) { application.exit(ok ? 0 : 5); });

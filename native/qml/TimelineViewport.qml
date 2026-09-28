@@ -542,7 +542,8 @@ Item {
                         }
                         Label {
                             visible: transition.width >= 92
-                            text: "→ " + transition.info.number + " " + transition.info.name
+                            text: "→ " + transition.info.number
+                                + (transition.info.name ? " " + transition.info.name : "")
                             color: MarchCraftTheme.textSecondary
                             font.pixelSize: 10
                             elide: Text.ElideRight
@@ -577,7 +578,8 @@ Item {
                     ToolTip.text: {
                         const details = typeof root.project.transitionInfo === "function"
                             ? root.project.transitionInfo(transition.index) : transition.info
-                        return "Transition to Set " + transition.info.number + " · " + transition.info.name
+                        return "Transition to Set " + transition.info.number
+                            + (transition.info.name ? " · " + transition.info.name : "")
                             + "\n" + transition.info.counts + " counts · " + root.formatTime(transition.startMs)
                             + " → " + root.formatTime(transition.endMs)
                             + (details.measure ? "\nMeasure " + details.measure + ", beat " + Number(details.beat).toFixed(2) : "")
@@ -661,7 +663,8 @@ Item {
                     }
                     ToolTip.visible: containsMouse && !pressed
                     ToolTip.delay: 350
-                    ToolTip.text: "Set " + setMarker.info.number + " · " + setMarker.info.name
+                    ToolTip.text: "Set " + setMarker.info.number
+                        + (setMarker.info.name ? " · " + setMarker.info.name : "")
                         + "\nShift-click selects a page range · Ctrl-click toggles a page"
                 }
 

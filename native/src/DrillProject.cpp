@@ -1,4 +1,5 @@
 #include "DrillProject.h"
+#include "CoordinateSheet.h"
 
 #include <QDir>
 #include <QDateTime>
@@ -74,6 +75,24 @@ private:
     QJsonObject m_after;
     bool m_firstRedo = true;
 };
+
+namespace
+{
+QString optionalSetTitle(QString value)
+{
+    value = value.simplified().left(120);
+    const QRegularExpression generated(
+        QStringLiteral("^(?:Set\\s+\\d+[A-Z]?|New set)$"),
+        QRegularExpression::CaseInsensitiveOption);
+    return generated.match(value).hasMatch() ? QString{} : value;
+}
+
+QString setDisplayName(const MarchCraft::DrillSet &set)
+{
+    return set.title.trimmed().isEmpty()
+        ? QStringLiteral("Set %1").arg(set.number) : set.title;
+}
+} // namespace
 
 
 
@@ -628,7 +647,7 @@ void DrillProject::setLoopEnabled(bool value)
 QString DrillProject::currentSetName() const
 {
     return m_currentSet >= 0 && m_currentSet < m_sets.size()
-        ? m_sets[m_currentSet].activeVariant().name : QString();
+        ? setDisplayName(m_sets[m_currentSet]) : QString();
 }
 
 int DrillProject::currentVariantCount() const
@@ -1191,8 +1210,8 @@ void DrillProject::addSet(const QString &name, int counts, bool subset)
     const auto before = toJson();
     DrillSet set;
     set.number = QString::number(m_sets.size() + 1);
-    set.activeVariant().name = name.trimmed().isEmpty()
-        ? QStringLiteral("Set %1").arg(m_sets.size() + 1) : name.trimmed();
+    set.title = optionalSetTitle(name);
+    set.activeVariant().name = QStringLiteral("Set %1").arg(m_sets.size() + 1);
     set.counts = qMax(1, counts);
     const int insertAt = m_currentSet + 1;
     set.startTick = m_sets.isEmpty() ? 0 : advancePulses(m_sets[qMax(0, m_currentSet)].startTick, set.counts);
@@ -1254,7 +1273,7 @@ void DrillProject::duplicateCurrentSet()
     for (auto &variant : copy.variants)
         variant.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     copy.activeVariantId = copy.variants.first().id;
-    copy.activeVariant().name += QStringLiteral(" Copy");
+    if (!copy.title.isEmpty()) copy.title += QStringLiteral(" Copy");
     m_sets.insert(m_currentSet + 1, copy);
     ++m_currentSet;
     QVector<int> durations;
@@ -1271,6 +1290,7 @@ void DrillProject::duplicateCurrentSet()
 void DrillProject::duplicateSetAt(int index)
 {
     if(index<0||index>=m_sets.size())return; const auto before=toJson(); DrillSet copy=m_sets[index];
+    if(!copy.title.isEmpty())copy.title+=QStringLiteral(" Copy");
     copy.id=QUuid::createUuid().toString(QUuid::WithoutBraces); copy.archivedOrder=-1;
     auto renewVariant=[](MarchCraft::SetVariant &variant){variant.id=QUuid::createUuid().toString(QUuid::WithoutBraces);QHash<QString,QString> groupIds;for(auto&group:variant.groups){const QString old=group.id;group.id=QUuid::createUuid().toString(QUuid::WithoutBraces);groupIds.insert(old,group.id);}for(auto&shape:variant.shapes){shape.id=QUuid::createUuid().toString(QUuid::WithoutBraces);if(groupIds.contains(shape.groupId))shape.groupId=groupIds.value(shape.groupId);}};
     for(auto&variant:copy.variants)renewVariant(variant);for(auto&variant:copy.archivedVariants)renewVariant(variant);
@@ -1324,7 +1344,7 @@ void DrillProject::moveSet(int from,int to)
     recalculateCounts(); emit propsChanged(); emit timingChanged(); emit setsChanged(); emit setRangeChanged();
     emit timelineSelectionChanged(); emit currentSetChanged(); emitAllDataChanged();
     setStatus(QStringLiteral("Moved %1 to timeline position %2; transitions and timing were rebuilt")
-        .arg(moved.number.isEmpty() ? moved.activeVariant().name : moved.number).arg(to + 1));
+        .arg(setDisplayName(moved)).arg(to + 1));
     commitSnapshot(before, QStringLiteral("Reorder sets"));
 }
 
@@ -1482,10 +1502,7 @@ void DrillProject::updateCurrentSet(const QString &number, const QString &name,
     const auto before = toJson();
     auto &set = m_sets[m_currentSet];
     set.number = number.trimmed().isEmpty() ? QString::number(m_currentSet + 1) : number.trimmed();
-    const QString requestedName = name.trimmed();
-    set.activeVariant().name = requestedName.isEmpty()
-        || QRegularExpression(QStringLiteral("^Set \\d+[A-Z]?$"), QRegularExpression::CaseInsensitiveOption).match(requestedName).hasMatch()
-        ? QStringLiteral("Set %1").arg(set.number) : requestedName;
+    set.title = optionalSetTitle(name);
     set.activeVariant().caption = caption.trimmed();
     set.measure = measure.trimmed();
     if (m_currentSet == 0) {
@@ -1845,7 +1862,9 @@ QVariantMap DrillProject::setInfo(int index) const
     const double duration = index > 0 ? transitionDurationMs(index) : 0.0;
     return {{QStringLiteral("number"), set.number.isEmpty() ? QString::number(index + 1) : set.number},
             {QStringLiteral("id"), set.id},
-            {QStringLiteral("name"), set.activeVariant().name},
+            {QStringLiteral("name"), set.title},
+            {QStringLiteral("displayName"), setDisplayName(set)},
+            {QStringLiteral("variantName"), set.activeVariant().name},
             {QStringLiteral("caption"), set.activeVariant().caption},
             {QStringLiteral("measure"), set.measure},
             {QStringLiteral("counts"), index == 0 ? (m_openingBehavior == QStringLiteral("hold") ? m_openingCounts : 0) : set.counts},
@@ -1884,7 +1903,9 @@ QVariantMap DrillProject::archivedSetInfo(int index) const
     if (index < 0 || index >= m_archivedSets.size()) return {};
     const auto &set = m_archivedSets[index];
     return {{QStringLiteral("number"), set.number},
-            {QStringLiteral("name"), set.activeVariant().name},
+            {QStringLiteral("name"), set.title},
+            {QStringLiteral("displayName"), setDisplayName(set)},
+            {QStringLiteral("variantName"), set.activeVariant().name},
             {QStringLiteral("caption"), set.activeVariant().caption},
             {QStringLiteral("measure"), set.measure},
             {QStringLiteral("variantCount"), set.variants.size()}};
@@ -1946,63 +1967,30 @@ QVariantMap DrillProject::performerInfo(int row) const
             {QStringLiteral("distance"), performerTotalDistance(row)}};
 }
 
-QString DrillProject::coordinateFor(int row, int setIndex) const
+QVariantMap DrillProject::coordinateDetails(int row, int setIndex) const
 {
     if (row < 0 || row >= m_performers.size()) return {};
     if (setIndex < 0) setIndex = m_currentSet;
-    const auto point = placementAt(row, setIndex).position;
-    if (point.y() >= 0.0 && point.y() <= fieldDepthSteps()) {
-        if (point.x() < 0.0 && point.x() >= canvasMinX())
-            return QStringLiteral("Side 1 end zone · %1 steps beyond the goal line")
-                .arg(compactNumber(-point.x()));
-        if (point.x() > fieldWidthSteps() && point.x() <= canvasMaxX())
-            return QStringLiteral("Side 2 end zone · %1 steps beyond the goal line")
-                .arg(compactNumber(point.x() - fieldWidthSteps()));
-    }
-    QStringList apronParts;
-    if (point.x() < 0.0)
-        apronParts << QStringLiteral("%1 steps outside Side 1 goal line").arg(compactNumber(-point.x()));
-    else if (point.x() > fieldWidthSteps())
-        apronParts << QStringLiteral("%1 steps outside Side 2 goal line").arg(compactNumber(point.x() - fieldWidthSteps()));
-    if (point.y() < 0.0)
-        apronParts << QStringLiteral("%1 steps in front of front sideline").arg(compactNumber(-point.y()));
-    else if (point.y() > fieldDepthSteps())
-        apronParts << QStringLiteral("%1 steps behind back sideline").arg(compactNumber(point.y() - fieldDepthSteps()));
-    if (!apronParts.isEmpty()) return QStringLiteral("Staging apron: %1").arg(apronParts.join(QStringLiteral(" · ")));
-    const double centered = point.x() - 80.0;
-    const int side = centered <= 0.0 ? 1 : 2;
-    const double rawYard = 50.0 - std::abs(centered) * 5.0 / 8.0;
-    const double yard = std::round(rawYard / 5.0) * 5.0;
-    const double yardX = 80.0 + (side == 1 ? -1.0 : 1.0) * (50.0 - yard) * 1.6;
-    const double offset = std::abs(point.x() - yardX);
-    const bool towardCenter = std::abs(point.x() - 80.0) < std::abs(yardX - 80.0);
-    QString lateral = offset < 0.01
-        ? QStringLiteral("On %1 yard line").arg(compactNumber(yard))
-        : QStringLiteral("%1 steps %2 %3 yard line")
-              .arg(compactNumber(offset), towardCenter ? QStringLiteral("inside") : QStringLiteral("outside"),
-                   compactNumber(yard));
-    // Audience-facing coordinate convention: Side 1 is screen-left, Side 2 is
-    // screen-right; the front sideline/hash are the audience-side landmarks.
-    // Moving toward smaller y is "in front of" a landmark, moving toward larger
-    // y is "behind" it. Therefore "in front of back hash" means toward the
-    // audience from the far hash, while "behind front hash" means away from it.
-    struct Landmark { QString name; double value; };
-    const auto geometry = MarchCraft::fieldGeometry(m_fieldPreset);
-    const QVector<Landmark> landmarks = {{QStringLiteral("front sideline"), 0.0},
-                                         {QStringLiteral("front hash"), geometry.frontHash},
-                                         {QStringLiteral("back hash"), geometry.backHash},
-                                         {QStringLiteral("back sideline"), geometry.depth}};
-    auto closest = landmarks.first();
-    for (const auto &candidate : landmarks)
-        if (std::abs(point.y() - candidate.value) < std::abs(point.y() - closest.value)) closest = candidate;
-    const double verticalOffset = std::abs(point.y() - closest.value);
-    const QString vertical = verticalOffset < 0.01
-        ? QStringLiteral("On %1").arg(closest.name)
-        : QStringLiteral("%1 steps %2 %3")
-              .arg(compactNumber(verticalOffset),
-                   point.y() < closest.value ? QStringLiteral("in front of") : QStringLiteral("behind"),
-                   closest.name);
-    return QStringLiteral("Side %1: %2 · %3").arg(side).arg(lateral, vertical);
+    if (setIndex < 0 || setIndex >= m_sets.size()) return {};
+    const auto &variant = m_sets[setIndex].activeVariant();
+    const QString performerId = m_performers[row].id;
+    if (!variant.placements.contains(performerId))
+        return {{QStringLiteral("valid"), false},
+                {QStringLiteral("sideToSide"), QStringLiteral("Coordinate unavailable")},
+                {QStringLiteral("frontToBack"), QStringLiteral("Coordinate unavailable")},
+                {QStringLiteral("combined"), QStringLiteral("Coordinate unavailable")}};
+    const auto text = MarchCraft::formatCoordinate(variant.placements.value(performerId).position,
+                                                    MarchCraft::fieldGeometry(m_fieldPreset),
+                                                    fieldWidthSteps());
+    return {{QStringLiteral("valid"), text.valid},
+            {QStringLiteral("sideToSide"), text.sideToSide},
+            {QStringLiteral("frontToBack"), text.frontToBack},
+            {QStringLiteral("combined"), text.combined()}};
+}
+
+QString DrillProject::coordinateFor(int row, int setIndex) const
+{
+    return coordinateDetails(row, setIndex).value(QStringLiteral("combined")).toString();
 }
 
 void DrillProject::undo() { m_undo.undo(); }
