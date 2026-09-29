@@ -1431,6 +1431,14 @@ private slots:
         recovered.refreshRecoveryCandidates();
         QVERIFY(recovered.restoreRecovery(recoveryIndex));
         QCOMPARE(recovered.performerCount(), 2);
+        QVERIFY(recovered.dirty());
+        recovered.selectPerformer(0, false);
+        recovered.nudgeSelected(0.5, 0.0);
+        QVERIFY(recovered.dirty());
+        QVERIFY(recovered.canUndo());
+        recovered.undo();
+        // Baseline of recovered project must remain dirty even after undoing subsequent edits
+        QVERIFY(recovered.dirty());
         project.discardRecovery(recoveryIndex);
     }
 

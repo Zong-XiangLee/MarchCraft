@@ -517,6 +517,7 @@ bool DrillProject::saveProject(const QString &urlOrPath)
     QFile::remove(recoveryRoot() + QLatin1Char('/') + key + QStringLiteral(".marchcraft"));
     QFile::remove(recoveryRoot() + QLatin1Char('/') + key + QStringLiteral(".json"));
     m_autosaveTimer.stop();
+    m_recoveredBaseline = false;
     m_undo.setClean();
     m_dirty = false;
     emit dirtyChanged();
@@ -559,6 +560,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
         return false;
     m_projectPath = legacyJson ? QString{} : path;
     m_autosaveTimer.stop();
+    m_recoveredBaseline = false;
     m_dirty = false;
     m_undo.clear();
     emit dirtyChanged();
@@ -593,7 +595,7 @@ bool DrillProject::restoreRecovery(int index)
         setDiagnostic(QStringLiteral("Restore recovery"), candidate.value(QStringLiteral("snapshotPath")).toString(), location, message.isEmpty() ? QStringLiteral("Recovery project could not be restored") : message); return false;
     }
     m_projectPath = candidate.value(QStringLiteral("projectPath")).toString();
-    m_undo.clear(); m_dirty = true; emit dirtyChanged(); emit projectChanged();
+    m_undo.clear(); m_recoveredBaseline = true; m_dirty = true; emit dirtyChanged(); emit projectChanged();
     setStatus(QStringLiteral("Recovered unsaved work; save to keep it"));
     return true;
 }

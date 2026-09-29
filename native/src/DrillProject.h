@@ -609,6 +609,7 @@ private:
     int m_selectedSetStart = 0;
     int m_selectedSetEnd = 0;
     bool m_dirty = false;
+    bool m_recoveredBaseline = false;
     QVector<MarchCraft::Performer> m_performers;
     QVector<MarchCraft::DrillSet> m_sets;
     QVector<MarchCraft::DrillSet> m_archivedSets;

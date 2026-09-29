@@ -21,6 +21,10 @@
 
 #ifdef Q_OS_WIN
 #include <windows.h>
+#else
+#include <cstdio>
+#include <cerrno>
+#include <cstring>
 #endif
 
 
@@ -68,12 +72,10 @@ bool replaceAtomically(const QString &stagedPath, const QString &destination, QS
     if (error) *error = QStringLiteral("Could not atomically replace project (Windows error %1)").arg(GetLastError());
     return false;
 #else
-    if (QFileInfo::exists(destination) && !QFile::remove(destination)) {
-        if (error) *error = QStringLiteral("Could not replace existing project");
-        return false;
-    }
-    if (QFile::rename(stagedPath, destination)) return true;
-    if (error) *error = QStringLiteral("Could not move staged project into place");
+    const std::string staged = stagedPath.toStdString();
+    const std::string target = destination.toStdString();
+    if (std::rename(staged.c_str(), target.c_str()) == 0) return true;
+    if (error) *error = QStringLiteral("Could not atomically replace project (%1)").arg(QString::fromLocal8Bit(std::strerror(errno)));
     return false;
 #endif
 }

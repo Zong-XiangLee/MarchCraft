@@ -152,9 +152,10 @@ DrillProject::DrillProject(bool backgroundWorker, QObject *parent)
     connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelFormationPreview);
     connect(this, &DrillProject::selectionChanged, this, &DrillProject::cancelGroupMotionPreview);
     connect(&m_undo, &QUndoStack::cleanChanged, this, [this](bool clean) {
-        if (m_dirty == !clean) return;
-        m_dirty = !clean;
-        if (clean) m_autosaveTimer.stop();
+        const bool shouldBeDirty = !clean || m_recoveredBaseline;
+        if (m_dirty == shouldBeDirty) return;
+        m_dirty = shouldBeDirty;
+        if (!m_dirty) m_autosaveTimer.stop();
         emit dirtyChanged();
     });
     newProject();
