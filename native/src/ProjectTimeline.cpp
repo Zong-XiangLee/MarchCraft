@@ -762,9 +762,10 @@ bool DrillProject::applySetPlan()
         MarchCraft::DrillSet set;
         set.startTick = candidate.tick;
         set.activeVariant().placements = m_sets[insertAt - 1].activeVariant().placements;
-        set.activeVariant().name = candidate.measure > 0
+        set.title = candidate.measure > 0
             ? QStringLiteral("Suggested Set · M. %1").arg(candidate.measure)
             : QStringLiteral("Suggested Set");
+        set.activeVariant().name = QStringLiteral("Set variant A");
         set.measure = candidate.measure > 0 ? QString::number(candidate.measure) : QString();
         m_sets.insert(insertAt, std::move(set));
     }

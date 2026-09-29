@@ -1,4 +1,5 @@
 #include "DrillProject.h"
+#include "CoordinateSheet.h"
 
 #include <QDateTime>
 #include <QCryptographicHash>
@@ -64,7 +65,7 @@ QJsonObject DrillProject::toJson() const
     std::sort(selectedIndices.begin(), selectedIndices.end());
     for (int index : selectedIndices) selectedSets.push_back(index);
     QJsonObject result{{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 12},
+            {QStringLiteral("version"), 13},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
@@ -115,7 +116,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 12) {
+        || object.value(QStringLiteral("version")).toInt() > 13) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
@@ -458,7 +459,14 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
             int destination = setIndices.value(key, -1);
             if (destination < 0) {
                 DrillSet set;
-                set.activeVariant().name = sourceSet.value(QStringLiteral("set")).toString();
+                set.number = sourceSet.value(QStringLiteral("set")).toString().simplified().left(24);
+                set.subset = QRegularExpression(QStringLiteral("[A-Za-z]$"))
+                                 .match(set.number).hasMatch();
+                set.title = (sourceSet.contains(QStringLiteral("title"))
+                                 ? sourceSet.value(QStringLiteral("title"))
+                                 : sourceSet.value(QStringLiteral("name")))
+                                .toString().simplified().left(120);
+                set.activeVariant().name = QStringLiteral("Set variant A");
                 set.measure = sourceSet.value(QStringLiteral("measure")).toString();
                 set.counts = qMax(1, sourceSet.value(QStringLiteral("counts")).toInt(8));
                 destination = m_sets.size();
@@ -494,7 +502,8 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
     m_tempoRegions = {MarchCraft::TempoRegion{0, std::numeric_limits<qint64>::max(), m_bpm, m_bpm, QStringLiteral("Tempo")}};
     qint64 tick = 0;
     for (int i = 0; i < m_sets.size(); ++i) {
-        m_sets[i].number = QString::number(i + 1);
+        if (m_sets[i].number.isEmpty())
+            m_sets[i].number = QString::number(i + 1);
         m_sets[i].startTick = tick;
         if (i == 0) { m_sets[i].counts = 0; m_sets[i].stepMultiplier = 0.0; }
         if (i + 1 < m_sets.size()) tick = advancePulses(tick, qMax(1, m_sets[i + 1].counts));
@@ -611,17 +620,31 @@ bool DrillProject::exportCsv(const QString &urlOrPath) const
     if (!file.open(QIODevice::WriteOnly | QIODevice::Text))
         return false;
     QTextStream stream(&file);
-    stream << QStringLiteral("Performer,Name,Instrument,Section,Set,Measure,Counts,Coordinate,Move steps,Total steps\n");
+    stream << QStringLiteral("Performer,Name,Instrument,Section,Set,Set Name,Measure,Counts,Side-to-Side,Front-to-Back,Notes\n");
     for (int p = 0; p < m_performers.size(); ++p) {
         for (int s = 0; s < m_sets.size(); ++s) {
             const auto &person = m_performers[p];
             const auto &set = m_sets[s];
+            const auto coordinate = coordinateDetails(p, s);
+            const bool hold = s > 0
+                && set.activeVariant().placements.contains(person.id)
+                && m_sets[s - 1].activeVariant().placements.contains(person.id)
+                && QLineF(set.activeVariant().placements.value(person.id).position,
+                          m_sets[s - 1].activeVariant().placements.value(person.id).position).length() < 0.01;
             stream << csvCell(person.label) << QLatin1Char(',') << csvCell(person.name) << QLatin1Char(',')
                    << csvCell(person.instrument) << QLatin1Char(',') << csvCell(person.section) << QLatin1Char(',')
-                   << csvCell(set.activeVariant().name) << QLatin1Char(',') << csvCell(set.measure) << QLatin1Char(',')
-                   << set.counts << QLatin1Char(',') << csvCell(coordinateFor(p, s)) << QLatin1Char(',')
-                   << QString::number(transitionDistance(p, s), 'f', 2) << QLatin1Char(',')
-                   << QString::number(performerTotalDistance(p), 'f', 2) << QLatin1Char('\n');
+                   << csvCell(set.number) << QLatin1Char(',') << csvCell(set.title) << QLatin1Char(',')
+                   << csvCell(set.measure) << QLatin1Char(',')
+                   << (s == 0 ? (m_openingBehavior == QStringLiteral("hold") ? m_openingCounts : 0) : set.counts)
+                   << QLatin1Char(',')
+                   << csvCell(hold ? QStringLiteral("Hold")
+                                   : coordinate.value(QStringLiteral("sideToSide")).toString())
+                   << QLatin1Char(',')
+                   << csvCell(hold ? QStringLiteral("Hold")
+                                   : coordinate.value(QStringLiteral("frontToBack")).toString())
+                   << QLatin1Char(',')
+                   << csvCell(hold ? QStringLiteral("Hold") : set.activeVariant().caption.simplified())
+                   << QLatin1Char('\n');
         }
     }
     return file.commit();
@@ -629,125 +652,66 @@ bool DrillProject::exportCsv(const QString &urlOrPath) const
 
 bool DrillProject::exportCoordinatePdf(const QString &urlOrPath) const
 {
-    const QString path = localPath(urlOrPath);
-    QPdfWriter writer(path);
+    const QSizeF letter = QPageSize(QPageSize::Letter).size(QPageSize::Point);
+    MarchCraft::CoordinateSheetOptions options;
+    options.density = QStringLiteral("standard");
+    options.marginPoints = 24.0;
+    options.showSetNames = true;
+    options.showMeasures = false;
+    options.showNotes = true;
+    options.monochrome = true;
+    if (m_performers.isEmpty() || m_sets.size() > MarchCraft::CoordinateSheetLayout::capacity(letter, options))
+        return false;
+
+    QPdfWriter writer(localPath(urlOrPath));
     writer.setTitle(m_showName + QStringLiteral(" Coordinate Sheets"));
     writer.setCreator(QStringLiteral("MarchCraft"));
     writer.setPageSize(QPageSize(QPageSize::Letter));
-    writer.setPageOrientation(QPageLayout::Landscape);
+    writer.setPageOrientation(QPageLayout::Portrait);
+    writer.setPageMargins(QMarginsF(0, 0, 0, 0));
     writer.setResolution(144);
     QPainter painter(&writer);
-    if (!painter.isActive())
-        return false;
+    if (!painter.isActive()) return false;
     const QRect page = writer.pageLayout().paintRectPixels(writer.resolution());
-    const int left = page.left() + 34;
-    const int right = page.right() - 34;
-    const int tableWidth = right - left;
-    const int rowHeight = 25;
-    const int tableTop = page.top() + 126;
-    const int footerSpace = 42;
-    const int rowsPerPage = qMax(1, (page.bottom() - footerSpace - tableTop - rowHeight) / rowHeight);
-    const int pagesPerPerformer = qMax(1, static_cast<int>(std::ceil(m_sets.size() / static_cast<double>(rowsPerPage))));
-    const int totalPages = pagesPerPerformer * m_performers.size();
-    int outputPage = 0;
-
-    QFont heading = painter.font();
-    heading.setBold(true);
-    heading.setPointSize(15);
-    QFont performerFont = painter.font();
-    performerFont.setBold(true);
-    performerFont.setPointSize(10);
-    QFont body = painter.font();
-    body.setPointSize(7);
-    QFont tableHeader = body;
-    tableHeader.setBold(true);
-
-    const QVector<double> columnFractions = {0.055, 0.085, 0.060, 0.300, 0.275, 0.095, 0.130};
-    QStringList headers = {QStringLiteral("Set"), QStringLiteral("Measure"), QStringLiteral("Counts"),
-                           QStringLiteral("Side-to-side"), QStringLiteral("Front-to-back"),
-                           QStringLiteral("Move"), QStringLiteral("Step/count")};
-
-    for (int p = 0; p < m_performers.size(); ++p) {
-        const auto &person = m_performers[p];
-        for (int performerPage = 0; performerPage < pagesPerPerformer; ++performerPage) {
-            if (outputPage > 0)
-                writer.newPage();
-            ++outputPage;
-
-            painter.fillRect(page, Qt::white);
-            painter.setPen(QColor(QStringLiteral("#111827")));
-            painter.setFont(heading);
-            painter.drawText(left, page.top() + 34, QStringLiteral("MARCHCRAFT COORDINATE SHEET"));
-            painter.setFont(performerFont);
-            painter.drawText(left, page.top() + 64,
-                             QStringLiteral("Performer: %1    Instrument: %2    Section: %3")
-                                 .arg(person.label, person.instrument, person.section));
-            painter.drawText(left, page.top() + 90,
-                             QStringLiteral("Name: %1").arg(person.name.isEmpty() ? QStringLiteral("-") : person.name));
-            painter.drawText(QRect(left, page.top() + 48, tableWidth, 28), Qt::AlignRight | Qt::AlignVCenter,
-                             m_showName);
-            painter.setFont(body);
-            painter.drawText(QRect(left, page.top() + 78, tableWidth, 24), Qt::AlignRight | Qt::AlignVCenter,
-                             QStringLiteral("Performer page %1 of %2").arg(performerPage + 1).arg(pagesPerPerformer));
-
-            int x = left;
-            painter.fillRect(QRect(left, tableTop, tableWidth, rowHeight), QColor(QStringLiteral("#17212b")));
-            painter.setPen(Qt::white);
-            painter.setFont(tableHeader);
-            for (int c = 0; c < headers.size(); ++c) {
-                const int width = c == headers.size() - 1
-                    ? right - x : qRound(tableWidth * columnFractions[c]);
-                painter.drawText(QRect(x + 5, tableTop, width - 10, rowHeight),
-                                 Qt::AlignLeft | Qt::AlignVCenter, headers[c]);
-                x += width;
-            }
-
-            painter.setFont(body);
-            const int firstSet = performerPage * rowsPerPage;
-            const int lastSet = qMin(firstSet + rowsPerPage, static_cast<int>(m_sets.size()));
-            for (int s = firstSet; s < lastSet; ++s) {
-                const int row = s - firstSet;
-                const int y = tableTop + rowHeight * (row + 1);
-                if (row % 2 == 1)
-                    painter.fillRect(QRect(left, y, tableWidth, rowHeight), QColor(QStringLiteral("#eef2f4")));
-                painter.setPen(QColor(QStringLiteral("#111827")));
-                const auto &set = m_sets[s];
-                const QString combined = coordinateFor(p, s);
-                QString lateral = combined.section(QStringLiteral(" · "), 0, 0);
-                const QString vertical = combined.section(QStringLiteral(" · "), 1, 1);
-                const double move = transitionDistance(p, s);
-                const double plannedSteps = set.counts * set.stepMultiplier;
-                const double stepPerCount = plannedSteps > 0.0 ? move / plannedSteps
-                                                               : (move > 0.0 ? std::numeric_limits<double>::infinity() : 0.0);
-                const QStringList values = {set.activeVariant().name, set.measure, QString::number(set.counts), lateral,
-                                            vertical, QStringLiteral("%1 st").arg(move, 0, 'f', 1),
-                                            QString::number(stepPerCount, 'f', 2)};
-                x = left;
-                for (int c = 0; c < values.size(); ++c) {
-                    const int width = c == values.size() - 1
-                        ? right - x : qRound(tableWidth * columnFractions[c]);
-                    const QString text = painter.fontMetrics().elidedText(values[c], Qt::ElideRight, width - 10);
-                    painter.drawText(QRect(x + 5, y, width - 10, rowHeight),
-                                     Qt::AlignLeft | Qt::AlignVCenter, text);
-                    painter.setPen(QColor(QStringLiteral("#d1d5db")));
-                    painter.drawLine(x + width, y, x + width, y + rowHeight);
-                    painter.setPen(QColor(QStringLiteral("#111827")));
-                    x += width;
-                }
-                painter.setPen(QColor(QStringLiteral("#d1d5db")));
-                painter.drawLine(left, y + rowHeight, right, y + rowHeight);
-            }
-
-            painter.setPen(QColor(QStringLiteral("#64748b")));
-            painter.setFont(body);
-            painter.drawText(left, page.bottom() - 16,
-                             QStringLiteral("Total distance: %1 steps / %2 yards")
-                                 .arg(performerTotalDistance(p), 0, 'f', 1)
-                                 .arg(performerTotalDistance(p) * 5.0 / 8.0, 0, 'f', 1));
-            painter.drawText(QRect(left, page.bottom() - 31, tableWidth, 24),
-                             Qt::AlignRight | Qt::AlignVCenter,
-                             QStringLiteral("Page %1 of %2").arg(outputPage).arg(totalPages));
+    const QString range = m_sets.size() == 1
+        ? QStringLiteral("Set %1").arg(m_sets.first().number)
+        : QStringLiteral("Sets %1-%2").arg(m_sets.first().number, m_sets.last().number);
+    for (int performer = 0; performer < m_performers.size(); ++performer) {
+        if (performer > 0 && !writer.newPage()) return false;
+        const auto &person = m_performers[performer];
+        MarchCraft::CoordinateSheetData sheet;
+        sheet.showName = m_showName;
+        sheet.rehearsalRange = range;
+        sheet.performerLabel = person.label;
+        sheet.performerName = person.name;
+        sheet.instrument = person.instrument;
+        sheet.section = person.section;
+        sheet.revision = QStringLiteral("Direct export");
+        QPointF previous;
+        bool previousValid = false;
+        for (int setIndex = 0; setIndex < m_sets.size(); ++setIndex) {
+            const auto &set = m_sets[setIndex];
+            const bool valid = set.activeVariant().placements.contains(person.id);
+            const QPointF position = valid ? set.activeVariant().placements.value(person.id).position : QPointF{};
+            const bool hold = setIndex > 0 && valid && previousValid
+                && QLineF(previous, position).length() < 0.01;
+            const auto coordinate = coordinateDetails(performer, setIndex);
+            MarchCraft::CoordinateSheetRow row;
+            row.set = set.number;
+            row.setName = set.title;
+            row.measure = set.measure;
+            row.counts = QString::number(setIndex == 0
+                ? (m_openingBehavior == QStringLiteral("hold") ? m_openingCounts : 0) : set.counts);
+            row.sideToSide = hold ? QStringLiteral("Hold")
+                : coordinate.value(QStringLiteral("sideToSide")).toString();
+            row.frontToBack = hold ? QStringLiteral("Hold")
+                : coordinate.value(QStringLiteral("frontToBack")).toString();
+            row.notes = hold ? QStringLiteral("Hold") : set.activeVariant().caption.simplified();
+            sheet.rows << row;
+            previous = position;
+            previousValid = valid;
         }
+        MarchCraft::CoordinateSheetLayout::draw(painter, page, letter, sheet, options);
     }
     painter.end();
     return true;

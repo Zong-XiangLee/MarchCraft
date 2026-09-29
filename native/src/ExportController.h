@@ -1,5 +1,7 @@
 #pragma once
 
+#include "CoordinateSheet.h"
+
 #include <QImage>
 #include <QJsonObject>
 #include <QObject>
@@ -20,9 +22,10 @@ class QFile;
 struct ExportOptions
 {
     QString format, content, paper, scope, variants, framing, audio, camera, basename;
-    QStringList movements, sets, performers, sections, variantIds;
+    QString range, density, performerScope, performerSort, holdMode;
+    QStringList movements, sets, performers, sections, instruments, variantIds;
     bool landscape, monochrome, grid, labels, symbols, props, notes, headings, numbers, companyLogo,
-        marchcraftLogo, subsets, split;
+        marchcraftLogo, subsets, split, setNames, measures, transitionPaths;
     double margin, fontSize, performerLabelSize, markerSize;
     int dpi, fps, height;
     QRectF crop;
@@ -45,6 +48,11 @@ class ExportController final : public QObject
     Q_PROPERTY(QVariantList choices READ choices NOTIFY changed)
     Q_PROPERTY(QVariantMap branding READ branding NOTIFY changed)
     Q_PROPERTY(QStringList presetNames READ presetNames NOTIFY changed)
+    Q_PROPERTY(QVariantList performerChoices READ performerChoices NOTIFY changed)
+    Q_PROPERTY(QStringList sectionChoices READ sectionChoices NOTIFY changed)
+    Q_PROPERTY(QStringList instrumentChoices READ instrumentChoices NOTIFY changed)
+    Q_PROPERTY(QVariantMap capacityInfo READ capacityInfo NOTIFY changed)
+    Q_PROPERTY(bool canExport READ canExport NOTIFY changed)
     Q_PROPERTY(QString ffmpeg READ ffmpeg WRITE setFfmpeg NOTIFY changed)
     Q_PROPERTY(QObject *renderProject READ renderProject NOTIFY renderProjectChanged)
     Q_PROPERTY(int videoWidth READ videoWidth NOTIFY changed)
@@ -63,6 +71,11 @@ class ExportController final : public QObject
     QVariantList choices() const;
     QVariantMap branding() const;
     QStringList presetNames() const;
+    QVariantList performerChoices() const;
+    QStringList sectionChoices() const;
+    QStringList instrumentChoices() const;
+    QVariantMap capacityInfo() const { return m_capacityInfo; }
+    bool canExport() const { return m_canExport; }
     QString ffmpeg() const;
     void setFfmpeg(const QString &path);
     QObject *renderProject() const;
@@ -87,6 +100,7 @@ class ExportController final : public QObject
     Q_INVOKABLE bool prepare(const QVariantMap &options);
     Q_INVOKABLE void preview(int page);
     Q_INVOKABLE int firstPageForFile(int file) const;
+    Q_INVOKABLE int firstPageForPerformer(const QString &performerId) const;
     Q_INVOKABLE QStringList plannedFiles(const QString &destination) const;
     Q_INVOKABLE bool start(const QString &destination, bool overwrite = false);
     Q_INVOKABLE void cancel();
@@ -116,12 +130,17 @@ class ExportController final : public QObject
         bool continuation = false;
         int performer = -1;
         QVector<int> rows;
+        QString performerId;
+        MarchCraft::CoordinateSheetData coordinateSheet;
+        bool coordinatePage = false;
+        bool capacityExceeded = false;
     };
     void drawPage(QPainter &painter, const QRectF &target, int page, bool animated = false);
     void drawHeader(QPainter &painter, const QRectF &page, DrillProject &project);
     void drawChart(QPainter &painter, const QRectF &area, DrillProject &project, bool animated);
     void activateChart(int chart);
     QSizeF pageSize() const;
+    QSizeF pageSizeForPage(int page) const;
     void tick();
     void positionFrame(int frame);
     int documentForPage(int page) const;
@@ -154,5 +173,8 @@ class ExportController final : public QObject
     QVector<int> m_frameEnds;
     QString m_encoderError;
     QVariantList m_tableRows;
+    QVariantMap m_capacityInfo;
+    QString m_exportIdentifier;
+    bool m_canExport = true;
     int m_previewRevision = 0;
 };

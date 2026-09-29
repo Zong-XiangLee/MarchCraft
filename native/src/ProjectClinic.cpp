@@ -491,7 +491,8 @@ bool DrillProject::acceptSuggestion(const QString &suggestionId)
         }
     } else if (type == QStringLiteral("insertSubset")) {
         DrillSet subset; subset.number = m_sets[destination - 1].number + QStringLiteral("A"); subset.subset = true;
-        subset.activeVariant().name = QStringLiteral("Clinic resolving subset");
+        subset.title = QStringLiteral("Clinic resolving subset");
+        subset.activeVariant().name = QStringLiteral("Set variant A");
         const qint64 a = m_sets[destination - 1].startTick, b = m_sets[destination].startTick; subset.startTick = a + (b-a)/2;
         for (const auto &performer : m_performers) {
             Placement placement = m_sets[destination].activeVariant().placements.value(performer.id);

@@ -13,6 +13,9 @@
 #include <QDir>
 #include <QDataStream>
 #include <QLineF>
+#include <QPainter>
+#include <QPdfWriter>
+#include <QPrinter>
 #include <QQmlContext>
 #include <QJSValue>
 #include <QQmlError>
@@ -1118,6 +1121,13 @@ private slots:
         QElapsedTimer timer;
         timer.start();
         QVERIFY(project.importCoordinateJson(QFileInfo(QString::fromUtf8(__FILE__)).dir().filePath(QStringLiteral("../../data/coordinates.json"))));
+        QCOMPARE(project.performerCount(), 204);
+        QCOMPARE(project.setCount(), 112);
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("number")).toString(), QStringLiteral("1"));
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("number")).toString(), QStringLiteral("1A"));
+        QVERIFY(project.setInfo(1).value(QStringLiteral("subset")).toBool());
+        QCOMPARE(project.setInfo(111).value(QStringLiteral("number")).toString(), QStringLiteral("97"));
+        QVERIFY(!project.setLabelsNeedRenumbering());
         const auto loadMs = timer.restart();
         QVERIFY(project.saveProject(directory.filePath(QStringLiteral("sample.marchcraft"))));
         const auto saveMs = timer.restart();
@@ -1457,9 +1467,15 @@ private slots:
                              QStringLiteral("Brass"), 96.0, geometry.backHash - 2.0);
         project.addPerformer(QStringLiteral("R"), QStringLiteral("Brass"),
                              QStringLiteral("Brass"), 96.0, geometry.backHash + 2.0);
-        QCOMPARE(project.coordinateFor(0), QStringLiteral("Side 1: On 40 yard line · 2 steps in front of front hash"));
-        QCOMPARE(project.coordinateFor(1), QStringLiteral("Side 2: On 40 yard line · 2 steps in front of back hash"));
-        QCOMPARE(project.coordinateFor(2), QStringLiteral("Side 2: On 40 yard line · 2 steps behind back hash"));
+        project.addPerformer(QStringLiteral("Q"), QStringLiteral("Brass"),
+                             QStringLiteral("Brass"), 64.0, 42.0);
+        QCOMPARE(project.coordinateFor(0), QStringLiteral("Side 1: On 40 | 2 in front of front hash"));
+        QCOMPARE(project.coordinateFor(1), QStringLiteral("Side 2: On 40 | 2 in front of back hash"));
+        QCOMPARE(project.coordinateFor(2), QStringLiteral("Side 2: On 40 | 2 behind back hash"));
+        QCOMPARE(project.coordinateDetails(0).value(QStringLiteral("sideToSide")).toString(),
+                 QStringLiteral("Side 1: On 40"));
+        QCOMPARE(project.coordinateDetails(3).value(QStringLiteral("frontToBack")).toString(),
+                 QStringLiteral("13.5 behind front hash"));
     }
 
     void formationAssignmentPreferencePersists()
@@ -2223,7 +2239,10 @@ private slots:
         DrillProject project; project.newProject();
         QCOMPARE(project.canvasMinX(), -16.0); QCOMPARE(project.canvasMaxX(), 176.0);
         project.addPerformer(QStringLiteral("A"), QStringLiteral("Guard"), QStringLiteral("Guard"), -7.0, -6.0);
-        QVERIFY(project.coordinateFor(0).contains(QStringLiteral("Staging apron")));
+        QCOMPARE(project.coordinateDetails(0).value(QStringLiteral("sideToSide")).toString(),
+                 QStringLiteral("Side 1 end zone: 7 beyond goal line"));
+        QCOMPARE(project.coordinateDetails(0).value(QStringLiteral("frontToBack")).toString(),
+                 QStringLiteral("6 in front of front sideline"));
         project.addPerformer(QStringLiteral("B"), QStringLiteral("Guard"), QStringLiteral("Guard"), -8.0, 20.0);
         QVERIFY(project.coordinateFor(1).contains(QStringLiteral("Side 1 end zone")));
         project.selectPerformer(0, false); project.nudgeSelected(-20, -20);
@@ -2276,7 +2295,8 @@ private slots:
         project.archiveSetAt(2); QVERIFY(!project.setLabelsNeedRenumbering());
         project.addSet(QStringLiteral("Set 3"), 8); project.archiveSetAt(1); QVERIFY(project.setLabelsNeedRenumbering());
         project.renumberSets(); QVERIFY(!project.setLabelsNeedRenumbering());
-        QCOMPARE(project.setInfo(1).value(QStringLiteral("name")).toString(), QStringLiteral("Set 2"));
+        QVERIFY(project.setInfo(1).value(QStringLiteral("name")).toString().isEmpty());
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("displayName")).toString(), QStringLiteral("Set 2"));
     }
 
     void galaxySpiralRemainsStableAtManyTurns()
@@ -2586,7 +2606,8 @@ private slots:
         project.moveSet(0, 2);
         QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(), QStringLiteral("Second"));
         QCOMPARE(project.setInfo(1).value(QStringLiteral("name")).toString(), QStringLiteral("Third"));
-        QCOMPARE(project.setInfo(2).value(QStringLiteral("name")).toString(), QStringLiteral("Set 1"));
+        QVERIFY(project.setInfo(2).value(QStringLiteral("name")).toString().isEmpty());
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("displayName")).toString(), QStringLiteral("Set 1"));
         QCOMPARE(project.setInfo(1).value(QStringLiteral("counts")).toInt(), 12);
         QCOMPARE(project.setInfo(2).value(QStringLiteral("counts")).toInt(), 8);
         QCOMPARE(project.currentSetIndex(), 2); QCOMPARE(project.selectedSetStartIndex(), 2); QCOMPARE(project.selectedSetEndIndex(), 2);
@@ -2595,7 +2616,220 @@ private slots:
         QVERIFY(project.setInfo(1).value(QStringLiteral("startTick")).toLongLong() > 0);
         QVERIFY(project.setInfo(2).value(QStringLiteral("startTick")).toLongLong()
             > project.setInfo(1).value(QStringLiteral("startTick")).toLongLong());
-        project.undo(); QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(), QStringLiteral("Set 1"));
+        project.undo(); QVERIFY(project.setInfo(0).value(QStringLiteral("name")).toString().isEmpty());
+    }
+
+    void optionalSetTitlesAreIndependentPersistentAndUndoable()
+    {
+        QTemporaryDir temporary;
+        DrillProject project;
+        project.newProject();
+        project.updateCurrentSet(QStringLiteral("1"), QStringLiteral("Opening Hit"), QString{},
+                                 QStringLiteral("1-4"), 8, false);
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Opening Hit"));
+        project.createVariant(QStringLiteral("Rain plan"), QStringLiteral("Alternate spacing"));
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Opening Hit"));
+        QCOMPARE(project.setInfo(0).value(QStringLiteral("variantName")).toString(),
+                 QStringLiteral("Rain plan"));
+
+        project.addSet(QStringLiteral("Set 2"), 8);
+        QVERIFY(project.setInfo(1).value(QStringLiteral("name")).toString().isEmpty());
+        project.updateCurrentSet(QStringLiteral("2"), QStringLiteral("Push to company front"),
+                                 QString{}, QStringLiteral("5-8"), 8, false);
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Push to company front"));
+        project.undo();
+        QVERIFY(project.setInfo(1).value(QStringLiteral("name")).toString().isEmpty());
+        project.redo();
+        QCOMPARE(project.setInfo(1).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Push to company front"));
+        project.duplicateCurrentSet();
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Push to company front Copy"));
+        project.renumberSets();
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Push to company front Copy"));
+        QCOMPARE(project.toJson().value(QStringLiteral("version")).toInt(), 13);
+
+        const QString path = temporary.filePath(QStringLiteral("set-titles.marchcraft"));
+        QVERIFY(project.saveProject(path));
+        DrillProject restored;
+        QVERIFY(restored.loadProject(path));
+        QCOMPARE(restored.setInfo(0).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Opening Hit"));
+        QCOMPARE(restored.setInfo(1).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Push to company front"));
+
+        QJsonObject legacy = project.toJson();
+        legacy.insert(QStringLiteral("version"), 12);
+        QJsonArray sets = legacy.value(QStringLiteral("sets")).toArray();
+        QJsonObject first = sets.first().toObject();
+        first.remove(QStringLiteral("title"));
+        QJsonArray variants = first.value(QStringLiteral("variants")).toArray();
+        QJsonObject active = variants.first().toObject();
+        active.insert(QStringLiteral("name"), QStringLiteral("Legacy authored title"));
+        variants[0] = active;
+        first.insert(QStringLiteral("activeVariantId"), active.value(QStringLiteral("id")));
+        first.insert(QStringLiteral("variants"), variants);
+        sets[0] = first;
+        legacy.insert(QStringLiteral("sets"), sets);
+        DrillProject migrated;
+        QVERIFY(migrated.restoreJson(legacy));
+        QCOMPARE(migrated.setInfo(0).value(QStringLiteral("name")).toString(),
+                 QStringLiteral("Legacy authored title"));
+    }
+
+    void performerSheetsAreOnePageRangeAwareAndCapacitySafe()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 64, 26);
+        project.addPerformer(QStringLiteral("P02"), QStringLiteral("Clarinet"),
+                             QStringLiteral("Woodwinds"), 96, 59);
+        project.batchAddSets(23, 8); // 24 timeline sets, all holds by default.
+        project.setCurrentSetIndex(4);
+        project.updateCurrentSet(QStringLiteral("5"), QStringLiteral("Company front"),
+                                 QStringLiteral("Watch the release"), QStringLiteral("17-20"), 8, false);
+
+        ExportController exporter(&project);
+        QVariantMap options{{QStringLiteral("content"), QStringLiteral("coordinates")},
+                            {QStringLiteral("format"), QStringLiteral("pdf")},
+                            {QStringLiteral("scope"), QStringLiteral("active")},
+                            {QStringLiteral("range"), QStringLiteral("custom")},
+                            {QStringLiteral("sets"), QStringLiteral("1-10")},
+                            {QStringLiteral("density"), QStringLiteral("standard")},
+                            {QStringLiteral("margin"), 8},
+                            {QStringLiteral("setNames"), true},
+                            {QStringLiteral("notes"), true},
+                            {QStringLiteral("holdMode"), QStringLiteral("hold")}};
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.canExport());
+        QCOMPARE(exporter.pages().size(), 2);
+        QCOMPARE(exporter.capacityInfo().value(QStringLiteral("selectedRows")).toInt(), 10);
+        QCOMPARE(exporter.m_pages[0].coordinateSheet.rows.size(), 10);
+        QVERIFY(exporter.m_pages[0].coordinatePage);
+        QVERIFY(exporter.m_pages[0].coordinateSheet.rows[0].sideToSide != QStringLiteral("Hold"));
+        QCOMPARE(exporter.m_pages[0].coordinateSheet.rows[1].sideToSide, QStringLiteral("Hold"));
+        QCOMPARE(exporter.m_pages[0].coordinateSheet.rows[4].setName,
+                 QStringLiteral("Company front"));
+        QCOMPARE(exporter.m_pages[0].coordinateSheet.rows[4].notes,
+                 QStringLiteral("Hold; Watch the release"));
+
+        options[QStringLiteral("performerScope")] = QStringLiteral("section");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(), 1); // An untouched selector uses its first visible section.
+        QCOMPARE(exporter.m_pages.first().coordinateSheet.performerLabel, QStringLiteral("P01"));
+        options[QStringLiteral("performerScope")] = QStringLiteral("single");
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(), 1); // Fast single-performer preview has a deterministic default.
+        options[QStringLiteral("performerScope")] = QStringLiteral("all");
+        options[QStringLiteral("sections")] = QStringList{QStringLiteral("Brass")};
+        QVERIFY(exporter.prepare(options));
+        QCOMPARE(exporter.pages().size(), 2); // All ignores stale filters from a previous scope.
+
+        options[QStringLiteral("holdMode")] = QStringLiteral("repeat");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.m_pages[0].coordinateSheet.rows[1].sideToSide != QStringLiteral("Hold"));
+        QVERIFY(exporter.m_pages[0].coordinateSheet.rows[1].notes.contains(QStringLiteral("Hold")));
+
+        const int standard = exporter.capacityInfo().value(QStringLiteral("standard")).toInt();
+        const int compact = exporter.capacityInfo().value(QStringLiteral("compact")).toInt();
+        const int large = exporter.capacityInfo().value(QStringLiteral("large")).toInt();
+        QVERIFY(compact > standard);
+        QVERIFY(standard > large);
+        options[QStringLiteral("holdMode")] = QStringLiteral("hold");
+        options[QStringLiteral("sets")] = QStringLiteral("1-%1").arg(standard + 1);
+        options[QStringLiteral("density")] = QStringLiteral("standard");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(!exporter.canExport());
+        QCOMPARE(exporter.pages().size(), 2); // diagnostic preview, never a spill page.
+        QVERIFY(exporter.m_pages.first().capacityExceeded);
+        QVERIFY(exporter.message().contains(QStringLiteral("Capacity warning")));
+        QVERIFY(exporter.message().contains(QStringLiteral("Export is disabled")));
+        QVERIFY(!exporter.start(QDir(QDir::tempPath()).filePath(
+            QStringLiteral("marchcraft-capacity-blocked.pdf"))));
+        options[QStringLiteral("density")] = QStringLiteral("compact");
+        QVERIFY(exporter.prepare(options));
+        QVERIFY(exporter.canExport());
+        QCOMPARE(exporter.pages().size(), 2);
+    }
+
+    void coordinatePdfAndNativePrintUseTheSamePhysicalRenderer()
+    {
+        QTemporaryDir directory;
+        QVERIFY(directory.isValid());
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 80, 42);
+        project.addSet(QStringLiteral("Named move"), 8);
+        project.addSet(QStringLiteral("Set 3"), 8);
+
+        ExportController exporter(&project);
+        QVERIFY(exporter.prepare({{QStringLiteral("content"), QStringLiteral("coordinates")},
+                                  {QStringLiteral("format"), QStringLiteral("pdf")},
+                                  {QStringLiteral("range"), QStringLiteral("custom")},
+                                  {QStringLiteral("sets"), QStringLiteral("1-3")},
+                                  {QStringLiteral("density"), QStringLiteral("standard")},
+                                  {QStringLiteral("margin"), 8}}));
+        QCOMPARE(exporter.m_pages.size(), 1);
+        QCOMPARE(exporter.pageSizeForPage(0), QSizeF(612, 792));
+
+        const QString writerPath = directory.filePath(QStringLiteral("writer.pdf"));
+        {
+            QPdfWriter writer(writerPath);
+            writer.setPageSize(QPageSize(exporter.pageSizeForPage(0), QPageSize::Point));
+            writer.setPageMargins(QMarginsF(0, 0, 0, 0));
+            writer.setResolution(144);
+            QPainter painter(&writer);
+            QVERIFY(painter.isActive());
+            exporter.drawPage(painter, QRectF(0, 0, writer.width(), writer.height()), 0);
+        }
+
+        const QString printerPath = directory.filePath(QStringLiteral("printer.pdf"));
+        {
+            QPrinter printer(QPrinter::HighResolution);
+            printer.setOutputFormat(QPrinter::PdfFormat);
+            printer.setOutputFileName(printerPath);
+            printer.setResolution(144);
+            printer.setPageSize(QPageSize(exporter.pageSizeForPage(0), QPageSize::Point));
+            printer.setFullPage(true);
+            QPainter painter(&printer);
+            QVERIFY(painter.isActive());
+            exporter.drawPage(painter, QRectF(0, 0, printer.width(), printer.height()), 0);
+        }
+
+        for (const QString &path : {writerPath, printerPath}) {
+            QFile file(path);
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const QByteArray contents = file.readAll();
+            QVERIFY(contents.size() > 1000);
+            QVERIFY(contents.contains("/MediaBox [0 0 612"));
+            QVERIFY(contents.contains("792"));
+        }
+    }
+
+    void customRangesIncludeInterveningSubsetSets()
+    {
+        DrillProject project;
+        project.newProject();
+        project.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"),
+                             QStringLiteral("Brass"), 80, 42);
+        project.addSet(QStringLiteral("Second"), 8, false);
+        project.addSet(QStringLiteral("Subset"), 4, true);
+        project.addSet(QStringLiteral("Third"), 8, false);
+        project.renumberSets();
+        QCOMPARE(project.setInfo(2).value(QStringLiteral("number")).toString(), QStringLiteral("2A"));
+        ExportController exporter(&project);
+        QVERIFY(exporter.prepare({{QStringLiteral("content"), QStringLiteral("coordinates")},
+                                  {QStringLiteral("range"), QStringLiteral("custom")},
+                                  {QStringLiteral("sets"), QStringLiteral("2-3")},
+                                  {QStringLiteral("subsets"), true}}));
+        QCOMPARE(exporter.m_pages.first().coordinateSheet.rows.size(), 3);
+        QCOMPARE(exporter.m_pages.first().coordinateSheet.rows[1].set, QStringLiteral("2A"));
     }
 
     void exportSelectionBrandingAndStateIsolation()
@@ -2759,13 +2993,32 @@ private slots:
         ExportController exporter(&project);
         QCOMPARE(ExportOptions::fromMap({}).performerLabelSize,6.0);
         QCOMPARE(ExportOptions::fromMap({{QStringLiteral("performerLabelSize"),2}}).performerLabelSize,4.0);
+        QCOMPARE(ExportOptions::fromMap({}).margin, 10.0);
+        QCOMPARE(ExportOptions::fromMap({{QStringLiteral("content"), QStringLiteral("coordinates")}}).margin,
+                 8.0);
+        QCOMPARE(ExportOptions::fromMap({{QStringLiteral("content"), QStringLiteral("both")}}).margin,
+                 8.0);
         const auto organization=QCoreApplication::organizationName();
         const auto application=QCoreApplication::applicationName();
         QCoreApplication::setOrganizationName(QStringLiteral("MarchCraftExportTests"));
         QCoreApplication::setApplicationName(QFileInfo(temp.path()).fileName());
         const auto cleanup=qScopeGuard([&] {QSettings().clear();QCoreApplication::setOrganizationName(organization);QCoreApplication::setApplicationName(application);});
-        exporter.savePreset(QStringLiteral("QA legacy label"),{{QStringLiteral("fontSize"),12}});
-        QCOMPARE(exporter.loadPreset(QStringLiteral("QA legacy label")).value(QStringLiteral("performerLabelSize")).toInt(),12);
+        exporter.savePreset(QStringLiteral("QA legacy label"),
+                            {{QStringLiteral("fontSize"), 12},
+                             {QStringLiteral("sets"), QStringLiteral("1-2")},
+                             {QStringLiteral("sections"), QStringList{QStringLiteral("Brass")}}});
+        const QVariantMap migratedPreset = exporter.loadPreset(QStringLiteral("QA legacy label"));
+        QCOMPARE(migratedPreset.value(QStringLiteral("performerLabelSize")).toInt(), 12);
+        QCOMPARE(migratedPreset.value(QStringLiteral("range")).toString(), QStringLiteral("custom"));
+        QCOMPARE(migratedPreset.value(QStringLiteral("density")).toString(), QStringLiteral("standard"));
+        QCOMPARE(migratedPreset.value(QStringLiteral("performerScope")).toString(),
+                 QStringLiteral("section"));
+        QCOMPARE(migratedPreset.value(QStringLiteral("performerSort")).toString(),
+                 QStringLiteral("roster"));
+        QCOMPARE(migratedPreset.value(QStringLiteral("holdMode")).toString(), QStringLiteral("hold"));
+        QVERIFY(migratedPreset.value(QStringLiteral("setNames")).toBool());
+        QVERIFY(!migratedPreset.value(QStringLiteral("measures")).toBool());
+        QVERIFY(!migratedPreset.value(QStringLiteral("transitionPaths")).toBool());
         QSettings().remove(QStringLiteral("export/presets/QA legacy label"));
         QVariantMap options{{QStringLiteral("content"),QStringLiteral("both")}, {QStringLiteral("basename"),QStringLiteral("Packet")}, {QStringLiteral("brandingCompany"),QStringLiteral("Preview only")}};
         const auto branding=exporter.branding();
@@ -2790,20 +3043,20 @@ private slots:
         options[QStringLiteral("split")]=true;
         QVERIFY(exporter.prepare(options));
         files=exporter.plannedFiles(temp.path());
-        QCOMPARE(files.size(),4);
+        QCOMPARE(files.size(),3);
         QVERIFY(files[0].contains(QStringLiteral("Drill Charts")));
-        QVERIFY(files[1].contains(QStringLiteral("Coordinates")));
-        QVERIFY(files[2].contains(QStringLiteral("Drill Charts")));
-        QVERIFY(exporter.start(temp.path()));
+        QVERIFY(files[1].contains(QStringLiteral("Drill Charts")));
+        QVERIFY(files[2].contains(QStringLiteral("Coordinates")));
+        QVERIFY(exporter.start(temp.path(),true));
         QTRY_VERIFY_WITH_TIMEOUT(!exporter.busy(),15000);
         QCOMPARE(exporter.progress(),1.0);
         for(const auto &file:files)QVERIFY(QFileInfo(file).size()>1000);
         options[QStringLiteral("format")]=QStringLiteral("csv");
         QVERIFY(exporter.prepare(options));
         QVERIFY(exporter.tableRows().size()>1);
-        QCOMPARE(exporter.tableRows()[0].toStringList().size(),12);
+        QCOMPARE(exporter.tableRows()[0].toStringList().size(),13);
         QCOMPARE(exporter.tableRows()[1].toStringList()[1],QStringLiteral("P01"));
-        QCOMPARE(exporter.tableRows()[1].toStringList()[8],QStringLiteral("2"));
+        QCOMPARE(exporter.tableRows()[1].toStringList()[9],QStringLiteral("2"));
         QVERIFY(exporter.suggestedName(QStringLiteral("charts"),QStringLiteral("pdf")).endsWith(QStringLiteral(" - Drill Charts.pdf")));
         options[QStringLiteral("format")]=QStringLiteral("video2d");
         QVERIFY(exporter.prepare(options));
@@ -2827,8 +3080,19 @@ private slots:
         const QString csv = temporary.filePath(QStringLiteral("analytics.csv"));
         const QString pdf = temporary.filePath(QStringLiteral("coordinates.pdf"));
         QVERIFY(project.exportCsv(csv));
-        QVERIFY(project.exportCoordinatePdf(pdf));
         QVERIFY(QFileInfo(csv).size() > 100);
+        DrillProject oversized;
+        oversized.newProject();
+        oversized.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"),
+                               QStringLiteral("Brass"), 80, 42);
+        oversized.batchAddSets(30, 8);
+        QVERIFY(!oversized.exportCoordinatePdf(pdf)); // Never silently spills an oversized performer.
+        DrillProject printable;
+        printable.newProject();
+        printable.addPerformer(QStringLiteral("P01"), QStringLiteral("Trumpet"),
+                               QStringLiteral("Brass"), 80, 42);
+        printable.batchAddSets(9, 8);
+        QVERIFY(printable.exportCoordinatePdf(pdf));
         QVERIFY(QFileInfo(pdf).size() > 100);
     }
 
