@@ -40,6 +40,33 @@ ApplicationWindow {
     function showQaTimeline(mode) {
         timelinePanel.showQaTimelineMode(mode)
     }
+    function showQaEditor(mode) {
+        requestWorkspace("editor")
+        workspaceSettings.toolbarMode = mode === "expanded" ? "expanded" : "compact"
+        workspaceSettings.rosterCollapsed = true
+        workspaceSettings.inspectorCollapsed = false
+        workspaceSettings.timelineCollapsed = false
+        workspaceSettings.inspectorAnalyticsExpanded = false
+        workspaceSettings.inspectorClinicExpanded = false
+        workspaceSettings.showPreviousFormation = mode === "previous"
+        drillProject.currentSetIndex = Math.min(1, drillProject.setCount - 1)
+        drillProject.clearSelection()
+        if (mode === "clean" || mode === "expanded") return
+        for (let row = 0; row < Math.min(6, drillProject.performerCount); ++row)
+            drillProject.selectPerformerMode(row, 1)
+        if (mode === "paste") {
+            drillProject.copySelectedFormation()
+            drillProject.currentSetIndex = Math.min(2, drillProject.setCount - 1)
+            Qt.callLater(function() { pasteSpecialDialog.open() })
+        } else if (mode === "context") {
+            fieldContextMenu.performerRow = 0
+            Qt.callLater(function() { fieldContextMenu.popup(window.width * 0.43, window.height * 0.34) })
+        } else if (mode === "editMenu") {
+            Qt.callLater(function() { editMenu.open() })
+        } else if (mode === "viewMenu") {
+            Qt.callLater(function() { viewMenu.open() })
+        }
+    }
 
     property int activePerformer: -1
     property bool threeD: false
@@ -50,6 +77,7 @@ ApplicationWindow {
     property string savePurpose: "normal"
     property string homeMode: initialHomeMode
     property bool qaShapePalette: false
+    property string qaEditorState: ""
     readonly property bool editorSurfaceActive: workspaceState.workspaceActive
                                                 && (workspaceState.currentWorkspace === "editor"
                                                     || workspaceState.currentWorkspace === "review")
@@ -184,6 +212,16 @@ ApplicationWindow {
         property bool inspectorCollapsed: false
         property bool timelineCollapsed: false
         property bool timelineMaximized: false
+        property string toolbarMode: "compact"
+        property bool showTransformTools: true
+        property bool showViewTools: false
+        property bool showPreviousFormation: false
+        property real previousFormationOpacity: 0.28
+        property bool showLabels: true
+        property bool snapEnabled: true
+        property real snapGrid: 1.0
+        property bool inspectorAnalyticsExpanded: false
+        property bool inspectorClinicExpanded: false
         property var quickShapes: ["line", "rectangle", "circle", "triangle"]
         property int workspaceChromeRevision: 0
     }
@@ -258,6 +296,7 @@ ApplicationWindow {
     function stopPlayback() { transport.stop() }
     function playCurrentTransition() { transport.playCurrentTransition() }
     function playWholeShow() { transport.playFromSelection() }
+    function formationDialogForToolbar() { formationDialog.open() }
 
     palette {
         window: MarchCraftTheme.panelHeader
@@ -272,6 +311,55 @@ ApplicationWindow {
         mid: MarchCraftTheme.divider
     }
     onQaShapePaletteChanged: if (qaShapePalette) Qt.callLater(function() { shapePalette.open() })
+    onQaEditorStateChanged: if (qaEditorState.length > 0) Qt.callLater(function() { showQaEditor(qaEditorState) })
+
+    Action { id: undoAction; text: "Undo"; shortcut: "Ctrl+Z"; enabled: drillProject.canUndo; onTriggered: drillProject.undo() }
+    Action { id: redoAction; text: "Redo"; shortcut: "Ctrl+Y"; enabled: drillProject.canRedo; onTriggered: drillProject.redo() }
+    Action {
+        id: cutFormationAction; text: "Cut formation"; shortcut: "Ctrl+X"
+        enabled: workspaceState.currentWorkspace === "editor"
+                 && drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0
+        onTriggered: drillProject.cutSelectedFormation()
+    }
+    Action {
+        id: copyFormationAction; text: drillProject.selectedCount > 0 ? "Copy selection" : "Copy formation"
+        shortcut: "Ctrl+C"
+        enabled: workspaceState.currentWorkspace === "editor" && drillProject.setCount > 0
+        onTriggered: drillProject.copyFormation()
+    }
+    Action {
+        id: pasteFormationAction; text: "Paste formation"; shortcut: "Ctrl+V"
+        enabled: workspaceState.currentWorkspace === "editor" && drillProject.hasFormationClipboard
+        onTriggered: drillProject.pasteFormation()
+    }
+    Action {
+        id: pasteSpecialAction; text: "Paste Special…"; shortcut: "Ctrl+Shift+V"
+        enabled: workspaceState.currentWorkspace === "editor" && drillProject.hasFormationClipboard
+        onTriggered: pasteSpecialDialog.open()
+    }
+    Action { id: selectAllAction; text: "Select all"; shortcut: "Ctrl+A"; enabled: workspaceState.currentWorkspace === "editor"; onTriggered: drillProject.selectAll() }
+    Action { id: clearSelectionAction; text: "Clear selection"; shortcut: "Esc"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.selectedCount > 0; onTriggered: drillProject.clearSelection() }
+    Action { id: deleteSelectedAction; text: "Delete performers"; shortcut: "Delete"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.selectedCount > 0; onTriggered: drillProject.removeSelectedPerformers() }
+    Action { id: groupAction; text: "Group selection"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.canGroupSelection; onTriggered: drillProject.groupSelected() }
+    Action { id: ungroupAction; text: "Ungroup selection"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.canUngroupSelection; onTriggered: drillProject.ungroupSelected() }
+    Action { id: removeFromGroupAction; text: "Remove from group"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.canRemoveSelectionFromGroup; onTriggered: drillProject.removeSelectedFromGroup() }
+    Action { id: previousSetAction; text: "Previous set"; shortcut: "PgUp"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.currentSetIndex > 0; onTriggered: transport.previousSet() }
+    Action { id: nextSetAction; text: "Next set"; shortcut: "PgDown"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.currentSetIndex + 1 < drillProject.setCount; onTriggered: transport.nextSet() }
+    Action { id: duplicateSetAction; text: "Duplicate current set"; shortcut: "Ctrl+D"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.setCount > 0; onTriggered: { drillProject.duplicateCurrentSet(); if (drillProject.setLabelsNeedRenumbering()) renumberDialog.open() } }
+    Action { id: formationBuilderAction; text: "Formation builder…"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.selectedCount > 0; onTriggered: formationDialog.open() }
+    Action {
+        id: transitionEditAction; text: drillProject.transitionEditActive ? "Apply transition paths" : "Edit incoming transition…"
+        enabled: workspaceState.currentWorkspace === "editor"
+                 && (drillProject.transitionEditActive
+                     || (drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0))
+        onTriggered: drillProject.transitionEditActive ? drillProject.applyTransitionEdit() : drillProject.beginTransitionEdit()
+    }
+    Action { id: view2DAction; text: "2D drill editor"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !window.threeD; shortcut: "Ctrl+1"; onTriggered: window.threeD = false }
+    Action { id: view3DAction; text: "3D preview"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: window.threeD; shortcut: "Ctrl+2"; onTriggered: window.threeD = true }
+    Action { id: rosterPanelAction; text: "Roster"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; shortcut: "Ctrl+Shift+R"; onTriggered: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
+    Action { id: inspectorPanelAction; text: "Inspector"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.inspectorCollapsed; shortcut: "Ctrl+Shift+I"; onTriggered: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
+    Action { id: timelinePanelAction; text: "Timeline"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !workspaceSettings.timelineCollapsed; shortcut: "Ctrl+Shift+T"; onTriggered: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
+    Action { id: projectSetupAction; text: "Project setup…"; shortcut: "Ctrl+,"; onTriggered: { projectSetupDialog.creationMode = false; projectSetupDialog.open() } }
 
     menuBar: MenuBar {
         visible: workspaceState.workspaceActive
@@ -304,44 +392,105 @@ ApplicationWindow {
             Action { text: "Export"; shortcut: "Alt+5"; checkable: true; checked: workspaceState.currentWorkspace === "export"; onTriggered: window.requestWorkspace("export") }
         }
         Menu {
+            id: editMenu
             title: "&Edit"
-            Action { text: "Undo"; shortcut: StandardKey.Undo; enabled: drillProject.canUndo; onTriggered: drillProject.undo() }
-            Action { text: "Redo"; shortcut: StandardKey.Redo; enabled: drillProject.canRedo; onTriggered: drillProject.redo() }
+            AppMenuItem { action: undoAction }
+            AppMenuItem { action: redoAction }
             MenuSeparator {}
-            Action { text: "Select all"; shortcut: StandardKey.SelectAll; onTriggered: drillProject.selectAll() }
-            Action { text: "Clear selection"; shortcut: "Escape"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.clearSelection() }
-            Action { text: "Delete selected"; shortcut: StandardKey.Delete; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.removeSelectedPerformers() }
+            AppMenuItem { action: cutFormationAction; ToolTip.text: "Copies coordinates, then resets the selection to the previous set" }
+            AppMenuItem { action: copyFormationAction }
+            AppMenuItem { action: pasteFormationAction }
+            AppMenuItem { action: pasteSpecialAction }
             MenuSeparator {}
-            Action { text: "Project setup…"; onTriggered: { projectSetupDialog.creationMode = false; projectSetupDialog.open() } }
-            Action { text: "Editor preferences…"; onTriggered: settingsDialog.open() }
+            AppMenuItem { action: selectAllAction }
+            AppMenuItem { action: clearSelectionAction }
+            Menu { title: "Group"; AppMenuItem { action: groupAction } AppMenuItem { action: removeFromGroupAction } AppMenuItem { action: ungroupAction } }
+            MenuSeparator {}
+            AppMenuItem { action: deleteSelectedAction }
+        }
+        Menu {
+            title: "&Set"
+            enabled: workspaceState.currentWorkspace === "editor"
+            AppMenuItem { action: previousSetAction }
+            AppMenuItem { action: nextSetAction }
+            MenuSeparator {}
+            AppMenuItem { text: "Edit current set…"; onTriggered: { setDialog.editing = true; setDialog.open() } }
+            AppMenuItem { text: "Copy full formation"; onTriggered: drillProject.copyCurrentFormation() }
+            AppMenuItem { action: pasteFormationAction }
+            AppMenuItem { action: pasteSpecialAction }
+            AppMenuItem { action: duplicateSetAction }
+            MenuSeparator {}
+            AppMenuItem { text: "Add set after current…"; onTriggered: { setDialog.editing = false; setDialog.open() } }
+            AppMenuItem { text: "Create formation variant…"; onTriggered: variantDialog.open() }
+            AppMenuItem { text: "Open set archive…"; onTriggered: archiveDialog.open() }
         }
         Menu {
             title: "&Formation"
             enabled: workspaceState.currentWorkspace === "editor"
-            Action { text: "Formation builder…"; enabled: drillProject.selectedCount > 0; onTriggered: formationDialog.open() }
-            Action { text: "Snap to 1-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(1.0) }
-            Action { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
-            Action { text: "Mirror front-to-back"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(false) }
-            Action { text: "Auto-label selected"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.autoLabel("P") }
+            AppMenuItem { action: formationBuilderAction }
+            AppMenuItem { text: "Choose shape…"; enabled: drillProject.selectedCount > 0; onTriggered: shapePalette.open() }
+            AppMenuItem { text: "Draw freehand…"; enabled: drillProject.selectedCount > 0; onTriggered: freehandDialog.open() }
             MenuSeparator {}
-            Action { text: "Face front"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(0) }
-            Action { text: "Face back"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(180) }
-            Action { text: "Face side 1"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(270) }
-            Action { text: "Face side 2"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(90) }
+            Menu { title: "Align"
+                AppMenuItem { text: "Left"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("left") }
+                AppMenuItem { text: "Horizontal center"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("centerX") }
+                AppMenuItem { text: "Right"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("right") }
+                AppMenuItem { text: "Front"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("front") }
+                AppMenuItem { text: "Vertical center"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("centerY") }
+                AppMenuItem { text: "Back"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("back") }
+            }
+            Menu { title: "Distribute"
+                AppMenuItem { text: "Horizontally"; enabled: drillProject.selectedCount > 2; onTriggered: drillProject.distributeSelected("horizontal") }
+                AppMenuItem { text: "Vertically"; enabled: drillProject.selectedCount > 2; onTriggered: drillProject.distributeSelected("vertical") }
+            }
+            AppMenuItem { text: "Snap to " + workspaceSettings.snapGrid + "-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(workspaceSettings.snapGrid) }
+            AppMenuItem { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
+            AppMenuItem { text: "Mirror front-to-back"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(false) }
+            AppMenuItem { text: "Auto-label selected"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.autoLabel("P") }
+            MenuSeparator {}
+            AppMenuItem { text: "Face front"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(0) }
+            AppMenuItem { text: "Face back"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(180) }
+            AppMenuItem { text: "Face side 1"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(270) }
+            AppMenuItem { text: "Face side 2"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.faceSelected(90) }
         }
         Menu {
+            title: "&Transition"
+            enabled: workspaceState.currentWorkspace === "editor"
+            AppMenuItem { action: transitionEditAction }
+            AppMenuItem { text: "Cancel transition edit"; enabled: drillProject.transitionEditActive; onTriggered: drillProject.cancelTransitionEdit() }
+            MenuSeparator {}
+            AppMenuItem { text: "Play current transition"; enabled: drillProject.currentSetIndex > 0; onTriggered: transport.playCurrentTransition() }
+            AppMenuItem { text: "Analyze incoming transition"; enabled: drillProject.currentSetIndex > 0; onTriggered: drillProject.analyzeTransition() }
+        }
+        Menu {
+            id: viewMenu
             title: "&View"
-            Action { text: "2D drill editor"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !window.threeD; onTriggered: window.threeD = false }
-            Action { text: "3D preview"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: window.threeD; onTriggered: window.threeD = true }
+            AppMenuItem { action: view2DAction }
+            AppMenuItem { action: view3DAction }
             MenuSeparator {}
-            Action { text: "Show paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
-            Action { text: "Show shape guides"; checkable: true; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides = checked }
-            Action { text: "Show field grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
-            Action { text: "Show labels"; checkable: true; checked: fieldView.showLabels; onToggled: fieldView.showLabels = checked }
+            AppMenuItem { text: "Show paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
+            AppMenuItem { text: "Show shape guides"; checkable: true; checked: drillProject.showShapeGuides; onToggled: drillProject.showShapeGuides = checked }
+            AppMenuItem { text: "Show previous formation"; checkable: true; checked: workspaceSettings.showPreviousFormation; onToggled: workspaceSettings.showPreviousFormation = checked }
+            AppMenuItem { text: "Show field grid"; checkable: true; checked: drillProject.showFieldGrid; onToggled: drillProject.showFieldGrid = checked }
+            AppMenuItem { text: "Show labels"; checkable: true; checked: workspaceSettings.showLabels; onToggled: workspaceSettings.showLabels = checked }
             MenuSeparator {}
-            Action { text: "Performer picker"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; onToggled: workspaceSettings.rosterCollapsed = !checked }
-            Action { text: "Inspector panel"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.inspectorCollapsed; onToggled: workspaceSettings.inspectorCollapsed = !checked }
-            Action { text: "Timeline panel"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !workspaceSettings.timelineCollapsed; onToggled: workspaceSettings.timelineCollapsed = !checked }
+            AppMenuItem { action: rosterPanelAction }
+            AppMenuItem { action: inspectorPanelAction }
+            AppMenuItem { action: timelinePanelAction }
+            MenuSeparator {}
+            AppMenuItem { text: "Compact toolbar"; checkable: true; checked: workspaceSettings.toolbarMode === "compact"; onTriggered: workspaceSettings.toolbarMode = "compact" }
+            AppMenuItem { text: "Expanded toolbar"; checkable: true; checked: workspaceSettings.toolbarMode === "expanded"; onTriggered: workspaceSettings.toolbarMode = "expanded" }
+            AppMenuItem { text: "Compact: Transform tools"; checkable: true; checked: workspaceSettings.showTransformTools; onToggled: workspaceSettings.showTransformTools = checked }
+            AppMenuItem { text: "Compact: View tools"; checkable: true; checked: workspaceSettings.showViewTools; onToggled: workspaceSettings.showViewTools = checked }
+        }
+        Menu {
+            title: "&Tools"
+            AppMenuItem { text: "Add performer…"; onTriggered: { performerDialog.editing = false; performerDialog.open() } }
+            AppMenuItem { text: "Batch add performers…"; onTriggered: batchDialog.open() }
+            AppMenuItem { text: "Scan show in Drill Clinic"; onTriggered: { workspaceSettings.inspectorCollapsed = false; workspaceSettings.inspectorClinicExpanded = true; drillProject.scanShow() } }
+            MenuSeparator {}
+            AppMenuItem { action: projectSetupAction }
+            AppMenuItem { text: "Editor preferences…"; onTriggered: settingsDialog.open() }
         }
         Menu {
             title: "&Help"
@@ -374,7 +523,12 @@ ApplicationWindow {
             freehandDialogContext: freehandDialog
             performerDialogContext: performerDialog
             shapePaletteContext: shapePalette
+            copyActionContext: copyFormationAction
+            duplicateSetActionContext: duplicateSetAction
+            pasteActionContext: pasteFormationAction
+            transitionActionContext: transitionEditAction
             windowContext: window
+            workspaceSettingsContext: workspaceSettings
             workspaceStateContext: workspaceState
         }
     }
@@ -435,7 +589,8 @@ ApplicationWindow {
             spacing: 4
             AppButton { text: "New project…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); window.startNewProject() } }
             AppButton { text: "Project setup…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); projectSetupDialog.creationMode = false; projectSetupDialog.open() } }
-            AppButton { text: "Preferences…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); preferencesDialog.open() } }
+            AppButton { text: "Preferences…"; flat: true; Layout.fillWidth: true; onClicked: { editorActionsPopup.close(); settingsDialog.open() } }
+            AppButton { text: workspaceSettings.toolbarMode === "expanded" ? "Use compact toolbar" : "Expand toolbar"; flat: true; Layout.fillWidth: true; onClicked: { workspaceSettings.toolbarMode = workspaceSettings.toolbarMode === "expanded" ? "compact" : "expanded"; editorActionsPopup.close() } }
         }
     }
 
@@ -579,9 +734,15 @@ ApplicationWindow {
                     shapeDrawMode: workspaceState.currentWorkspace === "editor" ? window.shapeDrawing : ""
                     showPaths: drillProject.showTransitionPaths
                     showShapeGuides: drillProject.showShapeGuides
+                    showLabels: workspaceSettings.showLabels
+                    showPreviousFormation: workspaceSettings.showPreviousFormation
+                    previousFormationOpacity: workspaceSettings.previousFormationOpacity
+                    snapEnabled: workspaceSettings.snapEnabled
+                    gridSize: workspaceSettings.snapGrid
                     onPerformerActivated: function(row) { window.activePerformer = row; inspectorPanel.exposedInspector.refresh() }
                     onContextMenuRequested: function(screenX, screenY, performerRow) {
                         window.activePerformer = performerRow
+                        fieldContextMenu.performerRow = performerRow
                         if (performerRow >= 0) inspectorPanel.exposedInspector.refresh()
                         fieldContextMenu.popup(screenX, screenY)
                     }
@@ -728,14 +889,46 @@ ApplicationWindow {
 
     Menu {
         id: fieldContextMenu
-        AppMenuItem { text: "Group"; enabled: drillProject.canGroupSelection; onTriggered: drillProject.groupSelected() }
-        MenuSeparator {}
-        AppMenuItem { text: "Remove from group"; enabled: drillProject.canRemoveSelectionFromGroup; onTriggered: drillProject.removeSelectedFromGroup() }
-        AppMenuItem { text: "Ungroup"; enabled: drillProject.canUngroupSelection; onTriggered: drillProject.ungroupSelected() }
-        MenuSeparator {}
-        AppMenuItem { text: "Snap to 1-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(1) }
-        AppMenuItem { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
-        AppMenuItem { text: "Auto-label selected"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.autoLabel("P") }
+        property int performerRow: -1
+        readonly property bool hasSelectionContext: performerRow >= 0 || drillProject.selectedCount > 0
+        AppMenuItem { action: cutFormationAction; visible: fieldContextMenu.hasSelectionContext }
+        AppMenuItem { action: copyFormationAction; visible: fieldContextMenu.hasSelectionContext }
+        AppMenuItem { action: pasteFormationAction }
+        AppMenuItem { action: pasteSpecialAction }
+        MenuSeparator { visible: fieldContextMenu.hasSelectionContext }
+        Menu {
+            title: "Group"
+            visible: fieldContextMenu.hasSelectionContext
+            AppMenuItem { action: groupAction }
+            AppMenuItem { action: removeFromGroupAction }
+            AppMenuItem { action: ungroupAction }
+        }
+        Menu {
+            title: "Formation"
+            visible: fieldContextMenu.hasSelectionContext
+            AppMenuItem { action: formationBuilderAction }
+            AppMenuItem { text: "Snap to " + workspaceSettings.snapGrid + "-step grid"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.snapSelected(workspaceSettings.snapGrid) }
+            AppMenuItem { text: "Mirror side-to-side"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(true) }
+            AppMenuItem { text: "Mirror front-to-back"; enabled: drillProject.selectedCount > 0; onTriggered: drillProject.mirrorSelected(false) }
+            AppMenuItem { text: "Align left"; enabled: drillProject.selectedCount > 1; onTriggered: drillProject.alignSelected("left") }
+            AppMenuItem { text: "Distribute horizontally"; enabled: drillProject.selectedCount > 2; onTriggered: drillProject.distributeSelected("horizontal") }
+        }
+        Menu {
+            title: "Facing"
+            visible: fieldContextMenu.hasSelectionContext
+            AppMenuItem { text: "Front"; onTriggered: drillProject.faceSelected(0) }
+            AppMenuItem { text: "Back"; onTriggered: drillProject.faceSelected(180) }
+            AppMenuItem { text: "Side 1"; onTriggered: drillProject.faceSelected(270) }
+            AppMenuItem { text: "Side 2"; onTriggered: drillProject.faceSelected(90) }
+        }
+        AppMenuItem { action: transitionEditAction; visible: fieldContextMenu.hasSelectionContext }
+        AppMenuItem { text: "Select all performers"; visible: !fieldContextMenu.hasSelectionContext; onTriggered: drillProject.selectAll() }
+        Menu {
+            title: "View"
+            AppMenuItem { text: "Previous formation"; checkable: true; checked: workspaceSettings.showPreviousFormation; onToggled: workspaceSettings.showPreviousFormation = checked }
+            AppMenuItem { text: "Transition paths"; checkable: true; checked: drillProject.showTransitionPaths; onToggled: drillProject.showTransitionPaths = checked }
+            AppMenuItem { text: "Labels"; checkable: true; checked: workspaceSettings.showLabels; onToggled: workspaceSettings.showLabels = checked }
+        }
     }
 
     Menu {
@@ -746,6 +939,10 @@ ApplicationWindow {
             enabled: setContextMenu.setIndex > 0
             onTriggered: drillProject.selectTimelineTransition(setContextMenu.setIndex)
         }
+        MenuSeparator {}
+        AppMenuItem { text: "Copy this formation"; onTriggered: drillProject.copySetFormation(setContextMenu.setIndex) }
+        AppMenuItem { text: "Paste formation here"; enabled: drillProject.hasFormationClipboard; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.pasteFormation() } }
+        AppMenuItem { text: "Paste Special here…"; enabled: drillProject.hasFormationClipboard; onTriggered: { transport.editSet(setContextMenu.setIndex); pasteSpecialDialog.open() } }
         MenuSeparator {}
         AppMenuItem {
             text: "Insert 8 counts before"
@@ -763,12 +960,82 @@ ApplicationWindow {
             onTriggered: drillProject.insertCountsAfterSet(setContextMenu.setIndex, 8)
         }
         MenuSeparator {}
-        AppMenuItem { text: "Copy set"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+        AppMenuItem { text: "Duplicate set"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.duplicateSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add before"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Add after"; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.insertSetAt(setContextMenu.setIndex+1); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
         AppMenuItem { text: "Create variant"; onTriggered: { transport.editSet(setContextMenu.setIndex); variantDialog.open() } }
         MenuSeparator {}
         AppMenuItem { text: "Delete set"; enabled: drillProject.setCount>1; onTriggered: { transport.editSet(setContextMenu.setIndex); drillProject.archiveSetAt(setContextMenu.setIndex); if(drillProject.setLabelsNeedRenumbering())renumberDialog.open() } }
+    }
+
+    Dialog {
+        id: pasteSpecialDialog
+        objectName: "pasteSpecialDialog"
+        title: "Paste Special"
+        modal: true
+        anchors.centerIn: Overlay.overlay
+        width: 480
+        onOpened: { pasteOffsetX.value = 0; pasteOffsetY.value = 0; pasteMirrorHorizontal.checked = false; pasteMirrorVertical.checked = false }
+        contentItem: ColumnLayout {
+            spacing: 12
+            Label {
+                text: drillProject.formationClipboardSummary || "Formation clipboard"
+                color: MarchCraftTheme.textSecondary
+                wrapMode: Text.Wrap
+                Layout.fillWidth: true
+            }
+            Label { text: "Content"; font.bold: true }
+            ComboBox {
+                id: pasteMode
+                Layout.fillWidth: true
+                textRole: "text"; valueRole: "value"
+                model: [
+                    {text: "Positions and facing (recommended)", value: "positionsFacing"},
+                    {text: "Positions only", value: "positions"},
+                    {text: "Positions, facing, groups, and shape metadata", value: "positionsFacingMetadata"}
+                ]
+            }
+            Label {
+                text: "Incoming transition paths and timing in the destination set are always preserved."
+                color: MarchCraftTheme.textMuted; wrapMode: Text.Wrap; Layout.fillWidth: true
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                CheckBox { id: pasteMirrorHorizontal; text: "Mirror side-to-side"; Layout.fillWidth: true }
+                CheckBox { id: pasteMirrorVertical; text: "Mirror front-to-back"; Layout.fillWidth: true }
+            }
+            GridLayout {
+                columns: 2; Layout.fillWidth: true
+                Label { text: "Side-to-side offset" }
+                SpinBox {
+                    id: pasteOffsetX; from: -768; to: 768; stepSize: 1; editable: true; Layout.fillWidth: true
+                    textFromValue: function(value) { return (value / 4).toFixed(2) + " steps" }
+                    valueFromText: function(text) { return Math.round(Number(text.replace(/[^0-9.-]/g, "")) * 4) }
+                }
+                Label { text: "Front-to-back offset" }
+                SpinBox {
+                    id: pasteOffsetY; from: -400; to: 400; stepSize: 1; editable: true; Layout.fillWidth: true
+                    textFromValue: function(value) { return (value / 4).toFixed(2) + " steps" }
+                    valueFromText: function(text) { return Math.round(Number(text.replace(/[^0-9.-]/g, "")) * 4) }
+                }
+            }
+            RowLayout {
+                Layout.fillWidth: true
+                AppButton { text: "Cancel"; onClicked: pasteSpecialDialog.close() }
+                Item { Layout.fillWidth: true }
+                AppButton {
+                    text: "Paste"; highlighted: true
+                    onClicked: {
+                        if (drillProject.pasteFormation(pasteMode.currentValue,
+                                                        pasteMirrorHorizontal.checked,
+                                                        pasteMirrorVertical.checked,
+                                                        pasteOffsetX.value / 4,
+                                                        pasteOffsetY.value / 4))
+                            pasteSpecialDialog.close()
+                    }
+                }
+            }
+        }
     }
 
     Dialog {
@@ -827,6 +1094,7 @@ ApplicationWindow {
         fieldViewContext: fieldView
         windowContext: window
         workspaceControllerContext: workspaceController
+        workspaceSettingsContext: workspaceSettings
     }
 
     PerformerDialog {
@@ -1169,13 +1437,7 @@ ApplicationWindow {
         context: Qt.ApplicationShortcut
         onActivated: transport.playPause()
     }
-    Shortcut { sequence: "Ctrl+,"; context: Qt.ApplicationShortcut; onActivated: projectSetupDialog.open() }
     Shortcut { sequence: "Ctrl+L"; enabled: workspaceState.hasCurrentProject; context: Qt.ApplicationShortcut; onActivated: { window.requestWorkspace("roster"); Qt.callLater(function() { rosterWorkspace.focusSearch() }) } }
-    Shortcut { sequence: "Ctrl+1"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: window.threeD = false }
-    Shortcut { sequence: "Ctrl+2"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: window.threeD = true }
-    Shortcut { sequence: "Ctrl+Shift+R"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+I"; enabled: workspaceState.workspaceActive && workspaceState.currentWorkspace === "editor"; context: Qt.ApplicationShortcut; onActivated: workspaceSettings.inspectorCollapsed = !workspaceSettings.inspectorCollapsed }
-    Shortcut { sequence: "Ctrl+Shift+T"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: workspaceSettings.timelineCollapsed = !workspaceSettings.timelineCollapsed }
     Shortcut { sequence: "+"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.min(3.5, fieldView.zoom * 1.12) }
     Shortcut { sequence: "-"; enabled: workspaceState.workspaceActive && (workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"); context: Qt.ApplicationShortcut; onActivated: fieldView.zoom = Math.max(0.7, fieldView.zoom * 0.89) }
 }

@@ -97,7 +97,7 @@ Frame {
                         const ctrl = (mouse.modifiers & Qt.ControlModifier) !== 0
                         const shift = (mouse.modifiers & Qt.ShiftModifier) !== 0
                         if (shift && roster.selectionAnchor >= 0)
-                            drillProjectContext.selectPerformerRange(roster.selectionAnchor, index, ctrl)
+                            drillProjectContext.selectPerformerRangeFiltered(roster.selectionAnchor, index, ctrl, rosterSearch.text)
                         else {
                             drillProjectContext.selectPerformerMode(index, ctrl ? 1 : 0)
                             roster.selectionAnchor = index

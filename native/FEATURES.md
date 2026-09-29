@@ -29,7 +29,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Workflow | Flexible Home → Roster → Music → Editor → Review → Export shell with direct navigation, optional Music/Review, Resume, and per-project last-workspace memory |
 | Roster | Dedicated workspace for add, edit, remove, transactional section batches, label previews, search/filter, multi-select, grouping, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, assign an optional persisted set title, mark subsets, directly retime incoming transitions, and ripple later timing without rebuilding formations; titles remain independent of variants |
-| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, equal-distance distribution, and transactional transition authoring for curves, FTL, gate/pivot, and stagger/ripple timing |
+| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, full/partial formation clipboard with Paste Special, alignment/equal-spacing tools, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and transactional transition authoring for curves, FTL, gate/pivot, and stagger/ripple timing |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
 | Music | Native MIDI/MusicXML timing, meter, tempo, note-activity, and track import; unified marker/drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent set/transition/time/measure selection; persistent landmarks, movements and parts; deterministic impact/phrase set-plan suggestions; built-in FluidSynth playback; previewed set generation; step-mode overrides; waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; one portrait Letter sheet per performer and selected rehearsal range, shared PDF/print/preview/CSV wording, explicit Hold rows, and capacity-safe Standard/Compact/Large densities |
@@ -38,6 +38,31 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | 3D | Meter-based Y-up world with grounded, height-scaled rigged human performers; modern corps-style forward, backward, slide, turn-in-place, diagonal, and phrase-close gait; authored facing and selection; rehearsal/stadium/gym/arena environments, lighting/quality presets, props, and press-box/overhead/field cameras. |
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 112 timeline entries spanning Sets 1–97; authored subset labels remain intact |
+
+## Editor workflow and formation clipboard
+
+- One shared QML action layer supplies the desktop menus, compact/expanded command bar,
+  field and set context menus, and keyboard shortcuts. Edit, Set, Formation, Transition,
+  View, and Tools group commands by intent without duplicating mutation handlers.
+- Copy uses stable performer IDs and captures either the selection or full active formation.
+  Paste defaults to positions and facing, skips absent/locked performers, preserves destination
+  path type/control points/stagger timing, translates the whole result to fit the canvas, and
+  commits as one undoable command. The clipboard crosses sets, active variants, and movements;
+  New/Load/sample replacement/coordinate import clear it. It is not project data.
+- Paste Special adds positions-only and safe metadata modes, horizontal/vertical mirror, and
+  quarter-step offsets. Only wholly copied groups/shapes transfer, with renewed IDs; archived
+  variants remain unchanged. Cut copies first, then restores the selection from the preceding
+  set without rewriting incoming paths, and is disabled on the opening set.
+- The compact command bar is the default. Expanded tools, optional compact Transform/View
+  groups, Roster/Inspector/Timeline visibility, label/ghost display, snap choices, and Inspector
+  disclosure state persist locally. Analytics and Drill Clinic begin collapsed; multi-selection
+  shows clipboard, align/distribute, facing, spacing, and transition actions contextually.
+- Page Up/Page Down preserve useful performer selection while navigating sets. Filtered roster
+  Shift-selection ranges only across visible matches. The previous-formation overlay uses hollow
+  markers and adjustable opacity, avoiding default field clutter.
+- Repeat Last Edit and a command palette remain future extensions: arbitrary transaction replay
+  was not considered predictable enough, and the reorganized menus/shared actions provide
+  discoverability without adding another command surface in this prototype.
 
 ## Prototype boundaries
 

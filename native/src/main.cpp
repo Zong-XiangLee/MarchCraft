@@ -80,6 +80,11 @@ int main(int argc, char *argv[])
         QStringLiteral("--qa-selected-transition"),
         QStringLiteral("--qa-transition-resize"), QStringLiteral("--qa-set-plan"),
         QStringLiteral("--qa-music-impacts"),
+        QStringLiteral("--qa-editor-clean"), QStringLiteral("--qa-editor-selected"),
+        QStringLiteral("--qa-editor-expanded"),
+        QStringLiteral("--qa-paste-special"), QStringLiteral("--qa-field-context"),
+        QStringLiteral("--qa-edit-menu"), QStringLiteral("--qa-view-menu"),
+        QStringLiteral("--qa-previous-formation"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"), QStringLiteral("--qa-export"),
         QStringLiteral("--qa-roster-workspace"), QStringLiteral("--qa-music-workspace"),
         QStringLiteral("--qa-review-workspace"), QStringLiteral("--qa-export-workspace"),
@@ -268,6 +273,17 @@ int main(int argc, char *argv[])
     }
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
+    QString editorQaState;
+    if (arguments.contains(QStringLiteral("--qa-editor-clean"))) editorQaState = QStringLiteral("clean");
+    else if (arguments.contains(QStringLiteral("--qa-editor-selected"))) editorQaState = QStringLiteral("selected");
+    else if (arguments.contains(QStringLiteral("--qa-editor-expanded"))) editorQaState = QStringLiteral("expanded");
+    else if (arguments.contains(QStringLiteral("--qa-paste-special"))) editorQaState = QStringLiteral("paste");
+    else if (arguments.contains(QStringLiteral("--qa-field-context"))) editorQaState = QStringLiteral("context");
+    else if (arguments.contains(QStringLiteral("--qa-edit-menu"))) editorQaState = QStringLiteral("editMenu");
+    else if (arguments.contains(QStringLiteral("--qa-view-menu"))) editorQaState = QStringLiteral("viewMenu");
+    else if (arguments.contains(QStringLiteral("--qa-previous-formation"))) editorQaState = QStringLiteral("previous");
+    if (!editorQaState.isEmpty() && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("qaEditorState", editorQaState);
     for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"),
                                 QStringLiteral("performer"), QStringLiteral("music"),
                                 QStringLiteral("formation"), QStringLiteral("roster-workspace"),
