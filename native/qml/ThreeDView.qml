@@ -431,6 +431,7 @@ Item {
             model: root.projectModel
             delegate: Node {
                 id: performerNode
+                required property int index
                 required property real fieldX
                 required property real fieldY
                 required property real facing
@@ -450,14 +451,18 @@ Item {
                 required property real gaitElapsedCounts
                 required property string travelPathType
                 required property bool closingTransition
-                readonly property real animationFacing:
-                    travelPathType === "follow" && locomotionMode !== "idle"
-                        ? travelHeading : facing
+                readonly property point authoringPosition: root.projectModel.transitionEditActive
+                    ? root.projectModel.transitionEditPosition(index, root.projectModel.playhead)
+                    : Qt.point(fieldX, fieldY)
+                readonly property real animationFacing: root.projectModel.transitionEditActive
+                    ? root.projectModel.transitionEditFacing(index, root.projectModel.playhead)
+                    : facing
                 readonly property bool markingTime: root.markTimeDuringHolds && locomotionMode === "idle"
                     && root.projectModel.playbackActive && root.projectModel.playbackSetIndex > 0
                     && root.projectModel.playbackSetCounts > 0
                 visible: performerVisible
-                position: Qt.vector3d(fieldX - 80, 0, root.projectModel.fieldDepthSteps / 2 - fieldY)
+                position: Qt.vector3d(authoringPosition.x - 80, 0,
+                                      root.projectModel.fieldDepthSteps / 2 - authoringPosition.y)
                 eulerRotation.y: animationFacing
                 HumanPerformer3D {
                     geometrySource: sharedHumanGeometry

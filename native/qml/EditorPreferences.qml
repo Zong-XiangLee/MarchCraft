@@ -11,6 +11,7 @@ Dialog {
     required property var fieldViewContext
     required property var windowContext
     required property var workspaceControllerContext
+    required property var workspaceSettingsContext
 
     id: settingsDialog
     title: "Configure MarchCraft"
@@ -44,6 +45,16 @@ Dialog {
                     checked: workspaceControllerContext.startupSoundEnabled
                     onToggled: workspaceControllerContext.startupSoundEnabled = checked
                 }
+                Label { text: "Editor toolbar"; color: MarchCraftTheme.textSecondary }
+                ComboBox {
+                    Layout.fillWidth: true
+                    textRole: "text"; valueRole: "value"
+                    model: [{text: "Compact", value: "compact"}, {text: "Expanded", value: "expanded"}]
+                    currentIndex: Math.max(0, indexOfValue(workspaceSettingsContext.toolbarMode))
+                    onActivated: workspaceSettingsContext.toolbarMode = currentValue
+                }
+                CheckBox { text: "Show transform tools in compact toolbar"; checked: workspaceSettingsContext.showTransformTools; onToggled: workspaceSettingsContext.showTransformTools = checked }
+                CheckBox { text: "Show 2D / 3D controls in compact toolbar"; checked: workspaceSettingsContext.showViewTools; onToggled: workspaceSettingsContext.showViewTools = checked }
                 Label {
                     text: "The short launch sound plays once when the welcome screen first opens. Automated QA runs stay silent."
                     color: MarchCraftTheme.textSecondary
@@ -108,12 +119,20 @@ Dialog {
                 Slider { Layout.fillWidth: true; from: .02; to: .8; value: drillProjectContext.fieldGridOpacity; onMoved: drillProjectContext.fieldGridOpacity=value }
                 Label { text: "Measurement display" }
                 ComboBox { Layout.fillWidth: true; textRole: "text"; valueRole: "value"; model: [{text:"Marching steps",value:"steps"},{text:"Yards",value:"yards"}]; Component.onCompleted: currentIndex=Math.max(0,indexOfValue(drillProjectContext.measurementUnit)); onActivated: drillProjectContext.measurementUnit=currentValue }
-                CheckBox { text: "Enable snapping"; checked: fieldViewContext.snapEnabled; onToggled: fieldViewContext.snapEnabled=checked }
-                ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; Component.onCompleted: currentIndex=2; onActivated: fieldViewContext.gridSize=Number(currentText) }
+                CheckBox { text: "Enable drag snapping"; checked: workspaceSettingsContext.snapEnabled; onToggled: workspaceSettingsContext.snapEnabled=checked }
+                ComboBox { Layout.fillWidth: true; model: ["4","2","1","0.5","0.25"]; currentIndex: Math.max(0, find(String(workspaceSettingsContext.snapGrid))); onActivated: workspaceSettingsContext.snapGrid=Number(currentText) }
             }
             ColumnLayout {
                 CheckBox { text: "Show transition paths"; checked: drillProjectContext.showTransitionPaths; onToggled: drillProjectContext.showTransitionPaths=checked }
                 CheckBox { text: "Show shape guides"; checked: drillProjectContext.showShapeGuides; onToggled: drillProjectContext.showShapeGuides=checked }
+                CheckBox { text: "Show performer labels"; checked: workspaceSettingsContext.showLabels; onToggled: workspaceSettingsContext.showLabels=checked }
+                CheckBox { text: "Show previous formation ghost"; checked: workspaceSettingsContext.showPreviousFormation; onToggled: workspaceSettingsContext.showPreviousFormation=checked }
+                RowLayout {
+                    Layout.fillWidth: true
+                    Label { text: "Previous formation opacity"; color: MarchCraftTheme.textSecondary }
+                    Slider { Layout.fillWidth: true; from: 0.08; to: 0.7; value: workspaceSettingsContext.previousFormationOpacity; onMoved: workspaceSettingsContext.previousFormationOpacity=value }
+                    Label { text: Math.round(workspaceSettingsContext.previousFormationOpacity * 100) + "%"; Layout.preferredWidth: 42 }
+                }
                 Item { Layout.fillHeight: true }
             }
             ColumnLayout {

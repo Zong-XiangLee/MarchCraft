@@ -124,6 +124,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(double audioOffsetMs READ audioOffsetMs WRITE setAudioOffsetMs NOTIFY musicChanged)
     Q_PROPERTY(QString statusMessage READ statusMessage NOTIFY statusMessageChanged)
     Q_PROPERTY(int selectedCount READ selectedCount NOTIFY selectionChanged)
+    Q_PROPERTY(bool hasFormationClipboard READ hasFormationClipboard NOTIFY formationClipboardChanged)
+    Q_PROPERTY(int formationClipboardCount READ formationClipboardCount NOTIFY formationClipboardChanged)
+    Q_PROPERTY(QString formationClipboardSummary READ formationClipboardSummary NOTIFY formationClipboardChanged)
     Q_PROPERTY(int selectedGroupedCount READ selectedGroupedCount NOTIFY selectionChanged)
     Q_PROPERTY(bool selectionIsExactGroup READ selectionIsExactGroup NOTIFY selectionChanged)
     Q_PROPERTY(bool canGroupSelection READ canGroupSelection NOTIFY selectionChanged)
@@ -145,6 +148,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList transitionEditControlPoints READ transitionEditControlPoints NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantList transitionEditPerformers READ transitionEditPerformers NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantMap transitionEditMetrics READ transitionEditMetrics NOTIFY transitionEditChanged)
+    Q_PROPERTY(QVariantMap transitionEditOptions READ transitionEditOptions NOTIFY transitionEditChanged)
+    Q_PROPERTY(bool transitionEditValid READ transitionEditValid NOTIFY transitionEditChanged)
+    Q_PROPERTY(QString transitionEditWarning READ transitionEditWarning NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantList clinicIssues READ clinicIssues NOTIFY clinicChanged)
     Q_PROPERTY(int clinicIssueCount READ clinicIssueCount NOTIFY clinicChanged)
     Q_PROPERTY(QString capabilityProfile READ capabilityProfile WRITE setCapabilityProfile NOTIFY clinicChanged)
@@ -332,6 +338,9 @@ public:
     void setAudioOffsetMs(double value);
     QString statusMessage() const { return m_statusMessage; }
     int selectedCount() const;
+    bool hasFormationClipboard() const;
+    int formationClipboardCount() const;
+    QString formationClipboardSummary() const;
     int selectedGroupedCount() const;
     bool selectionIsExactGroup() const;
     bool canGroupSelection() const;
@@ -353,6 +362,9 @@ public:
     QVariantList transitionEditControlPoints() const;
     QVariantList transitionEditPerformers() const;
     QVariantMap transitionEditMetrics() const;
+    QVariantMap transitionEditOptions() const { return m_transitionEdit.options; }
+    bool transitionEditValid() const { return m_transitionEdit.valid; }
+    QString transitionEditWarning() const { return m_transitionEdit.warning; }
     QVariantList clinicIssues() const { return m_clinicIssues; }
     int clinicIssueCount() const { return m_clinicIssues.size(); }
     QString capabilityProfile() const { return m_capability.name; }
@@ -507,10 +519,20 @@ public:
     Q_INVOKABLE void selectPerformer(int row, bool additive);
     Q_INVOKABLE void selectPerformerMode(int row, int mode);
     Q_INVOKABLE void selectPerformerRange(int anchorRow, int row, bool additive);
+    Q_INVOKABLE void selectPerformerRangeFiltered(int anchorRow, int row, bool additive,
+                                                   const QString &filter);
     Q_INVOKABLE void selectInRect(double x1, double y1, double x2, double y2, bool additive);
     Q_INVOKABLE void selectInPolygon(const QVariantList &points, bool additive);
     Q_INVOKABLE void selectAll();
     Q_INVOKABLE void clearSelection();
+    Q_INVOKABLE bool copyFormation();
+    Q_INVOKABLE bool copySelectedFormation();
+    Q_INVOKABLE bool copyCurrentFormation();
+    Q_INVOKABLE bool copySetFormation(int setIndex);
+    Q_INVOKABLE bool cutSelectedFormation();
+    Q_INVOKABLE bool pasteFormation(const QString &mode = QStringLiteral("positionsFacing"),
+                                     bool mirrorHorizontal = false, bool mirrorVertical = false,
+                                     double offsetX = 0.0, double offsetY = 0.0);
     Q_INVOKABLE void groupSelected(const QString &name = {});
     Q_INVOKABLE void ungroupSelected();
     Q_INVOKABLE void removeSelectedFromGroup();
@@ -554,6 +576,8 @@ public:
     Q_INVOKABLE void mirrorSelected(bool horizontal);
     Q_INVOKABLE void snapSelected(double grid);
     Q_INVOKABLE void faceSelected(double degrees);
+    Q_INVOKABLE bool alignSelected(const QString &alignment);
+    Q_INVOKABLE bool distributeSelected(const QString &axis);
     Q_INVOKABLE bool beginTransitionEdit();
     Q_INVOKABLE void setTransitionEditType(const QString &type, const QVariantMap &options = {});
     Q_INVOKABLE void updateTransitionEditOptions(const QVariantMap &options);
@@ -570,6 +594,8 @@ public:
     Q_INVOKABLE void mirrorActiveTransitionPath(bool horizontal = true);
     Q_INVOKABLE void copyActiveTransitionPathToSelection(bool mirrored = false);
     Q_INVOKABLE QVariantMap transitionEditPathInfo(int row) const;
+    Q_INVOKABLE QPointF transitionEditPosition(int row, double progress) const;
+    Q_INVOKABLE double transitionEditFacing(int row, double progress) const;
     Q_INVOKABLE void setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints = {});
     Q_INVOKABLE QVariantList transitionPathSamples(int performerRow, int samples = 24) const;
     Q_INVOKABLE QVariantMap shapeInfo(int index) const;
@@ -623,6 +649,7 @@ signals:
     void formationPreviewChanged();
     void transitionEditChanged();
     void clinicChanged();
+    void formationClipboardChanged();
 
 private:
     friend class ExportController;
@@ -656,6 +683,14 @@ private:
     MarchCraft::Placement transitionEditPlacement(int performerIndex) const;
     QVector<int> orderedTransitionEditRows(const QString &order, bool reversed = false) const;
     void rebuildTransitionEditPreview();
+    bool materializeTransitionRelationship(int destinationSet, MarchCraft::SetVariant &variant,
+                                           MarchCraft::TransitionRelationship &relationship,
+                                           QString *warning = nullptr) const;
+    bool reconcileTransitionRelationships(int destinationSet = -1);
+    void detachFromTransitionRelationships(MarchCraft::SetVariant &variant,
+                                           const QSet<QString> &performerIds);
+    void preserveTransitionEditOverride(int performerRow, bool detachRelationship);
+    void validateTransitionEdit();
     QPointF clampPosition(QPointF point) const;
     void ensurePlacements();
     int pulsesBetween(qint64 startTick, qint64 endTick) const;
@@ -676,6 +711,12 @@ private:
                                   const QVector<int> &assignment) const;
     void invalidateClinic();
     QString issueLabelList(const QVector<int> &rows, int limit = 6) const;
+    bool copyFormationFromSet(int setIndex, bool selectionOnly);
+    QJsonObject availableFormationClipboard() const;
+    void setFormationClipboardPayload(const QJsonObject &payload);
+    void clearFormationClipboard();
+    void detachEditedPerformersFromShapes(MarchCraft::SetVariant &variant,
+                                          const QSet<QString> &performerIds);
 
     struct FormationPreviewState {
         bool active = false;
@@ -696,8 +737,13 @@ private:
         QVector<QString> performerIds;
         QSet<QString> initialSelectedIds;
         QString activePerformerId;
+        QString relationshipId;
         QHash<QString, MarchCraft::Placement> originalPlacements;
         QHash<QString, MarchCraft::Placement> previewPlacements;
+        QHash<QString, MarchCraft::Placement> detachedPlacements;
+        QSet<QString> detachedPerformerIds;
+        bool valid = true;
+        QString warning;
     };
 
     struct MusicSection {
@@ -715,6 +761,7 @@ private:
     QString m_projectPath;
     QString m_ownedRecoveryPath;
     QString m_statusMessage{QStringLiteral("Ready")};
+    QJsonObject m_formationClipboard;
     double m_bpm = 120.0;
     double m_playhead = 0.0;
     int m_playbackSet = -1;
@@ -801,6 +848,7 @@ private:
     QString m_measurementUnit{QStringLiteral("steps")};
     FormationPreviewState m_formationPreview;
     TransitionEditState m_transitionEdit;
+    QString m_transitionReconcileWarning;
     bool m_generatingFormationPreview = false;
     int m_formationPreviewSourceSet = -1;
     bool m_formationPreviewInsertsNext = false;

@@ -29,7 +29,7 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Workflow | Flexible Home → Roster → Music → Editor → Review → Export shell with direct navigation, optional Music/Review, Resume, and per-project last-workspace memory |
 | Roster | Dedicated workspace for add, edit, remove, transactional section batches, label previews, search/filter, multi-select, grouping, custom name/section/instrument/notes |
 | Sets | Add, edit, delete, duplicate, batch-create, assign an optional persisted set title, mark subsets, directly retime incoming transitions, and ripple later timing without rebuilding formations; titles remain independent of variants |
-| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, equal-distance distribution, and transactional transition authoring for curves, FTL, gate/pivot, and stagger/ripple timing |
+| Drill editing | Drag, keyboard nudge, axis lock, grid snap, grouping/context actions, full/partial formation clipboard with Paste Special, alignment/equal-distance tools, compact group-colored dot markers plus circle/square/diamond markers, per-set facing with animated turns, persistent shape library, adaptive spirals, and transactional transition authoring for curves, persisted/rebuildable FTL and gate relationships, manual member overrides, and validated stagger/ripple timing |
 | Saving | Versioned local project file, atomic save, automatic recovery copy, undo/redo |
 | Music | Native MIDI/MusicXML timing, meter, tempo, note-activity, and track import; unified marker/drill/music/audio lanes with shared zoom, scrubbing, follow-playhead, and independent set/transition/time/measure selection; persistent landmarks, movements and parts; deterministic impact/phrase set-plan suggestions; built-in FluidSynth playback; previewed set generation; step-mode overrides; waveform audio and synchronization anchors |
 | Coordinates | Audience-perspective coordinates: Side 1 left, Side 2 right; front sideline/hash toward the audience, back hash/sideline away from it; one portrait Letter sheet per performer and selected rehearsal range, shared PDF/print/preview/CSV wording, explicit Hold rows, and capacity-safe Standard/Compact/Large densities |
@@ -39,9 +39,34 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 | Platforms | Qt/CMake architecture supports Windows first and portable macOS/Linux builds |
 | Bundled test show | The supplied Rancho Bernardo data opens by default with 204 performers and 112 timeline entries spanning Sets 1–97; authored subset labels remain intact |
 
+## Editor workflow and formation clipboard
+
+- One shared QML action layer supplies the desktop menus, compact/expanded command bar,
+  field and set context menus, and keyboard shortcuts. Edit, Set, Formation, Transition,
+  View, and Tools group commands by intent without duplicating mutation handlers.
+- Copy uses stable performer IDs and captures either the selection or full active formation.
+  Paste defaults to positions and facing, skips absent/locked performers, preserves destination
+  path type/control points/stagger timing, translates the whole result to fit the canvas, and
+  commits as one undoable command. The clipboard crosses sets, active variants, and movements;
+  New/Load/sample replacement/coordinate import clear it. It is not project data.
+- Paste Special adds positions-only and safe metadata modes, horizontal/vertical mirror, and
+  quarter-step offsets. Only wholly copied groups/shapes transfer, with renewed IDs; archived
+  variants remain unchanged. Cut copies first, then restores the selection from the preceding
+  set without rewriting incoming paths, and is disabled on the opening set.
+- The compact command bar is the default. Expanded tools, optional compact Transform/View
+  groups, Roster/Inspector/Timeline visibility, label/ghost display, snap choices, and Inspector
+  disclosure state persist locally. Analytics and Drill Clinic begin collapsed; multi-selection
+  shows clipboard, align/distribute, facing, spacing, and transition actions contextually.
+- Page Up/Page Down preserve useful performer selection while navigating sets. Filtered roster
+  Shift-selection ranges only across visible matches. The previous-formation overlay uses hollow
+  markers and adjustable opacity, avoiding default field clutter.
+- Repeat Last Edit and a command palette remain future extensions: arbitrary transaction replay
+  was not considered predictable enough, and the reorganized menus/shared actions provide
+  discoverability without adding another command surface in this prototype.
+
 ## Prototype boundaries
 
-- Transition authoring supports direct and multi-control-point curves, persisted Follow the Leader routes, gate/pivot arcs, individual correction/copy/mirror operations, and explicit stagger/ripple starts. Group tools resolve to per-performer path data; automatic counter-march vocabulary beyond these authored routes remains a future extension.
+- Transition authoring supports direct and multi-control-point curves, persisted Follow the Leader and gate/pivot intent, explicit independent member overrides, individual correction/copy/mirror operations, and validated stagger/ripple starts. Origins and destinations are formation-owned; independent geometry retains control points while generated relationships rebuild after formation changes. Set duplication copies formation only and creates a fresh direct incoming transition. Automatic counter-march vocabulary beyond these authored routes remains a future extension.
 - Audio can be attached, previewed, offset, and aligned with anchors. Set-plan analysis uses authoritative MIDI/MusicXML structure and explicit user markers; arbitrary rehearsal audio is not presented as reliable phrase understanding.
 - The built-in assistant is deterministic. Cloud AI proposals will plug into the validated project command layer later.
 - “In front of back hash” means toward the audience from the far hash; “behind front hash” means away from the audience from the near hash.
@@ -59,11 +84,21 @@ This inventory tracks behavioral parity with the public OpenMarch feature list. 
 
 - The model delegates domain implementation to focused persistence, music, formation,
   transition, and Clinic units, supported by stateless geometry and storage interfaces.
-- Shared transition tables avoid rebuilding paths for every rendering/analysis query.
+- Shared transition tables provide one arc-length, timing, and tangent evaluator for field
+  preview, 2D/3D playback, gait, analytics, Clinic, and export. Collision sampling adapts to
+  both count length and path distance instead of relying on endpoints or whole counts.
 - Transition previews are isolated from project data, update only the selected subset,
-  expose live distance/step/timing/collision metrics, and commit as one undoable action.
-- Schema 12 adds optional `pathStartCount` and `pathDurationCounts`; missing values use
-  full-transition timing and legacy delayed paths retain the former 25% start.
+  expose live distance/step/timing/collision metrics and an exact count scrub, and commit as
+  one undoable action. Order lists, pivot/radial guides, stagger bars, and invalid-state
+  feedback expose generated behavior before Apply.
+- Schema 13 retains optional `pathStartCount` and `pathDurationCounts` plus relationship
+  identity, membership/order, leader, pivot/direction, stagger grouping/interval/arrival,
+  authored count length, and manual override IDs. Missing fields preserve legacy baked paths;
+  missing timing uses the full transition and legacy delayed paths retain the former 25% start.
+- Retiming preserves path geometry. Explicit and stagger offsets stay absolute, while FTL
+  derives count offsets from its physical-spacing contract; destination-synchronized movement
+  expands/contracts to the new arrival, impossible stagger shortening is rejected, and an
+  otherwise uncontainable partial window scales proportionally instead of clipping.
 - Asynchronous MIDI imports and formation previews are discarded after intervening
   project changes. Generated previews still require Apply.
 - Playback updates only motion roles; performer editing is one undoable operation.

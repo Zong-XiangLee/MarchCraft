@@ -846,6 +846,7 @@ void DrillProject::newProject()
 {
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     resetMovements();
     if (m_audioDecoder) m_audioDecoder->stop();
     m_transitionPaths.clear();
@@ -1266,25 +1267,7 @@ void DrillProject::batchAddSets(int numberOfSets, int counts)
 
 void DrillProject::duplicateCurrentSet()
 {
-    if (m_currentSet < 0 || m_currentSet >= m_sets.size()) return;
-    const auto before = toJson();
-    DrillSet copy = m_sets[m_currentSet];
-    copy.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    for (auto &variant : copy.variants)
-        variant.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
-    copy.activeVariantId = copy.variants.first().id;
-    if (!copy.title.isEmpty()) copy.title += QStringLiteral(" Copy");
-    m_sets.insert(m_currentSet + 1, copy);
-    ++m_currentSet;
-    QVector<int> durations;
-    for (const auto &set : std::as_const(m_sets)) durations.push_back(qMax(1, set.counts));
-    rebuildSetTicksFrom(m_currentSet, durations);
-    m_selectedSetStart = m_selectedSetEnd = m_currentSet;
-    m_selectedTimelineSets = {m_currentSet}; m_timelineSelectionKind = QStringLiteral("set"); m_selectedTransition = -1;
-    m_selectedTimelineMarkerId.clear();
-    emit setsChanged(); emit currentSetChanged(); emit timingChanged(); emit setRangeChanged();
-    emit timelineSelectionChanged(); emitAllDataChanged();
-    commitSnapshot(before, QStringLiteral("Duplicate set"));
+    duplicateSetAt(m_currentSet);
 }
 
 void DrillProject::duplicateSetAt(int index)
@@ -1292,13 +1275,28 @@ void DrillProject::duplicateSetAt(int index)
     if(index<0||index>=m_sets.size())return; const auto before=toJson(); DrillSet copy=m_sets[index];
     if(!copy.title.isEmpty())copy.title+=QStringLiteral(" Copy");
     copy.id=QUuid::createUuid().toString(QUuid::WithoutBraces); copy.archivedOrder=-1;
-    auto renewVariant=[](MarchCraft::SetVariant &variant){variant.id=QUuid::createUuid().toString(QUuid::WithoutBraces);QHash<QString,QString> groupIds;for(auto&group:variant.groups){const QString old=group.id;group.id=QUuid::createUuid().toString(QUuid::WithoutBraces);groupIds.insert(old,group.id);}for(auto&shape:variant.shapes){shape.id=QUuid::createUuid().toString(QUuid::WithoutBraces);if(groupIds.contains(shape.groupId))shape.groupId=groupIds.value(shape.groupId);}};
+    auto renewVariant=[](MarchCraft::SetVariant &variant){
+        variant.id=QUuid::createUuid().toString(QUuid::WithoutBraces);
+        QHash<QString,QString> groupIds;
+        for(auto&group:variant.groups){const QString old=group.id;group.id=QUuid::createUuid().toString(QUuid::WithoutBraces);groupIds.insert(old,group.id);}
+        for(auto&shape:variant.shapes){shape.id=QUuid::createUuid().toString(QUuid::WithoutBraces);if(groupIds.contains(shape.groupId))shape.groupId=groupIds.value(shape.groupId);}
+        // Duplicate Set means duplicate the destination formation.  Incoming
+        // paths belong to the source/destination pair and cannot be reused
+        // safely with the duplicated set's new source formation.
+        variant.transitionRelationships.clear();
+        for(auto placement=variant.placements.begin();placement!=variant.placements.end();++placement){
+            placement->pathType=QStringLiteral("direct");
+            placement->pathPoints.clear();
+            placement->pathStartCount=-1.0;
+            placement->pathDurationCounts=-1.0;
+        }
+    };
     for(auto&variant:copy.variants)renewVariant(variant);for(auto&variant:copy.archivedVariants)renewVariant(variant);
     copy.activeVariantId=copy.variants.value(qMax(0,m_sets[index].activeVariantIndex())).id;
     const int insert=index+1; const int counts=qMax(1,copy.counts); copy.startTick=advancePulses(m_sets[index].startTick,counts);
     m_sets.insert(insert,copy);QVector<int>durations;for(const auto&set:std::as_const(m_sets))durations.push_back(qMax(1,set.counts));
     rebuildSetTicksFrom(insert,durations);m_currentSet=insert;m_selectedSetStart=m_selectedSetEnd=insert;m_selectedTimelineSets={insert};m_timelineSelectionKind=QStringLiteral("set");m_selectedTransition=-1;m_selectedTimelineMarkerId.clear();
-    recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Copy set"));
+    recalculateCounts();emit setsChanged();emit currentSetChanged();emit timingChanged();emit setRangeChanged();emit timelineSelectionChanged();emitAllDataChanged();commitSnapshot(before,QStringLiteral("Duplicate set"));
 }
 
 void DrillProject::insertSetAt(int index)
@@ -1564,6 +1562,32 @@ void DrillProject::selectPerformerRange(int anchorRow, int row, bool additive)
     for (int i = first; i <= last; ++i)
         if (m_performers[i].visible && !m_performers[i].locked)
             m_performers[i].selected = true;
+    emitAllDataChanged();
+    emit selectionChanged();
+}
+
+void DrillProject::selectPerformerRangeFiltered(int anchorRow, int row, bool additive,
+                                                const QString &filter)
+{
+    if (filter.trimmed().isEmpty()) {
+        selectPerformerRange(anchorRow, row, additive);
+        return;
+    }
+    if (m_performers.isEmpty()) return;
+    anchorRow = std::clamp(anchorRow, 0, static_cast<int>(m_performers.size()) - 1);
+    row = std::clamp(row, 0, static_cast<int>(m_performers.size()) - 1);
+    if (!additive)
+        for (auto &person : m_performers) person.selected = false;
+    const QString needle = filter.trimmed().toCaseFolded();
+    const int first = qMin(anchorRow, row);
+    const int last = qMax(anchorRow, row);
+    for (int i = first; i <= last; ++i) {
+        auto &performer = m_performers[i];
+        const QString searchable = QStringLiteral("%1 %2 %3 %4")
+            .arg(performer.label, performer.name, performer.instrument, performer.section).toCaseFolded();
+        if (searchable.contains(needle) && performer.visible && !performer.locked)
+            performer.selected = true;
+    }
     emitAllDataChanged();
     emit selectionChanged();
 }
@@ -1932,8 +1956,12 @@ QVariantMap DrillProject::performerInfo(int row) const
         ? transitionPath(row, m_currentSet).durationCounts() : 1.0;
     double directionChange = 0.0;
     if (m_currentSet > 0 && m_currentSet + 1 < m_sets.size()) {
-        const QPointF incomingVector = placementAt(row, m_currentSet).position - placementAt(row, m_currentSet - 1).position;
-        const QPointF outgoingVector = placementAt(row, m_currentSet + 1).position - placementAt(row, m_currentSet).position;
+        QPointF incomingVector = transitionPath(row, m_currentSet).tangent(1.0);
+        QPointF outgoingVector = transitionPath(row, m_currentSet + 1).tangent(0.0);
+        if (pointDistance({}, incomingVector) <= 0.001)
+            incomingVector = placementAt(row, m_currentSet).position - placementAt(row, m_currentSet - 1).position;
+        if (pointDistance({}, outgoingVector) <= 0.001)
+            outgoingVector = placementAt(row, m_currentSet + 1).position - placementAt(row, m_currentSet).position;
         const double lengths = pointDistance({}, incomingVector) * pointDistance({}, outgoingVector);
         if (lengths > 0.001)
             directionChange = std::acos(qBound(-1.0, QPointF::dotProduct(incomingVector, outgoingVector) / lengths, 1.0))
@@ -1998,9 +2026,22 @@ void DrillProject::redo() { m_undo.redo(); }
 
 void DrillProject::commitSnapshot(const QJsonObject &before, const QString &text)
 {
+    // A transition preview is intentionally transient. Any other project
+    // mutation (formation tools, paste, roster, retime, etc.) cancels it at
+    // the shared transaction boundary so stale preview endpoints can never be
+    // applied over newly committed drill. applyTransitionEdit() clears the
+    // preview before reaching this method and therefore remains one command.
+    const bool canceledTransitionEdit = m_transitionEdit.active;
+    if (canceledTransitionEdit) cancelTransitionEdit();
     QJsonArray roster;
     for (const auto &person : m_performers) roster.append(person.toJson());
     if (before.value(QStringLiteral("performers")).toArray() != roster) synchronizeMovementRoster();
+    // Relationship-authored paths are derived from source/destination
+    // formations.  Reconcile them at the transaction boundary so every
+    // formation mutation (move, mirror, paste, shape, roster edit, etc.) has
+    // identical invalidation behavior and remains one undoable operation.
+    const bool relationshipsChanged = reconcileTransitionRelationships();
+    if (relationshipsChanged) emitAllDataChanged();
     const auto after = toJson();
     if (before == after)
         return;
@@ -2008,6 +2049,13 @@ void DrillProject::commitSnapshot(const QJsonObject &before, const QString &text
     m_analyticsValid = false;
     m_undo.push(new ProjectStateCommand(this, before, after, text));
     markDirty(text);
+    QStringList transactionNotes;
+    if (canceledTransitionEdit)
+        transactionNotes.push_back(QStringLiteral("pending transition edit canceled"));
+    if (!m_transitionReconcileWarning.isEmpty())
+        transactionNotes.push_back(m_transitionReconcileWarning);
+    if (!transactionNotes.isEmpty())
+        setStatus(QStringLiteral("%1 — %2").arg(text, transactionNotes.join(QStringLiteral(" "))));
     if (!m_backgroundWorkerClone) { invalidateClinic(); analyzeTransition(m_currentSet); }
     emit statisticsChanged();
 }

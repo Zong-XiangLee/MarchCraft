@@ -328,6 +328,7 @@ void DrillProject::loadDemo()
 {
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     resetMovements();
     m_openingBehavior = QStringLiteral("move"); m_openingCounts = 8;
     m_musicSections.clear();
@@ -426,6 +427,7 @@ bool DrillProject::importCoordinateJson(const QString &urlOrPath)
         return false;
     }
 
+    clearFormationClipboard();
     beginResetModel();
     resetMovements();
     // Coordinate sheets begin at a zero-count first set. A written hold is a
@@ -588,6 +590,7 @@ bool DrillProject::loadProject(const QString &urlOrPath)
         return false;
     m_requiresExplicitSave = false;
     m_ownedRecoveryPath.clear();
+    clearFormationClipboard();
     m_projectPath = legacyJson ? QString{} : path;
     m_autosaveTimer.stop();
     m_dirty = false;
@@ -894,6 +897,7 @@ QString DrillProject::currentMovementName() const
 void DrillProject::activateMovement(int index)
 {
     if (index < 0 || index >= m_movements.size() || index == m_currentMovement) return;
+    const bool canceledTransitionEdit = m_transitionEdit.active;
     auto snapshot = toJson();
     auto entries = snapshot.value(QStringLiteral("movements")).toArray();
     auto leaving = entries[m_currentMovement].toObject();
@@ -906,7 +910,9 @@ void DrillProject::activateMovement(int index)
     clearSelection(); cancelFormationPreview();
     // Workspace navigation must not create undo entries or dirty a saved show.
     if (!wasDirty) { m_dirty = false; m_autosaveTimer.stop(); emit dirtyChanged(); }
-    setStatus(QStringLiteral("Editing %1").arg(currentMovementName()));
+    setStatus(canceledTransitionEdit
+        ? QStringLiteral("Transition edit canceled; editing %1").arg(currentMovementName())
+        : QStringLiteral("Editing %1").arg(currentMovementName()));
 }
 
 bool DrillProject::createMovement(const QString &name, bool duplicate)
@@ -993,6 +999,25 @@ void DrillProject::synchronizeMovementRoster()
                     for (auto &shape : variant.shapes)
                         shape.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
                     variant.shapes.removeIf([](const auto &shape) { return shape.performerIds.size() < 2; });
+                    for (auto &relationship : variant.transitionRelationships) {
+                        relationship.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
+                        relationship.manualOverrideIds.removeIf([&](const QString &id) {
+                            return !relationship.performerIds.contains(id);
+                        });
+                    }
+                    variant.transitionRelationships.removeIf([](const auto &relationship) {
+                        const int minimumMembers = relationship.type == QStringLiteral("stagger") ? 1 : 2;
+                        int generatedMembers = 0;
+                        for (const auto &id : relationship.performerIds)
+                            if (!relationship.manualOverrideIds.contains(id)) ++generatedMembers;
+                        const bool missingAnchor = (relationship.type == QStringLiteral("follow")
+                                                    && (!relationship.performerIds.contains(relationship.leaderId)
+                                                        || relationship.manualOverrideIds.contains(relationship.leaderId)))
+                            || (relationship.type == QStringLiteral("gate")
+                                && (!relationship.performerIds.contains(relationship.pivotId)
+                                    || relationship.manualOverrideIds.contains(relationship.pivotId)));
+                        return missingAnchor || generatedMembers < minimumMembers;
+                    });
                 };
                 for (auto &variant : set.variants) synchronize(variant);
                 for (auto &variant : set.archivedVariants) synchronize(variant);

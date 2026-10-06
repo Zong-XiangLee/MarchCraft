@@ -1,6 +1,11 @@
 #include "DrillProject.h"
 
 #include <QFutureWatcher>
+#include <QClipboard>
+#include <QGuiApplication>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QMimeData>
 #include <QPolygonF>
 #include <QSizeF>
 #include <QSet>
@@ -24,6 +29,23 @@ using MarchCraft::Placement;
 
 using namespace MarchCraft::ProjectAlgorithms;
 using namespace MarchCraft::ProjectStorage;
+
+namespace {
+constexpr auto FormationClipboardMime = "application/x-marchcraft-formation+json";
+
+bool nativeClipboardAvailable()
+{
+    if (!QGuiApplication::instance()) return false;
+    const QString platform = QGuiApplication::platformName();
+    return platform != QStringLiteral("offscreen") && platform != QStringLiteral("minimal");
+}
+
+double normalizedDegrees(double value)
+{
+    value = std::fmod(value, 360.0);
+    return value < 0.0 ? value + 360.0 : value;
+}
+}
 
 QVariantMap DrillProject::assignmentMetrics(const QVector<int> &rows, const QVector<QPointF> &targets,
                                              const QVector<int> &assignment) const
@@ -799,14 +821,434 @@ void DrillProject::distributeRectangle(double x, double y, double width, double 
         {QStringLiteral("height"), std::abs(height)}});
 }
 
+bool DrillProject::hasFormationClipboard() const
+{
+    return !availableFormationClipboard().value(QStringLiteral("placements")).toObject().isEmpty();
+}
+
+int DrillProject::formationClipboardCount() const
+{
+    return availableFormationClipboard().value(QStringLiteral("placements")).toObject().size();
+}
+
+QString DrillProject::formationClipboardSummary() const
+{
+    return availableFormationClipboard().value(QStringLiteral("summary")).toString();
+}
+
+QJsonObject DrillProject::availableFormationClipboard() const
+{
+    if (!m_formationClipboard.isEmpty()) return m_formationClipboard;
+    if (m_backgroundWorkerClone || !nativeClipboardAvailable()) return {};
+    const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+    if (!mimeData || !mimeData->hasFormat(QString::fromLatin1(FormationClipboardMime))) return {};
+    QJsonParseError error;
+    const auto document = QJsonDocument::fromJson(mimeData->data(QString::fromLatin1(FormationClipboardMime)), &error);
+    const auto payload = document.object();
+    if (error.error != QJsonParseError::NoError
+        || payload.value(QStringLiteral("kind")).toString() != QStringLiteral("marchcraft/formation")
+        || payload.value(QStringLiteral("version")).toInt() != 1) return {};
+    return payload;
+}
+
+void DrillProject::setFormationClipboardPayload(const QJsonObject &payload)
+{
+    m_formationClipboard = payload;
+    if (!m_backgroundWorkerClone && nativeClipboardAvailable()) {
+        auto *mimeData = new QMimeData;
+        mimeData->setData(QString::fromLatin1(FormationClipboardMime),
+                          QJsonDocument(payload).toJson(QJsonDocument::Compact));
+        mimeData->setText(payload.value(QStringLiteral("summary")).toString());
+        QGuiApplication::clipboard()->setMimeData(mimeData);
+    }
+    emit formationClipboardChanged();
+}
+
+void DrillProject::clearFormationClipboard()
+{
+    bool changed = !m_formationClipboard.isEmpty();
+    m_formationClipboard = {};
+    if (!m_backgroundWorkerClone && nativeClipboardAvailable()) {
+        const QMimeData *mimeData = QGuiApplication::clipboard()->mimeData();
+        if (mimeData && mimeData->hasFormat(QString::fromLatin1(FormationClipboardMime))) {
+            QGuiApplication::clipboard()->clear();
+            changed = true;
+        }
+    }
+    if (changed) emit formationClipboardChanged();
+}
+
+bool DrillProject::copyFormationFromSet(int setIndex, bool selectionOnly)
+{
+    if (setIndex < 0 || setIndex >= m_sets.size()) return false;
+    const auto &set = m_sets[setIndex];
+    const auto &variant = set.activeVariant();
+    QSet<QString> ids;
+    for (const auto &performer : m_performers)
+        if (!selectionOnly || performer.selected) ids.insert(performer.id);
+    if (ids.isEmpty()) {
+        setStatus(QStringLiteral("Select performers to copy"));
+        return false;
+    }
+
+    QJsonObject placements;
+    QPointF center;
+    int count = 0;
+    for (const auto &performer : m_performers) {
+        if (!ids.contains(performer.id) || !variant.placements.contains(performer.id)) continue;
+        const auto &placement = variant.placements[performer.id];
+        placements.insert(performer.id, QJsonObject{{QStringLiteral("x"), placement.position.x()},
+                                                    {QStringLiteral("y"), placement.position.y()},
+                                                    {QStringLiteral("facing"), placement.facing}});
+        center += placement.position;
+        ++count;
+    }
+    if (count == 0) return false;
+    center /= count;
+
+    QJsonArray groups;
+    for (const auto &group : variant.groups) {
+        bool fullyContained = !group.performerIds.isEmpty();
+        for (const auto &id : group.performerIds) fullyContained = fullyContained && ids.contains(id);
+        if (fullyContained) groups.push_back(group.toJson());
+    }
+    QJsonArray shapes;
+    for (const auto &shape : variant.shapes) {
+        bool fullyContained = !shape.performerIds.isEmpty();
+        for (const auto &id : shape.performerIds) fullyContained = fullyContained && ids.contains(id);
+        if (fullyContained) shapes.push_back(shape.toJson());
+    }
+
+    const QString sourceSet = set.number.isEmpty() ? QString::number(setIndex + 1) : set.number;
+    const QString summary = QStringLiteral("MarchCraft formation: %1 performer%2 from Set %3")
+        .arg(count).arg(count == 1 ? QString() : QStringLiteral("s"), sourceSet);
+    QJsonObject payload{{QStringLiteral("kind"), QStringLiteral("marchcraft/formation")},
+                        {QStringLiteral("version"), 1},
+                        {QStringLiteral("summary"), summary},
+                        {QStringLiteral("sourceSetIndex"), setIndex},
+                        {QStringLiteral("sourceSetNumber"), sourceSet},
+                        {QStringLiteral("sourceVariantId"), variant.id},
+                        {QStringLiteral("selectionOnly"), selectionOnly},
+                        {QStringLiteral("centerX"), center.x()},
+                        {QStringLiteral("centerY"), center.y()},
+                        {QStringLiteral("placements"), placements},
+                        {QStringLiteral("groups"), groups},
+                        {QStringLiteral("shapes"), shapes}};
+    if (m_currentMovement >= 0 && m_currentMovement < m_movements.size()) {
+        payload.insert(QStringLiteral("sourceMovementId"), m_movements[m_currentMovement].id);
+        payload.insert(QStringLiteral("sourceMovementName"), m_movements[m_currentMovement].name);
+    }
+    setFormationClipboardPayload(payload);
+    setStatus(QStringLiteral("Copied %1 performer%2 from Set %3")
+                  .arg(count).arg(count == 1 ? QString() : QStringLiteral("s"), sourceSet));
+    return true;
+}
+
+bool DrillProject::copyFormation()
+{
+    return selectedCount() > 0 ? copySelectedFormation() : copyCurrentFormation();
+}
+
+bool DrillProject::copySelectedFormation()
+{
+    return copyFormationFromSet(m_currentSet, true);
+}
+
+bool DrillProject::copyCurrentFormation()
+{
+    return copyFormationFromSet(m_currentSet, false);
+}
+
+bool DrillProject::copySetFormation(int setIndex)
+{
+    return copyFormationFromSet(setIndex, false);
+}
+
+void DrillProject::detachEditedPerformersFromShapes(MarchCraft::SetVariant &variant,
+                                                     const QSet<QString> &performerIds)
+{
+    bool changed = false;
+    for (auto &shape : variant.shapes) {
+        const int previousSize = shape.performerIds.size();
+        shape.performerIds.erase(std::remove_if(shape.performerIds.begin(), shape.performerIds.end(),
+                                                [&](const QString &id) { return performerIds.contains(id); }),
+                                 shape.performerIds.end());
+        if (shape.performerIds.size() == previousSize) continue;
+        changed = true;
+        QRectF bounds;
+        bool initialized = false;
+        for (const auto &id : std::as_const(shape.performerIds)) {
+            const QPointF point = variant.placements.value(id).position;
+            if (!initialized) { bounds = QRectF(point, QSizeF()); initialized = true; }
+            else bounds |= QRectF(point, QSizeF());
+        }
+        if (initialized) {
+            shape.anchor = bounds.center();
+            shape.width = bounds.width();
+            shape.height = bounds.height();
+        }
+    }
+    const auto oldSize = variant.shapes.size();
+    variant.shapes.erase(std::remove_if(variant.shapes.begin(), variant.shapes.end(),
+                                        [](const auto &shape) { return shape.performerIds.size() < 2; }),
+                         variant.shapes.end());
+    changed = changed || variant.shapes.size() != oldSize;
+    if (changed) emit shapesChanged();
+}
+
+bool DrillProject::cutSelectedFormation()
+{
+    if (m_currentSet <= 0 || selectedCount() == 0) {
+        setStatus(m_currentSet <= 0 ? QStringLiteral("The opening set has no previous formation to cut back to")
+                                    : QStringLiteral("Select performers to cut"));
+        return false;
+    }
+    if (!copySelectedFormation()) return false;
+    QSet<QString> affected;
+    for (const auto &performer : m_performers)
+        if (performer.selected && !performer.locked) affected.insert(performer.id);
+    if (affected.isEmpty()) {
+        setStatus(QStringLiteral("Selected performers are locked"));
+        return false;
+    }
+    const auto before = toJson();
+    auto &destination = m_sets[m_currentSet].activeVariant();
+    const auto &previous = m_sets[m_currentSet - 1].activeVariant();
+    detachEditedPerformersFromShapes(destination, affected);
+    for (const auto &id : std::as_const(affected)) {
+        auto &placement = destination.placements[id];
+        const auto source = previous.placements.value(id, placement);
+        placement.position = source.position;
+        placement.facing = source.facing;
+    }
+    emitAllDataChanged();
+    commitSnapshot(before, QStringLiteral("Cut formation"));
+    setStatus(QStringLiteral("Cut %1 performer%2; reset to the previous set")
+                  .arg(affected.size()).arg(affected.size() == 1 ? QString() : QStringLiteral("s")));
+    return true;
+}
+
+bool DrillProject::pasteFormation(const QString &mode, bool mirrorHorizontal, bool mirrorVertical,
+                                  double offsetX, double offsetY)
+{
+    if (m_currentSet < 0 || m_currentSet >= m_sets.size()) return false;
+    const auto payload = availableFormationClipboard();
+    const auto sourcePlacements = payload.value(QStringLiteral("placements")).toObject();
+    if (sourcePlacements.isEmpty()) {
+        setStatus(QStringLiteral("Formation clipboard is empty"));
+        return false;
+    }
+    const bool includeFacing = mode.compare(QStringLiteral("positions"), Qt::CaseInsensitive) != 0;
+    const bool includeMetadata = mode.compare(QStringLiteral("positionsFacingMetadata"), Qt::CaseInsensitive) == 0;
+    const QPointF sourceCenter{payload.value(QStringLiteral("centerX")).toDouble(),
+                               payload.value(QStringLiteral("centerY")).toDouble()};
+
+    QHash<QString, QPointF> targetPositions;
+    QHash<QString, double> targetFacings;
+    QSet<QString> affected;
+    int missing = 0;
+    int locked = 0;
+    for (auto it = sourcePlacements.begin(); it != sourcePlacements.end(); ++it) {
+        auto performer = std::find_if(m_performers.cbegin(), m_performers.cend(),
+                                      [&](const auto &candidate) { return candidate.id == it.key(); });
+        if (performer == m_performers.cend()) { ++missing; continue; }
+        if (performer->locked) { ++locked; continue; }
+        const auto source = it.value().toObject();
+        QPointF point{source.value(QStringLiteral("x")).toDouble(), source.value(QStringLiteral("y")).toDouble()};
+        point -= sourceCenter;
+        if (mirrorHorizontal) point.setX(-point.x());
+        if (mirrorVertical) point.setY(-point.y());
+        point += sourceCenter + QPointF(offsetX, offsetY);
+        double facing = source.value(QStringLiteral("facing")).toDouble();
+        if (mirrorHorizontal) facing = -facing;
+        if (mirrorVertical) facing = 180.0 - facing;
+        targetPositions.insert(it.key(), point);
+        targetFacings.insert(it.key(), normalizedDegrees(facing));
+        affected.insert(it.key());
+    }
+    if (affected.isEmpty()) {
+        setStatus(QStringLiteral("No matching unlocked performers are available in this movement"));
+        return false;
+    }
+
+    double minX = std::numeric_limits<double>::max(), minY = std::numeric_limits<double>::max();
+    double maxX = std::numeric_limits<double>::lowest(), maxY = std::numeric_limits<double>::lowest();
+    for (const auto &point : std::as_const(targetPositions)) {
+        minX = qMin(minX, point.x()); maxX = qMax(maxX, point.x());
+        minY = qMin(minY, point.y()); maxY = qMax(maxY, point.y());
+    }
+    QPointF fitOffset;
+    if (maxX - minX <= canvasMaxX() - canvasMinX()) {
+        if (minX < canvasMinX()) fitOffset.setX(canvasMinX() - minX);
+        else if (maxX > canvasMaxX()) fitOffset.setX(canvasMaxX() - maxX);
+    }
+    if (maxY - minY <= canvasMaxY() - canvasMinY()) {
+        if (minY < canvasMinY()) fitOffset.setY(canvasMinY() - minY);
+        else if (maxY > canvasMaxY()) fitOffset.setY(canvasMaxY() - maxY);
+    }
+    if (!fitOffset.isNull())
+        for (auto it = targetPositions.begin(); it != targetPositions.end(); ++it) it.value() += fitOffset;
+
+    const auto transformPoint = [&](QPointF point) {
+        point -= sourceCenter;
+        if (mirrorHorizontal) point.setX(-point.x());
+        if (mirrorVertical) point.setY(-point.y());
+        return point + sourceCenter + QPointF(offsetX, offsetY) + fitOffset;
+    };
+
+    const auto before = toJson();
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    detachEditedPerformersFromShapes(variant, affected);
+    for (const auto &id : std::as_const(affected)) {
+        auto &placement = variant.placements[id];
+        placement.position = targetPositions[id];
+        if (includeFacing) placement.facing = targetFacings[id];
+    }
+
+    if (includeMetadata) {
+        for (auto &group : variant.groups)
+            group.performerIds.erase(std::remove_if(group.performerIds.begin(), group.performerIds.end(),
+                                                    [&](const QString &id) { return affected.contains(id); }),
+                                     group.performerIds.end());
+        variant.groups.erase(std::remove_if(variant.groups.begin(), variant.groups.end(),
+                                            [](const auto &group) { return group.performerIds.size() < 2; }),
+                             variant.groups.end());
+
+        QHash<QString, QString> groupIds;
+        for (const auto &value : payload.value(QStringLiteral("groups")).toArray()) {
+            auto group = MarchCraft::PerformerGroup::fromJson(value.toObject());
+            group.performerIds.erase(std::remove_if(group.performerIds.begin(), group.performerIds.end(),
+                                                    [&](const QString &id) { return !affected.contains(id); }),
+                                     group.performerIds.end());
+            if (group.performerIds.size() < 2) continue;
+            const QString oldId = group.id;
+            group.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            groupIds.insert(oldId, group.id);
+            variant.groups.push_back(group);
+        }
+        for (const auto &value : payload.value(QStringLiteral("shapes")).toArray()) {
+            auto shape = MarchCraft::FormationShape::fromJson(value.toObject());
+            bool complete = shape.performerIds.size() >= 2;
+            for (const auto &id : std::as_const(shape.performerIds)) complete = complete && affected.contains(id);
+            if (!complete) continue;
+            shape.id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+            shape.anchor = transformPoint(shape.anchor);
+            for (auto &point : shape.points) point = transformPoint(point);
+            if (mirrorHorizontal) shape.rotation = 180.0 - shape.rotation;
+            if (mirrorVertical) shape.rotation = -shape.rotation;
+            shape.rotation = normalizedDegrees(shape.rotation);
+            shape.groupId = groupIds.value(shape.groupId);
+            variant.shapes.push_back(shape);
+        }
+        emit shapesChanged();
+    }
+
+    for (auto &performer : m_performers) performer.selected = affected.contains(performer.id);
+    emit selectionChanged();
+    emitAllDataChanged();
+    commitSnapshot(before, includeMetadata ? QStringLiteral("Paste formation with metadata")
+                                           : QStringLiteral("Paste formation"));
+    QString detail;
+    if (missing > 0) detail += QStringLiteral("; %1 unmatched").arg(missing);
+    if (locked > 0) detail += QStringLiteral("; %1 locked").arg(locked);
+    setStatus(QStringLiteral("Pasted %1 performer%2%3")
+                  .arg(affected.size()).arg(affected.size() == 1 ? QString() : QStringLiteral("s"), detail));
+    return true;
+}
+
+bool DrillProject::alignSelected(const QString &alignment)
+{
+    if (m_currentSet < 0) return false;
+    QVector<QString> ids;
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    for (const auto &performer : m_performers)
+        if (performer.selected && !performer.locked) ids.push_back(performer.id);
+    if (ids.size() < 2) { setStatus(QStringLiteral("Select at least two unlocked performers to align")); return false; }
+    double minX = std::numeric_limits<double>::max(), minY = std::numeric_limits<double>::max();
+    double maxX = std::numeric_limits<double>::lowest(), maxY = std::numeric_limits<double>::lowest();
+    for (const auto &id : std::as_const(ids)) {
+        const auto point = variant.placements.value(id).position;
+        minX = qMin(minX, point.x()); maxX = qMax(maxX, point.x());
+        minY = qMin(minY, point.y()); maxY = qMax(maxY, point.y());
+    }
+    const bool xAxis = alignment == QStringLiteral("left") || alignment == QStringLiteral("right")
+        || alignment == QStringLiteral("centerX");
+    const bool yAxis = alignment == QStringLiteral("front") || alignment == QStringLiteral("back")
+        || alignment == QStringLiteral("centerY");
+    if (!xAxis && !yAxis) return false;
+    const double coordinate = alignment == QStringLiteral("left") ? minX
+        : alignment == QStringLiteral("right") ? maxX
+        : alignment == QStringLiteral("centerX") ? (minX + maxX) / 2.0
+        : alignment == QStringLiteral("front") ? minY
+        : alignment == QStringLiteral("back") ? maxY : (minY + maxY) / 2.0;
+    const auto before = toJson();
+    detachEditedPerformersFromShapes(variant, QSet<QString>(ids.cbegin(), ids.cend()));
+    for (const auto &id : std::as_const(ids)) {
+        auto &point = variant.placements[id].position;
+        if (xAxis) point.setX(coordinate); else point.setY(coordinate);
+    }
+    emitAllDataChanged();
+    commitSnapshot(before, QStringLiteral("Align performers"));
+    setStatus(QStringLiteral("Aligned %1 performers").arg(ids.size()));
+    return true;
+}
+
+bool DrillProject::distributeSelected(const QString &axis)
+{
+    if (m_currentSet < 0) return false;
+    QVector<QString> ids;
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    for (const auto &performer : m_performers)
+        if (performer.selected && !performer.locked) ids.push_back(performer.id);
+    if (ids.size() < 3) { setStatus(QStringLiteral("Select at least three unlocked performers to distribute")); return false; }
+    const bool horizontal = axis == QStringLiteral("horizontal");
+    if (!horizontal && axis != QStringLiteral("vertical")) return false;
+    std::stable_sort(ids.begin(), ids.end(), [&](const QString &a, const QString &b) {
+        const auto pa = variant.placements.value(a).position;
+        const auto pb = variant.placements.value(b).position;
+        return horizontal ? pa.x() < pb.x() : pa.y() < pb.y();
+    });
+    const auto first = variant.placements.value(ids.first()).position;
+    const auto last = variant.placements.value(ids.last()).position;
+    const double start = horizontal ? first.x() : first.y();
+    const double finish = horizontal ? last.x() : last.y();
+    if (qFuzzyCompare(start + 1.0, finish + 1.0)) {
+        setStatus(QStringLiteral("The selected performers already share that coordinate"));
+        return false;
+    }
+    const auto before = toJson();
+    detachEditedPerformersFromShapes(variant, QSet<QString>(ids.cbegin(), ids.cend()));
+    for (int index = 1; index < ids.size() - 1; ++index) {
+        const double coordinate = start + (finish - start) * index / (ids.size() - 1);
+        auto &point = variant.placements[ids[index]].position;
+        if (horizontal) point.setX(coordinate); else point.setY(coordinate);
+    }
+    emitAllDataChanged();
+    commitSnapshot(before, QStringLiteral("Distribute performers"));
+    setStatus(QStringLiteral("Distributed %1 performers %2")
+                  .arg(ids.size()).arg(horizontal ? QStringLiteral("horizontally") : QStringLiteral("vertically")));
+    return true;
+}
+
 void DrillProject::mirrorSelected(bool horizontal)
 {
     if (selectedCount() == 0 || m_currentSet < 0) return;
+    QSet<QString> affected;
+    for (const auto &person : m_performers)
+        if (person.selected && !person.locked) affected.insert(person.id);
+    if (affected.isEmpty()) { setStatus(QStringLiteral("Selected performers are locked")); return; }
     const auto before = toJson();
-    for (const auto &person : m_performers) if (person.selected) {
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    detachEditedPerformersFromShapes(variant, affected);
+    for (const auto &person : m_performers) if (affected.contains(person.id)) {
         auto &placement = m_sets[m_currentSet].activeVariant().placements[person.id];
-        if (horizontal) placement.position.setX(fieldWidthSteps() - placement.position.x());
-        else placement.position.setY(fieldDepthSteps() - placement.position.y());
+        if (horizontal) {
+            placement.position.setX(fieldWidthSteps() - placement.position.x());
+            placement.facing = normalizedDegrees(-placement.facing);
+        } else {
+            placement.position.setY(fieldDepthSteps() - placement.position.y());
+            placement.facing = normalizedDegrees(180.0 - placement.facing);
+        }
     }
     emitAllDataChanged(); commitSnapshot(before, QStringLiteral("Mirror performers"));
 }
@@ -814,8 +1256,14 @@ void DrillProject::mirrorSelected(bool horizontal)
 void DrillProject::snapSelected(double grid)
 {
     if (grid <= 0.0 || m_currentSet < 0) return;
+    QSet<QString> affected;
+    for (const auto &person : m_performers)
+        if (person.selected && !person.locked) affected.insert(person.id);
+    if (affected.isEmpty()) { setStatus(QStringLiteral("Select unlocked performers to snap")); return; }
     const auto before = toJson();
-    for (const auto &person : m_performers) if (person.selected) {
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    detachEditedPerformersFromShapes(variant, affected);
+    for (const auto &person : m_performers) if (affected.contains(person.id)) {
         auto &point = m_sets[m_currentSet].activeVariant().placements[person.id].position;
         point = clampPosition({std::round(point.x() / grid) * grid, std::round(point.y() / grid) * grid});
     }

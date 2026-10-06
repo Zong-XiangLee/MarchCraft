@@ -101,12 +101,22 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     AnimationState state;
     const int counts = playbackSetCounts();
     if (counts > 0) {
-        state.elapsedCounts = m_playhead * counts;
-        // Preserve left/right alternation and step-off weight across consecutive
-        // sets, including odd count moves. A stationary hold starts a new phrase.
-        for (int set = playbackSetIndex() - 1; set > 0; --set) {
-            if (transitionDistance(performerIndex, set) <= 1e-5) break;
-            state.elapsedCounts += m_sets[set].counts;
+        const auto &currentPath = transitionPath(performerIndex, playbackSetIndex());
+        const double rawCount = m_playhead * counts;
+        state.elapsedCounts = qBound(0.0, rawCount - currentPath.startCount(),
+                                     currentPath.durationCounts());
+        // Preserve left/right alternation across genuinely consecutive moves.
+        // A delayed step-off or an early arrival creates a planted break and
+        // starts the next marching phrase at count zero.
+        if (currentPath.startCount() <= 0.001) {
+            for (int set = playbackSetIndex() - 1; set > 0; --set) {
+                const auto &path = transitionPath(performerIndex, set);
+                if (transitionDistance(performerIndex, set) <= 1e-5
+                    || path.startCount() > 0.001
+                    || qAbs(path.arrivalCount() - m_sets[set].counts) > 0.001)
+                    break;
+                state.elapsedCounts += path.durationCounts();
+            }
         }
         state.normalizedTime = std::fmod(state.elapsedCounts / 2.0, 1.0);
         if (state.normalizedTime < 0.0) state.normalizedTime += 1.0;
@@ -151,11 +161,6 @@ AnimationState DrillProject::animationStateAt(int performerIndex) const
     // Field Y increases away from the audience: front = -Y, Side 2 = +X.
     state.travelDirectionDegrees = std::fmod(std::atan2(directionDelta.x(), -directionDelta.y())
                                              * 180.0 / std::numbers::pi + 360.0, 360.0);
-    if (destination.pathType == QStringLiteral("follow")) {
-        state.locomotion = QStringLiteral("march.forward");
-        return state;
-    }
-
     const double facing = interpolatedFacing(performerIndex);
     const double relative = std::fmod(state.travelDirectionDegrees - facing + 540.0, 360.0) - 180.0;
     const double absoluteRelative = std::abs(relative);
@@ -239,6 +244,13 @@ QVector<int> DrillProject::orderedTransitionEditRows(const QString &order, bool 
         if (row >= 0) { rows.push_back(row); included.insert(id); }
     };
 
+    if (m_transitionEdit.options.value(QStringLiteral("useStoredOrder")).toBool()) {
+        for (const auto &value : m_transitionEdit.options.value(QStringLiteral("orderedIds")).toList())
+            appendId(value.toString());
+        for (const auto &id : m_transitionEdit.performerIds) appendId(id);
+        return rows;
+    }
+
     if (order == QStringLiteral("formation") && m_transitionEdit.destinationSet >= 0
         && m_transitionEdit.destinationSet < m_sets.size()) {
         const auto &variant = m_sets[m_transitionEdit.destinationSet].activeVariant();
@@ -260,6 +272,305 @@ QVector<int> DrillProject::orderedTransitionEditRows(const QString &order, bool 
     }
     if (reversed) std::reverse(rows.begin(), rows.end());
     return rows;
+}
+
+int minimumRelationshipMembers(const MarchCraft::TransitionRelationship &relationship)
+{
+    return relationship.type == QStringLiteral("stagger") ? 1 : 2;
+}
+
+int generatedRelationshipMembers(const MarchCraft::TransitionRelationship &relationship)
+{
+    int count = 0;
+    for (const auto &id : relationship.performerIds)
+        if (!relationship.manualOverrideIds.contains(id)) ++count;
+    return count;
+}
+
+bool DrillProject::materializeTransitionRelationship(
+    int destinationSet, MarchCraft::SetVariant &variant,
+    MarchCraft::TransitionRelationship &relationship, QString *warning) const
+{
+    if (warning) warning->clear();
+    if (destinationSet <= 0 || destinationSet >= m_sets.size()) return false;
+
+    auto setWarning = [&](const QString &message) {
+        if (!warning || message.isEmpty()) return;
+        if (warning->isEmpty()) *warning = message;
+        else if (!warning->contains(message)) *warning += QStringLiteral(" ") + message;
+    };
+    auto rowForId = [&](const QString &id) { return performerRowForId(m_performers, id); };
+    relationship.performerIds.erase(
+        std::remove_if(relationship.performerIds.begin(), relationship.performerIds.end(),
+            [&](const QString &id) { return rowForId(id) < 0 || !variant.placements.contains(id); }),
+        relationship.performerIds.end());
+    relationship.manualOverrideIds.erase(
+        std::remove_if(relationship.manualOverrideIds.begin(), relationship.manualOverrideIds.end(),
+            [&](const QString &id) { return !relationship.performerIds.contains(id); }),
+        relationship.manualOverrideIds.end());
+    if (generatedRelationshipMembers(relationship) < minimumRelationshipMembers(relationship)) {
+        setWarning(QStringLiteral("The relationship no longer has enough performers."));
+        return false;
+    }
+
+    const double counts = qMax(1, m_sets[destinationSet].counts);
+    relationship.authoredCounts = counts;
+    bool valid = true;
+
+    if (relationship.type == QStringLiteral("follow")) {
+        if (!relationship.performerIds.contains(relationship.leaderId)
+            || relationship.manualOverrideIds.contains(relationship.leaderId)) {
+            setWarning(QStringLiteral("The Follow the Leader leader is missing."));
+            return false;
+        }
+        const int leaderIndex = relationship.performerIds.indexOf(relationship.leaderId);
+        std::rotate(relationship.performerIds.begin(),
+                    relationship.performerIds.begin() + leaderIndex,
+                    relationship.performerIds.end());
+        const int leaderRow = rowForId(relationship.leaderId);
+        const QPointF leaderOrigin = placementAt(leaderRow, destinationSet - 1).position;
+        Placement leader = variant.placements.value(relationship.leaderId);
+        if (leader.pathPoints.isEmpty())
+            leader.pathPoints = {clampPosition(defaultCurveControl(leaderOrigin, leader.position))};
+        for (auto &point : leader.pathPoints) point = clampPosition(point);
+        leader.pathType = QStringLiteral("follow");
+        leader.pathStartCount = 0.0;
+        leader.pathDurationCounts = counts;
+        variant.placements.insert(relationship.leaderId, leader);
+
+        MarchCraft::TransitionPath leaderPath(leaderOrigin, leader, counts);
+        if (leaderPath.distance() <= 0.01) {
+            valid = false;
+            setWarning(QStringLiteral("The Follow the Leader route has zero length."));
+        }
+        const int routeSamples = qBound(96, qCeil(leaderPath.distance() * 4.0), 384);
+        QVector<QPointF> route;
+        route.reserve(routeSamples + 1);
+        for (int sample = 0; sample <= routeSamples; ++sample)
+            route.push_back(leaderPath.geometryPosition(double(sample) / routeSamples));
+        const double leaderSpeed = qMax(0.001, leaderPath.distance() / counts);
+        double spacingDistance = 0.0;
+        for (int ordinal = 1; ordinal < relationship.performerIds.size(); ++ordinal) {
+            const QString id = relationship.performerIds[ordinal];
+            const QString previousId = relationship.performerIds[ordinal - 1];
+            const int row = rowForId(id);
+            const int previousRow = rowForId(previousId);
+            const QPointF origin = placementAt(row, destinationSet - 1).position;
+            const QPointF previousOrigin = placementAt(previousRow, destinationSet - 1).position;
+            spacingDistance += pointDistance(origin, previousOrigin);
+
+            if (relationship.manualOverrideIds.contains(id)) continue;
+
+            Placement follower = variant.placements.value(id);
+            int entry = 0;
+            int exit = routeSamples;
+            double entryDistance = std::numeric_limits<double>::max();
+            double exitDistance = std::numeric_limits<double>::max();
+            for (int sample = 0; sample <= routeSamples; ++sample) {
+                const double fromOrigin = pointDistance(origin, route[sample]);
+                if (fromOrigin < entryDistance) { entryDistance = fromOrigin; entry = sample; }
+                const double fromDestination = pointDistance(follower.position, route[sample]);
+                if (fromDestination < exitDistance) { exitDistance = fromDestination; exit = sample; }
+            }
+            if (exit < entry) {
+                valid = false;
+                setWarning(QStringLiteral("A follower destination occurs before its route entry."));
+                entry = 0;
+                exit = routeSamples;
+            }
+
+            QVector<QPointF> points;
+            auto appendDistinct = [&](QPointF point) {
+                point = clampPosition(point);
+                const QPointF previous = points.isEmpty() ? origin : points.last();
+                if (pointDistance(previous, point) > 0.05
+                    && pointDistance(follower.position, point) > 0.05)
+                    points.push_back(point);
+            };
+            appendDistinct(route[entry]);
+            const int routeStride = qMax(1, (exit - entry) / 32);
+            for (int sample = entry + routeStride; sample < exit; sample += routeStride)
+                appendDistinct(route[sample]);
+            appendDistinct(route[exit]);
+
+            const double requestedStart = spacingDistance / leaderSpeed;
+            if (requestedStart >= counts - 0.249) {
+                valid = false;
+                setWarning(QStringLiteral("Follower spacing requires more counts than this transition provides."));
+            }
+            follower.pathType = QStringLiteral("follow");
+            follower.pathPoints = points;
+            follower.pathStartCount = qMin(counts - 0.25, requestedStart);
+            follower.pathDurationCounts = qMax(0.25, counts - follower.pathStartCount);
+            variant.placements.insert(id, follower);
+        }
+        return valid;
+    }
+
+    if (relationship.type == QStringLiteral("gate")) {
+        if (!relationship.performerIds.contains(relationship.pivotId)
+            || relationship.manualOverrideIds.contains(relationship.pivotId)) {
+            setWarning(QStringLiteral("The gate pivot is missing."));
+            return false;
+        }
+        const int pivotIndex = relationship.performerIds.indexOf(relationship.pivotId);
+        std::rotate(relationship.performerIds.begin(),
+                    relationship.performerIds.begin() + pivotIndex,
+                    relationship.performerIds.end());
+        const int pivotRow = rowForId(relationship.pivotId);
+        const QPointF sourcePivot = placementAt(pivotRow, destinationSet - 1).position;
+        const QPointF destinationPivot = variant.placements.value(relationship.pivotId).position;
+        const bool clockwise = relationship.direction != QStringLiteral("counterclockwise");
+        bool radiusMismatch = false;
+
+        for (const auto &id : std::as_const(relationship.performerIds)) {
+            if (relationship.manualOverrideIds.contains(id)) continue;
+            const int row = rowForId(id);
+            Placement placement = variant.placements.value(id);
+            placement.pathPoints.clear();
+            if (id == relationship.pivotId) {
+                placement.pathType = QStringLiteral("pivot");
+                variant.placements.insert(id, placement);
+                continue;
+            }
+
+            const QPointF origin = placementAt(row, destinationSet - 1).position;
+            const QPointF startVector = origin - sourcePivot;
+            const QPointF endVector = placement.position - destinationPivot;
+            const double startRadius = pointDistance({}, startVector);
+            const double endRadius = pointDistance({}, endVector);
+            if (startRadius < 0.01 || endRadius < 0.01) {
+                valid = false;
+                setWarning(QStringLiteral("A gate member overlaps the pivot."));
+            }
+            const double radiusTolerance = qMax(0.5, startRadius * 0.05);
+            radiusMismatch = radiusMismatch || qAbs(startRadius - endRadius) > radiusTolerance;
+            const double startAngle = std::atan2(startVector.y(), startVector.x());
+            const double endAngle = std::atan2(endVector.y(), endVector.x());
+            double sweep = endAngle - startAngle;
+            if (clockwise) while (sweep > 0.0) sweep -= 2.0 * std::numbers::pi;
+            else while (sweep < 0.0) sweep += 2.0 * std::numbers::pi;
+
+            placement.pathType = QStringLiteral("gate");
+            constexpr int arcSamples = 32;
+            for (int sample = 1; sample < arcSamples; ++sample) {
+                const double progress = double(sample) / arcSamples;
+                const QPointF movingPivot = sourcePivot + (destinationPivot - sourcePivot) * progress;
+                const double radius = startRadius + (endRadius - startRadius) * progress;
+                const double angle = startAngle + sweep * progress;
+                placement.pathPoints.push_back(clampPosition(movingPivot
+                    + QPointF(std::cos(angle) * radius, std::sin(angle) * radius)));
+            }
+            variant.placements.insert(id, placement);
+        }
+        if (radiusMismatch)
+            setWarning(QStringLiteral("Destination radii differ; MarchCraft uses a smooth spiral gate to preserve endpoints."));
+        return valid;
+    }
+
+    if (relationship.type == QStringLiteral("stagger")) {
+        const int groupSize = qMax(1, relationship.groupSize);
+        const double interval = qMax(0.0, relationship.intervalCounts);
+        const double baseDelay = qMax(0.0, relationship.baseDelayCounts);
+        const int lastGroup = (relationship.performerIds.size() - 1) / groupSize;
+        const double requestedLatestStart = baseDelay + lastGroup * interval;
+        if (requestedLatestStart >= counts - 0.249) {
+            valid = false;
+            setWarning(QStringLiteral("The requested stagger starts at %1 counts, but only %2 counts are available.")
+                .arg(requestedLatestStart, 0, 'f', 2).arg(counts, 0, 'f', 0));
+        }
+        const double latestStart = qMin(counts - 0.25, requestedLatestStart);
+        const double commonDuration = qMax(0.25, counts - latestStart);
+        for (int ordinal = 0; ordinal < relationship.performerIds.size(); ++ordinal) {
+            const QString id = relationship.performerIds[ordinal];
+            Placement placement = variant.placements.value(id);
+            if (placement.pathType == QStringLiteral("delayed")) {
+                placement.pathType = QStringLiteral("direct");
+                placement.pathPoints.clear();
+            }
+            const double requestedStart = baseDelay + (ordinal / groupSize) * interval;
+            placement.pathStartCount = qMin(counts - 0.25, requestedStart);
+            placement.pathDurationCounts = relationship.arriveTogether
+                ? qMax(0.25, counts - placement.pathStartCount) : commonDuration;
+            variant.placements.insert(id, placement);
+        }
+        return valid;
+    }
+
+    setWarning(QStringLiteral("Unknown transition relationship type."));
+    return false;
+}
+
+void DrillProject::detachFromTransitionRelationships(
+    MarchCraft::SetVariant &variant, const QSet<QString> &performerIds)
+{
+    for (int index = variant.transitionRelationships.size() - 1; index >= 0; --index) {
+        auto &relationship = variant.transitionRelationships[index];
+        bool changed = false;
+        for (int member = relationship.performerIds.size() - 1; member >= 0; --member) {
+            if (!performerIds.contains(relationship.performerIds[member])) continue;
+            relationship.manualOverrideIds.removeAll(relationship.performerIds[member]);
+            relationship.performerIds.removeAt(member);
+            changed = true;
+        }
+        if (!changed) continue;
+        const bool lostAnchor = (relationship.type == QStringLiteral("follow")
+                                 && performerIds.contains(relationship.leaderId))
+            || (relationship.type == QStringLiteral("gate")
+                && performerIds.contains(relationship.pivotId));
+        if (lostAnchor
+            || generatedRelationshipMembers(relationship) < minimumRelationshipMembers(relationship))
+            variant.transitionRelationships.removeAt(index);
+    }
+}
+
+bool DrillProject::reconcileTransitionRelationships(int destinationSet)
+{
+    bool changed = false;
+    m_transitionReconcileWarning.clear();
+    const int first = destinationSet > 0 ? destinationSet : 1;
+    const int last = destinationSet > 0 ? destinationSet : m_sets.size() - 1;
+    for (int set = first; set <= last && set < m_sets.size(); ++set) {
+        auto reconcileVariants = [&](QVector<MarchCraft::SetVariant> &variants) {
+        for (auto &variant : variants) {
+            const QJsonObject before = variant.toJson();
+            for (int index = variant.transitionRelationships.size() - 1; index >= 0; --index) {
+                auto &relationship = variant.transitionRelationships[index];
+                QString warning;
+                const bool anchorPresent = relationship.type == QStringLiteral("follow")
+                        ? relationship.performerIds.contains(relationship.leaderId)
+                            && !relationship.manualOverrideIds.contains(relationship.leaderId)
+                        : relationship.type == QStringLiteral("gate")
+                            ? relationship.performerIds.contains(relationship.pivotId)
+                                && !relationship.manualOverrideIds.contains(relationship.pivotId) : true;
+                if (!anchorPresent
+                    || generatedRelationshipMembers(relationship) < minimumRelationshipMembers(relationship)) {
+                    variant.transitionRelationships.removeAt(index);
+                    continue;
+                }
+                materializeTransitionRelationship(set, variant, relationship, &warning);
+                const bool anchorStillPresent = relationship.type == QStringLiteral("follow")
+                        ? relationship.performerIds.contains(relationship.leaderId)
+                            && !relationship.manualOverrideIds.contains(relationship.leaderId)
+                        : relationship.type == QStringLiteral("gate")
+                            ? relationship.performerIds.contains(relationship.pivotId)
+                                && !relationship.manualOverrideIds.contains(relationship.pivotId) : true;
+                if (!anchorStillPresent
+                    || generatedRelationshipMembers(relationship) < minimumRelationshipMembers(relationship)) {
+                    variant.transitionRelationships.removeAt(index);
+                    continue;
+                }
+                if (!warning.isEmpty() && set == m_currentSet
+                    && variant.id == m_sets[set].activeVariantId)
+                    m_transitionReconcileWarning = warning;
+            }
+            changed = changed || before != variant.toJson();
+        }
+        };
+        reconcileVariants(m_sets[set].variants);
+        reconcileVariants(m_sets[set].archivedVariants);
+    }
+    return changed;
 }
 
 bool DrillProject::beginTransitionEdit()
@@ -286,26 +597,140 @@ bool DrillProject::beginTransitionEdit()
         m_transitionEdit.previewPlacements.insert(id, placement);
     }
     m_transitionEdit.activePerformerId = m_transitionEdit.performerIds.first();
-    const Placement activePlacement = m_transitionEdit.previewPlacements.value(m_transitionEdit.activePerformerId);
-    m_transitionEdit.type = activePlacement.pathType == QStringLiteral("delayed")
-        ? QStringLiteral("stagger") : activePlacement.pathType;
-    if (m_transitionEdit.type == QStringLiteral("direct")) {
-        const bool hasExplicitTiming = std::any_of(
-            m_transitionEdit.originalPlacements.cbegin(), m_transitionEdit.originalPlacements.cend(),
-            [](const Placement &placement) {
-                return (placement.pathType == QStringLiteral("direct")
-                        || placement.pathType == QStringLiteral("delayed"))
-                    && (placement.pathStartCount >= 0.0 || placement.pathDurationCounts >= 0.0);
-            });
-        if (hasExplicitTiming) m_transitionEdit.type = QStringLiteral("stagger");
-    }
-    if (m_transitionEdit.type == QStringLiteral("pivot")) m_transitionEdit.type = QStringLiteral("gate");
     m_transitionEdit.options = {{QStringLiteral("order"), QStringLiteral("selection")},
         {QStringLiteral("reversed"), false}, {QStringLiteral("leaderRow"), transitionEditActiveRow()},
         {QStringLiteral("pivotRow"), transitionEditActiveRow()},
         {QStringLiteral("direction"), QStringLiteral("clockwise")},
         {QStringLiteral("intervalCounts"), 1.0}, {QStringLiteral("groupSize"), 1},
         {QStringLiteral("baseDelayCounts"), 0.0}, {QStringLiteral("arriveTogether"), true}};
+
+    QSet<QString> selectedSet;
+    for (const auto &id : std::as_const(m_transitionEdit.performerIds)) selectedSet.insert(id);
+    const auto &variant = m_sets[m_currentSet].activeVariant();
+    const MarchCraft::TransitionRelationship *persistedRelationship = nullptr;
+    for (const auto &relationship : variant.transitionRelationships) {
+        if (relationship.performerIds.size() != selectedSet.size()) continue;
+        bool exact = true;
+        for (const auto &id : relationship.performerIds) exact = exact && selectedSet.contains(id);
+        if (exact) { persistedRelationship = &relationship; break; }
+    }
+
+    if (persistedRelationship) {
+        const auto &relationship = *persistedRelationship;
+        m_transitionEdit.relationshipId = relationship.id;
+        m_transitionEdit.type = relationship.type;
+        m_transitionEdit.performerIds = relationship.performerIds;
+        for (const auto &id : relationship.manualOverrideIds) {
+            m_transitionEdit.detachedPerformerIds.insert(id);
+            m_transitionEdit.detachedPlacements.insert(id, m_transitionEdit.previewPlacements.value(id));
+        }
+        m_transitionEdit.activePerformerId = relationship.type == QStringLiteral("follow")
+            ? relationship.leaderId : relationship.type == QStringLiteral("gate")
+                ? relationship.pivotId : relationship.performerIds.first();
+        QVariantList orderedIds;
+        for (const auto &id : relationship.performerIds) orderedIds.push_back(id);
+        m_transitionEdit.options = {
+            {QStringLiteral("order"), relationship.order},
+            {QStringLiteral("reversed"), relationship.reversed},
+            {QStringLiteral("leaderRow"), performerRowForId(m_performers, relationship.leaderId)},
+            {QStringLiteral("pivotRow"), performerRowForId(m_performers, relationship.pivotId)},
+            {QStringLiteral("direction"), relationship.direction},
+            {QStringLiteral("spacingMode"), relationship.spacingMode},
+            {QStringLiteral("intervalCounts"), relationship.intervalCounts},
+            {QStringLiteral("groupSize"), relationship.groupSize},
+            {QStringLiteral("baseDelayCounts"), relationship.baseDelayCounts},
+            {QStringLiteral("arriveTogether"), relationship.arriveTogether},
+            {QStringLiteral("orderedIds"), orderedIds},
+            {QStringLiteral("useStoredOrder"), true}
+        };
+        if (relationship.type == QStringLiteral("follow")) {
+            const Placement leader = m_transitionEdit.previewPlacements.value(relationship.leaderId);
+            m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(leader.pathPoints));
+        }
+    } else {
+        m_transitionEdit.activePerformerId = m_transitionEdit.performerIds.first();
+        const Placement activePlacement = m_transitionEdit.previewPlacements.value(m_transitionEdit.activePerformerId);
+        m_transitionEdit.type = activePlacement.pathType == QStringLiteral("delayed")
+            ? QStringLiteral("stagger") : activePlacement.pathType;
+        if (m_transitionEdit.type == QStringLiteral("pivot")) m_transitionEdit.type = QStringLiteral("gate");
+
+        if (m_transitionEdit.type == QStringLiteral("direct")) {
+            const bool hasExplicitTiming = std::any_of(
+                m_transitionEdit.originalPlacements.cbegin(), m_transitionEdit.originalPlacements.cend(),
+                [](const Placement &placement) {
+                    return (placement.pathType == QStringLiteral("direct")
+                            || placement.pathType == QStringLiteral("delayed"))
+                        && (placement.pathStartCount >= 0.0 || placement.pathDurationCounts >= 0.0);
+                });
+            if (hasExplicitTiming) m_transitionEdit.type = QStringLiteral("stagger");
+        }
+
+        // Deterministically recover the useful portion of legacy generated
+        // intent. New projects persist the complete relationship metadata.
+        if (m_transitionEdit.type == QStringLiteral("follow")) {
+            int leaderRow = transitionEditActiveRow();
+            double earliest = std::numeric_limits<double>::max();
+            QVariantList orderedIds;
+            QVector<QString> ordered = m_transitionEdit.performerIds;
+            std::stable_sort(ordered.begin(), ordered.end(), [&](const QString &left, const QString &right) {
+                return m_transitionEdit.originalPlacements.value(left).pathStartCount
+                    < m_transitionEdit.originalPlacements.value(right).pathStartCount;
+            });
+            for (const auto &id : ordered) {
+                orderedIds.push_back(id);
+                const double start = m_transitionEdit.originalPlacements.value(id).pathStartCount;
+                if (start < earliest) { earliest = start; leaderRow = performerRowForId(m_performers, id); }
+            }
+            m_transitionEdit.performerIds = ordered;
+            m_transitionEdit.activePerformerId = m_performers[leaderRow].id;
+            m_transitionEdit.options.insert(QStringLiteral("leaderRow"), leaderRow);
+            m_transitionEdit.options.insert(QStringLiteral("leaderPoints"),
+                pointList(m_transitionEdit.originalPlacements.value(m_performers[leaderRow].id).pathPoints));
+            m_transitionEdit.options.insert(QStringLiteral("orderedIds"), orderedIds);
+            m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), true);
+        } else if (m_transitionEdit.type == QStringLiteral("gate")) {
+            for (const auto &id : std::as_const(m_transitionEdit.performerIds)) {
+                if (m_transitionEdit.originalPlacements.value(id).pathType != QStringLiteral("pivot")) continue;
+                m_transitionEdit.activePerformerId = id;
+                m_transitionEdit.options.insert(QStringLiteral("pivotRow"), performerRowForId(m_performers, id));
+                break;
+            }
+        } else if (m_transitionEdit.type == QStringLiteral("stagger")) {
+            QVector<QString> ordered = m_transitionEdit.performerIds;
+            std::stable_sort(ordered.begin(), ordered.end(), [&](const QString &left, const QString &right) {
+                return m_transitionEdit.originalPlacements.value(left).pathStartCount
+                    < m_transitionEdit.originalPlacements.value(right).pathStartCount;
+            });
+            QVariantList orderedIds;
+            for (const auto &id : ordered) orderedIds.push_back(id);
+            m_transitionEdit.performerIds = ordered;
+            m_transitionEdit.activePerformerId = ordered.first();
+            const double base = qMax(0.0, m_transitionEdit.originalPlacements.value(ordered.first()).pathStartCount);
+            int groupSize = 1;
+            while (groupSize < ordered.size()
+                   && qFuzzyCompare(m_transitionEdit.originalPlacements.value(ordered[groupSize]).pathStartCount + 1.0,
+                                    base + 1.0))
+                ++groupSize;
+            const double interval = groupSize < ordered.size()
+                ? qMax(0.0, m_transitionEdit.originalPlacements.value(ordered[groupSize]).pathStartCount - base)
+                : 0.0;
+            const double firstArrival = m_transitionEdit.originalPlacements.value(ordered.first()).pathStartCount
+                + m_transitionEdit.originalPlacements.value(ordered.first()).pathDurationCounts;
+            bool together = true;
+            for (const auto &id : ordered) {
+                const Placement placement = m_transitionEdit.originalPlacements.value(id);
+                together = together && qAbs(placement.pathStartCount + placement.pathDurationCounts
+                                             - firstArrival) < 0.001;
+            }
+            m_transitionEdit.options.insert(QStringLiteral("baseDelayCounts"), base);
+            m_transitionEdit.options.insert(QStringLiteral("groupSize"), groupSize);
+            m_transitionEdit.options.insert(QStringLiteral("intervalCounts"), interval);
+            m_transitionEdit.options.insert(QStringLiteral("arriveTogether"), together);
+            m_transitionEdit.options.insert(QStringLiteral("orderedIds"), orderedIds);
+            m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), true);
+        }
+    }
+    validateTransitionEdit();
     emit transitionEditChanged();
     setStatus(QStringLiteral("Transition path preview ready — Apply or Cancel"));
     return true;
@@ -316,7 +741,11 @@ void DrillProject::rebuildTransitionEditPreview()
     if (!m_transitionEdit.active || m_transitionEdit.destinationSet <= 0
         || m_transitionEdit.destinationSet >= m_sets.size()) return;
     m_transitionEdit.previewPlacements = m_transitionEdit.originalPlacements;
-    const double counts = qMax(1, m_sets[m_transitionEdit.destinationSet].counts);
+    for (auto it = m_transitionEdit.detachedPlacements.cbegin();
+         it != m_transitionEdit.detachedPlacements.cend(); ++it)
+        m_transitionEdit.previewPlacements.insert(it.key(), it.value());
+    m_transitionEdit.valid = true;
+    m_transitionEdit.warning.clear();
     const QString type = m_transitionEdit.type;
     const bool reversed = m_transitionEdit.options.value(QStringLiteral("reversed"), false).toBool();
     const QString order = m_transitionEdit.options.value(QStringLiteral("order"), QStringLiteral("formation")).toString();
@@ -327,7 +756,6 @@ void DrillProject::rebuildTransitionEditPreview()
         for (int row : rows) {
             auto &placement = m_transitionEdit.previewPlacements[m_performers[row].id];
             placement.pathType = QStringLiteral("direct"); placement.pathPoints.clear();
-            placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
         }
         return;
     }
@@ -347,128 +775,101 @@ void DrillProject::rebuildTransitionEditPreview()
             if (placement.pathPoints.isEmpty())
                 placement.pathPoints = {clampPosition(defaultCurveControl(
                     placementAt(row, m_transitionEdit.destinationSet - 1).position, placement.position))};
-            placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
         }
         return;
     }
-    if (type == QStringLiteral("follow")) {
-        int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), rows.first()).toInt();
-        auto leaderPosition = std::find(rows.begin(), rows.end(), leaderRow);
-        if (leaderPosition == rows.end()) { leaderRow = rows.first(); leaderPosition = rows.begin(); }
-        std::rotate(rows.begin(), leaderPosition, rows.end());
-        m_transitionEdit.options.insert(QStringLiteral("leaderRow"), leaderRow);
-        m_transitionEdit.activePerformerId = m_performers[leaderRow].id;
 
-        const QString leaderId = m_performers[leaderRow].id;
-        Placement leader = m_transitionEdit.previewPlacements.value(leaderId);
-        QVector<QPointF> leaderPoints = variantPoints(m_transitionEdit.options.value(QStringLiteral("leaderPoints")));
-        if (leaderPoints.isEmpty() && leader.pathType != QStringLiteral("direct")
-            && leader.pathType != QStringLiteral("delayed")) leaderPoints = leader.pathPoints;
-        const QPointF leaderOrigin = placementAt(leaderRow, m_transitionEdit.destinationSet - 1).position;
-        if (leaderPoints.isEmpty()) leaderPoints = {clampPosition(defaultCurveControl(leaderOrigin, leader.position))};
-        for (auto &point : leaderPoints) point = clampPosition(point);
-        m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(leaderPoints));
-        leader.pathType = QStringLiteral("follow"); leader.pathPoints = leaderPoints;
-        leader.pathStartCount = 0.0; leader.pathDurationCounts = counts;
-        m_transitionEdit.previewPlacements.insert(leaderId, leader);
-
-        MarchCraft::TransitionPath leaderPath(leaderOrigin, leader, counts);
-        QVector<QPointF> route;
-        constexpr int routeSamples = 64;
-        route.reserve(routeSamples + 1);
-        for (int sample = 0; sample <= routeSamples; ++sample)
-            route.push_back(leaderPath.position(double(sample) / routeSamples));
-        const double leaderSpeed = qMax(0.25, leaderPath.distance() / counts);
-        double spacingDistance = 0.0;
-        for (int ordinal = 1; ordinal < rows.size(); ++ordinal) {
-            const int row = rows[ordinal];
-            const int previousRow = rows[ordinal - 1];
-            const QPointF origin = placementAt(row, m_transitionEdit.destinationSet - 1).position;
-            const QPointF previousOrigin = placementAt(previousRow, m_transitionEdit.destinationSet - 1).position;
-            spacingDistance += pointDistance(origin, previousOrigin);
-            Placement follower = m_transitionEdit.previewPlacements.value(m_performers[row].id);
-            int entry = 0, exit = routeSamples;
-            double entryDistance = std::numeric_limits<double>::max();
-            double exitDistance = std::numeric_limits<double>::max();
-            for (int sample = 0; sample <= routeSamples; ++sample) {
-                const double fromOrigin = pointDistance(origin, route[sample]);
-                if (fromOrigin < entryDistance) { entryDistance = fromOrigin; entry = sample; }
-                const double fromDestination = pointDistance(follower.position, route[sample]);
-                if (fromDestination < exitDistance) { exitDistance = fromDestination; exit = sample; }
-            }
-            if (exit < entry) { entry = 0; exit = routeSamples; }
-            QVector<QPointF> points;
-            auto appendDistinct = [&](QPointF point) {
-                point = clampPosition(point);
-                if ((points.isEmpty() ? pointDistance(origin, point) : pointDistance(points.last(), point)) > 0.05
-                    && pointDistance(follower.position, point) > 0.05) points.push_back(point);
-            };
-            appendDistinct(route[entry]);
-            for (int sample = entry + 4; sample < exit; sample += 4) appendDistinct(route[sample]);
-            appendDistinct(route[exit]);
-            follower.pathType = QStringLiteral("follow"); follower.pathPoints = points;
-            follower.pathStartCount = qMin(counts - 0.25, spacingDistance / leaderSpeed);
-            follower.pathDurationCounts = qMax(0.25, counts - follower.pathStartCount);
-            m_transitionEdit.previewPlacements.insert(m_performers[row].id, follower);
-        }
-        return;
-    }
-    if (type == QStringLiteral("gate") || type == QStringLiteral("pivot")) {
-        int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), rows.first()).toInt();
-        if (!rows.contains(pivotRow)) pivotRow = rows.first();
-        m_transitionEdit.options.insert(QStringLiteral("pivotRow"), pivotRow);
-        m_transitionEdit.activePerformerId = m_performers[pivotRow].id;
-        const QPointF pivot = placementAt(pivotRow, m_transitionEdit.destinationSet - 1).position;
-        const bool clockwise = m_transitionEdit.options.value(QStringLiteral("direction"),
-            QStringLiteral("clockwise")).toString() != QStringLiteral("counterclockwise");
+    if (type == QStringLiteral("follow") || type == QStringLiteral("gate")
+        || type == QStringLiteral("pivot") || type == QStringLiteral("stagger")) {
+        MarchCraft::TransitionRelationship relationship;
+        relationship.id = m_transitionEdit.relationshipId.isEmpty()
+            ? relationship.id : m_transitionEdit.relationshipId;
+        relationship.type = type == QStringLiteral("pivot") ? QStringLiteral("gate") : type;
         for (int row : rows) {
             const QString id = m_performers[row].id;
-            Placement placement = m_transitionEdit.previewPlacements.value(id);
-            const QPointF origin = placementAt(row, m_transitionEdit.destinationSet - 1).position;
-            const QPointF startVector = origin - pivot, endVector = placement.position - pivot;
-            const double startRadius = pointDistance({}, startVector), endRadius = pointDistance({}, endVector);
-            placement.pathPoints.clear(); placement.pathStartCount = -1.0; placement.pathDurationCounts = -1.0;
-            if (row == pivotRow || (startRadius < 0.01 && endRadius < 0.01)) {
-                placement.pathType = QStringLiteral("pivot");
-            } else {
-                placement.pathType = QStringLiteral("gate");
-                const double startAngle = std::atan2(startVector.y(), startVector.x());
-                const double endAngle = std::atan2(endVector.y(), endVector.x());
-                double sweep = endAngle - startAngle;
-                if (clockwise) while (sweep > 0.0) sweep -= 2.0 * std::numbers::pi;
-                else while (sweep < 0.0) sweep += 2.0 * std::numbers::pi;
-                constexpr int arcSamples = 12;
-                for (int sample = 1; sample < arcSamples; ++sample) {
-                    const double progress = double(sample) / arcSamples;
-                    const double radius = startRadius + (endRadius - startRadius) * progress;
-                    const double angle = startAngle + sweep * progress;
-                    placement.pathPoints.push_back(clampPosition(pivot
-                        + QPointF(std::cos(angle) * radius, std::sin(angle) * radius)));
+            relationship.performerIds.push_back(id);
+            if (m_transitionEdit.detachedPerformerIds.contains(id))
+                relationship.manualOverrideIds.push_back(id);
+        }
+        const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"),
+                                                               rows.value(0, -1)).toInt();
+        const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"),
+                                                             rows.value(0, -1)).toInt();
+        if (leaderRow >= 0 && leaderRow < m_performers.size())
+            relationship.leaderId = m_performers[leaderRow].id;
+        if (pivotRow >= 0 && pivotRow < m_performers.size())
+            relationship.pivotId = m_performers[pivotRow].id;
+        relationship.order = m_transitionEdit.options.value(
+            QStringLiteral("order"), QStringLiteral("selection")).toString();
+        relationship.reversed = m_transitionEdit.options.value(QStringLiteral("reversed")).toBool();
+        relationship.direction = m_transitionEdit.options.value(
+            QStringLiteral("direction"), QStringLiteral("clockwise")).toString();
+        relationship.spacingMode = m_transitionEdit.options.value(
+            QStringLiteral("spacingMode"), QStringLiteral("sourceDistance")).toString();
+        relationship.intervalCounts = qMax(0.0, m_transitionEdit.options.value(
+            QStringLiteral("intervalCounts"), 1.0).toDouble());
+        relationship.groupSize = qMax(1, m_transitionEdit.options.value(
+            QStringLiteral("groupSize"), 1).toInt());
+        relationship.baseDelayCounts = qMax(0.0, m_transitionEdit.options.value(
+            QStringLiteral("baseDelayCounts"), 0.0).toDouble());
+        relationship.arriveTogether = m_transitionEdit.options.value(
+            QStringLiteral("arriveTogether"), true).toBool();
+
+        if (relationship.type == QStringLiteral("follow") && !relationship.leaderId.isEmpty()) {
+            auto leader = m_transitionEdit.previewPlacements.value(relationship.leaderId);
+            const auto leaderPoints = variantPoints(
+                m_transitionEdit.options.value(QStringLiteral("leaderPoints")));
+            if (m_transitionEdit.options.contains(QStringLiteral("leaderPoints")))
+                leader.pathPoints = leaderPoints;
+            m_transitionEdit.previewPlacements.insert(relationship.leaderId, leader);
+        }
+
+        MarchCraft::SetVariant scratch = m_sets[m_transitionEdit.destinationSet].activeVariant();
+        for (auto it = m_transitionEdit.previewPlacements.cbegin();
+             it != m_transitionEdit.previewPlacements.cend(); ++it)
+            scratch.placements.insert(it.key(), it.value());
+        QString warning;
+        if (generatedRelationshipMembers(relationship) < minimumRelationshipMembers(relationship)) {
+            // A manual follower/member override can dissolve the remaining
+            // generated relationship.  Keep every edited route as an
+            // independent path instead of blocking Apply or silently
+            // reattaching it.
+            for (const auto &id : std::as_const(relationship.performerIds)) {
+                auto placement = m_transitionEdit.previewPlacements.value(id);
+                if (relationship.type == QStringLiteral("gate") && id == relationship.pivotId) {
+                    placement.pathType = QStringLiteral("direct");
+                    placement.pathPoints.clear();
+                } else {
+                    placement.pathType = placement.pathPoints.isEmpty()
+                        ? QStringLiteral("direct") : QStringLiteral("curved");
                 }
+                m_transitionEdit.previewPlacements.insert(id, placement);
             }
-            m_transitionEdit.previewPlacements.insert(id, placement);
+            m_transitionEdit.valid = true;
+            warning = QStringLiteral("Manual overrides leave too few members for the generated relationship; remaining routes will be independent.");
+        } else {
+            m_transitionEdit.valid = materializeTransitionRelationship(
+                m_transitionEdit.destinationSet, scratch, relationship, &warning);
+        }
+        m_transitionEdit.warning = warning;
+        if (generatedRelationshipMembers(relationship) >= minimumRelationshipMembers(relationship))
+            for (const auto &id : std::as_const(relationship.performerIds))
+                if (!relationship.manualOverrideIds.contains(id))
+                    m_transitionEdit.previewPlacements.insert(id, scratch.placements.value(id));
+
+        m_transitionEdit.performerIds = relationship.performerIds;
+        QVariantList orderedIds;
+        for (const auto &id : relationship.performerIds) orderedIds.push_back(id);
+        m_transitionEdit.options.insert(QStringLiteral("orderedIds"), orderedIds);
+        m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), true);
+        if (relationship.type == QStringLiteral("follow") && !relationship.leaderId.isEmpty()) {
+            m_transitionEdit.activePerformerId = relationship.leaderId;
+            const Placement leader = m_transitionEdit.previewPlacements.value(relationship.leaderId);
+            m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(leader.pathPoints));
+        } else if (relationship.type == QStringLiteral("gate") && !relationship.pivotId.isEmpty()) {
+            m_transitionEdit.activePerformerId = relationship.pivotId;
         }
         return;
-    }
-    if (type == QStringLiteral("stagger")) {
-        const int groupSize = qMax(1, m_transitionEdit.options.value(QStringLiteral("groupSize"), 1).toInt());
-        const double interval = qMax(0.0, m_transitionEdit.options.value(QStringLiteral("intervalCounts"), 1.0).toDouble());
-        const double baseDelay = qMax(0.0, m_transitionEdit.options.value(QStringLiteral("baseDelayCounts"), 0.0).toDouble());
-        const bool arriveTogether = m_transitionEdit.options.value(QStringLiteral("arriveTogether"), true).toBool();
-        const int lastGroup = rows.isEmpty() ? 0 : (rows.size() - 1) / groupSize;
-        const double maximumStart = qMin(counts - 0.25, baseDelay + lastGroup * interval);
-        const double commonDuration = qMax(0.25, counts - maximumStart);
-        for (int ordinal = 0; ordinal < rows.size(); ++ordinal) {
-            const int row = rows[ordinal];
-            Placement placement = m_transitionEdit.previewPlacements.value(m_performers[row].id);
-            if (placement.pathType == QStringLiteral("delayed")) {
-                placement.pathType = QStringLiteral("direct"); placement.pathPoints.clear();
-            }
-            placement.pathStartCount = qMin(counts - 0.25, baseDelay + (ordinal / groupSize) * interval);
-            placement.pathDurationCounts = arriveTogether
-                ? qMax(0.25, counts - placement.pathStartCount) : commonDuration;
-            m_transitionEdit.previewPlacements.insert(m_performers[row].id, placement);
-        }
     }
 }
 
@@ -478,8 +879,22 @@ void DrillProject::setTransitionEditType(const QString &type, const QVariantMap 
     static const QSet<QString> supported{QStringLiteral("direct"), QStringLiteral("curved"),
         QStringLiteral("follow"), QStringLiteral("gate"), QStringLiteral("pivot"),
         QStringLiteral("stagger"), QStringLiteral("delayed")};
-    m_transitionEdit.type = supported.contains(type) ? type : QStringLiteral("direct");
+    const QString nextType = supported.contains(type) ? type : QStringLiteral("direct");
+    const bool typeChanged = m_transitionEdit.type != nextType;
+    m_transitionEdit.type = nextType;
+    if (typeChanged) {
+        m_transitionEdit.detachedPerformerIds.clear();
+        m_transitionEdit.detachedPlacements.clear();
+        m_transitionEdit.options.remove(QStringLiteral("orderedIds"));
+        m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), false);
+        if (nextType != QStringLiteral("follow"))
+            m_transitionEdit.options.remove(QStringLiteral("leaderPoints"));
+    }
     for (auto it = options.cbegin(); it != options.cend(); ++it) m_transitionEdit.options.insert(it.key(), it.value());
+    if (options.contains(QStringLiteral("order")) || options.contains(QStringLiteral("reversed"))) {
+        m_transitionEdit.options.remove(QStringLiteral("orderedIds"));
+        m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), false);
+    }
     rebuildTransitionEditPreview();
     emit transitionEditChanged();
 }
@@ -487,16 +902,40 @@ void DrillProject::setTransitionEditType(const QString &type, const QVariantMap 
 void DrillProject::updateTransitionEditOptions(const QVariantMap &options)
 {
     if (!m_transitionEdit.active) return;
+    const bool orderChanged = options.contains(QStringLiteral("order"));
+    const bool reversedChanged = options.contains(QStringLiteral("reversed"));
     for (auto it = options.cbegin(); it != options.cend(); ++it) m_transitionEdit.options.insert(it.key(), it.value());
+    if (orderChanged || reversedChanged) {
+        m_transitionEdit.options.remove(QStringLiteral("orderedIds"));
+        m_transitionEdit.options.insert(QStringLiteral("useStoredOrder"), false);
+    }
     rebuildTransitionEditPreview();
     emit transitionEditChanged();
+}
+
+void DrillProject::validateTransitionEdit()
+{
+    if (!m_transitionEdit.active) return;
+    rebuildTransitionEditPreview();
 }
 
 bool DrillProject::applyTransitionEdit()
 {
     if (!m_transitionEdit.active || m_transitionEdit.destinationSet != m_currentSet) return false;
+    if (!m_transitionEdit.valid) {
+        setStatus(m_transitionEdit.warning.isEmpty()
+            ? QStringLiteral("This transition configuration is invalid")
+            : m_transitionEdit.warning);
+        return false;
+    }
     const auto before = toJson();
-    auto &placements = m_sets[m_currentSet].activeVariant().placements;
+    auto &variant = m_sets[m_currentSet].activeVariant();
+    auto &placements = variant.placements;
+    QSet<QString> editedIds;
+    for (auto it = m_transitionEdit.originalPlacements.cbegin();
+         it != m_transitionEdit.originalPlacements.cend(); ++it)
+        editedIds.insert(it.key());
+    detachFromTransitionRelationships(variant, editedIds);
     for (auto it = m_transitionEdit.previewPlacements.cbegin(); it != m_transitionEdit.previewPlacements.cend(); ++it) {
         auto &destination = placements[it.key()];
         destination.pathType = it.value().pathType;
@@ -504,6 +943,44 @@ bool DrillProject::applyTransitionEdit()
         destination.pathStartCount = it.value().pathStartCount;
         destination.pathDurationCounts = it.value().pathDurationCounts;
     }
+
+    const QString relationshipType = m_transitionEdit.type == QStringLiteral("pivot")
+        ? QStringLiteral("gate") : m_transitionEdit.type;
+    if (relationshipType == QStringLiteral("follow") || relationshipType == QStringLiteral("gate")
+        || relationshipType == QStringLiteral("stagger")) {
+        MarchCraft::TransitionRelationship relationship;
+        if (!m_transitionEdit.relationshipId.isEmpty()) relationship.id = m_transitionEdit.relationshipId;
+        relationship.type = relationshipType;
+        for (const auto &id : std::as_const(m_transitionEdit.performerIds))
+            relationship.performerIds.push_back(id);
+        for (const auto &id : std::as_const(m_transitionEdit.detachedPerformerIds))
+            if (relationship.performerIds.contains(id)) relationship.manualOverrideIds.push_back(id);
+        const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
+        const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
+        if (leaderRow >= 0 && leaderRow < m_performers.size())
+            relationship.leaderId = m_performers[leaderRow].id;
+        if (pivotRow >= 0 && pivotRow < m_performers.size())
+            relationship.pivotId = m_performers[pivotRow].id;
+        relationship.order = m_transitionEdit.options.value(
+            QStringLiteral("order"), QStringLiteral("selection")).toString();
+        relationship.reversed = m_transitionEdit.options.value(QStringLiteral("reversed")).toBool();
+        relationship.direction = m_transitionEdit.options.value(
+            QStringLiteral("direction"), QStringLiteral("clockwise")).toString();
+        relationship.spacingMode = m_transitionEdit.options.value(
+            QStringLiteral("spacingMode"), QStringLiteral("sourceDistance")).toString();
+        relationship.intervalCounts = qMax(0.0, m_transitionEdit.options.value(
+            QStringLiteral("intervalCounts"), 1.0).toDouble());
+        relationship.groupSize = qMax(1, m_transitionEdit.options.value(
+            QStringLiteral("groupSize"), 1).toInt());
+        relationship.baseDelayCounts = qMax(0.0, m_transitionEdit.options.value(
+            QStringLiteral("baseDelayCounts"), 0.0).toDouble());
+        relationship.arriveTogether = m_transitionEdit.options.value(
+            QStringLiteral("arriveTogether"), true).toBool();
+        relationship.authoredCounts = qMax(1, m_sets[m_currentSet].counts);
+        if (generatedRelationshipMembers(relationship) >= minimumRelationshipMembers(relationship))
+            variant.transitionRelationships.push_back(relationship);
+    }
+    reconcileTransitionRelationships(m_currentSet);
     m_transitionEdit = {};
     emit transitionEditChanged(); emitAllDataChanged();
     commitSnapshot(before, QStringLiteral("Edit transition paths"));
@@ -533,15 +1010,12 @@ bool DrillProject::selectTransitionEditPerformer(int row, bool additive)
         return true;
     }
     if (!additive) {
-        m_transitionEdit.performerIds = {id};
-        m_transitionEdit.originalPlacements.clear(); m_transitionEdit.previewPlacements.clear();
-        const Placement placement = placementAt(row, m_transitionEdit.destinationSet);
-        m_transitionEdit.originalPlacements.insert(id, placement);
-        m_transitionEdit.previewPlacements.insert(id, placement);
-        for (auto &performer : m_performers) performer.selected = performer.id == id;
+        setStatus(QStringLiteral("Hold Shift or Ctrl to add this performer to the transition operation"));
+        return false;
     } else if (m_transitionEdit.originalPlacements.contains(id)) {
         m_transitionEdit.performerIds.removeAll(id);
         m_transitionEdit.originalPlacements.remove(id); m_transitionEdit.previewPlacements.remove(id);
+        m_transitionEdit.detachedPlacements.remove(id); m_transitionEdit.detachedPerformerIds.remove(id);
         m_performers[row].selected = false;
     } else {
         m_transitionEdit.performerIds.push_back(id);
@@ -556,12 +1030,47 @@ bool DrillProject::selectTransitionEditPerformer(int row, bool additive)
     m_transitionEdit.activePerformerId = id;
     if (!m_transitionEdit.originalPlacements.contains(id))
         m_transitionEdit.activePerformerId = m_transitionEdit.performerIds.first();
+    const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
+    if (leaderRow < 0 || leaderRow >= m_performers.size()
+        || !m_transitionEdit.originalPlacements.contains(m_performers[leaderRow].id))
+        m_transitionEdit.options.insert(QStringLiteral("leaderRow"),
+                                         performerRowForId(m_performers, m_transitionEdit.performerIds.first()));
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
+    if (pivotRow < 0 || pivotRow >= m_performers.size()
+        || !m_transitionEdit.originalPlacements.contains(m_performers[pivotRow].id))
+        m_transitionEdit.options.insert(QStringLiteral("pivotRow"),
+                                         performerRowForId(m_performers, m_transitionEdit.performerIds.first()));
     // Membership changes are edits to the current operation, not requests to
     // adopt the newly active performer's previously persisted path type.
     // Rebuild so group routes, pivots, and stagger timing use the new set.
     rebuildTransitionEditPreview();
     emit selectionChanged(); emit transitionEditChanged();
     return true;
+}
+
+QPointF DrillProject::transitionEditPosition(int row, double progress) const
+{
+    if (!m_transitionEdit.active || row < 0 || row >= m_performers.size()
+        || m_transitionEdit.destinationSet <= 0
+        || m_transitionEdit.destinationSet >= m_sets.size()) return {};
+    const Placement placement = transitionEditPlacement(row);
+    const MarchCraft::TransitionPath path(
+        placementAt(row, m_transitionEdit.destinationSet - 1).position,
+        placement, qMax(1, m_sets[m_transitionEdit.destinationSet].counts));
+    return path.position(qBound(0.0, progress, 1.0));
+}
+
+double DrillProject::transitionEditFacing(int row, double progress) const
+{
+    if (!m_transitionEdit.active || row < 0 || row >= m_performers.size()
+        || m_transitionEdit.destinationSet <= 0
+        || m_transitionEdit.destinationSet >= m_sets.size()) return 0.0;
+    const double source = placementAt(row, m_transitionEdit.destinationSet - 1).facing;
+    const double destination = transitionEditPlacement(row).facing;
+    const double delta = std::fmod(destination - source + 540.0, 360.0) - 180.0;
+    double result = std::fmod(source + delta * qBound(0.0, progress, 1.0), 360.0);
+    if (result < 0.0) result += 360.0;
+    return result;
 }
 
 bool DrillProject::selectTransitionPathAt(double x, double y, double toleranceSteps, bool additive)
@@ -613,6 +1122,7 @@ QVariantMap DrillProject::transitionEditPathInfo(int row) const
         {QStringLiteral("arrivalCount"), path.arrivalCount()},
         {QStringLiteral("stepsPerCount"), path.distance() / qMax(0.001, path.durationCounts())},
         {QStringLiteral("active"), row == transitionEditActiveRow()},
+        {QStringLiteral("detached"), m_transitionEdit.detachedPerformerIds.contains(m_performers[row].id)},
         {QStringLiteral("selected"), m_transitionEdit.originalPlacements.contains(m_performers[row].id)}};
 }
 
@@ -650,7 +1160,8 @@ QVariantMap DrillProject::transitionEditMetrics() const
         }
     }
     QSet<quint64> collisionPairs;
-    const int samples = qBound(8, counts * 4, 64);
+    const int distanceSamples = qCeil(longest / qMax(0.05, m_capability.collisionClearance * 0.125));
+    const int samples = qBound(16, qMax(counts * 8, distanceSamples), 256);
     QVector<QPointF> positions(m_performers.size());
     const double cellSize = qMax(0.25, m_capability.collisionClearance);
     auto cellKey = [](int x, int y) { return (quint64(quint32(x)) << 32) | quint32(y); };
@@ -675,12 +1186,28 @@ QVariantMap DrillProject::transitionEditMetrics() const
     const int activeRow = transitionEditActiveRow();
     const auto active = activeRow >= 0 && activeRow < paths.size() ? paths[activeRow] : MarchCraft::TransitionPath{};
     result = {{QStringLiteral("pathCount"), editedRows.size()},
+        {QStringLiteral("transitionCounts"), counts},
         {QStringLiteral("averageDistance"), editedRows.isEmpty() ? 0.0 : totalDistance / editedRows.size()},
         {QStringLiteral("longestDistance"), longest}, {QStringLiteral("maximumStepsPerCount"), maximumSteps},
         {QStringLiteral("warningCount"), warnings}, {QStringLiteral("collisionCount"), collisionPairs.size()},
         {QStringLiteral("activeDistance"), active.distance()}, {QStringLiteral("activeStartCount"), active.startCount()},
         {QStringLiteral("activeArrivalCount"), active.arrivalCount()}};
     return result;
+}
+
+void DrillProject::preserveTransitionEditOverride(int performerRow, bool detachRelationship)
+{
+    if (!m_transitionEdit.active || performerRow < 0 || performerRow >= m_performers.size()) return;
+    const QString id = m_performers[performerRow].id;
+    auto found = m_transitionEdit.previewPlacements.find(id);
+    if (found == m_transitionEdit.previewPlacements.end()) return;
+    if (detachRelationship) {
+        found->pathType = found->pathPoints.isEmpty()
+            ? QStringLiteral("direct") : QStringLiteral("curved");
+        m_transitionEdit.detachedPerformerIds.insert(id);
+    }
+    m_transitionEdit.detachedPlacements.insert(id, found.value());
+    m_transitionEdit.activePerformerId = id;
 }
 
 void DrillProject::moveTransitionControlPoint(int row, int pointIndex, double x, double y)
@@ -691,9 +1218,20 @@ void DrillProject::moveTransitionControlPoint(int row, int pointIndex, double x,
         || pointIndex < 0 || pointIndex >= found->pathPoints.size()) return;
     found->pathPoints[pointIndex] = clampPosition({x, y});
     const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
     if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
         m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(found->pathPoints));
         rebuildTransitionEditPreview();
+    } else if ((m_transitionEdit.type == QStringLiteral("gate")
+                || m_transitionEdit.type == QStringLiteral("pivot")) && row == pivotRow) {
+        setStatus(QStringLiteral("The gate pivot follows its source and destination; edit a gate member to make an independent override."));
+        return;
+    } else if (m_transitionEdit.type == QStringLiteral("follow")
+               || m_transitionEdit.type == QStringLiteral("gate")
+               || m_transitionEdit.type == QStringLiteral("pivot")) {
+        preserveTransitionEditOverride(row, true);
+    } else if (m_transitionEdit.type == QStringLiteral("stagger")) {
+        preserveTransitionEditOverride(row, false);
     }
     emit transitionEditChanged();
 }
@@ -705,9 +1243,17 @@ void DrillProject::insertTransitionControlPoint(int row, int pointIndex, double 
     if (row < 0 || row >= m_performers.size()) return;
     auto found = m_transitionEdit.previewPlacements.find(m_performers[row].id);
     if (found == m_transitionEdit.previewPlacements.end()) return;
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
+    if ((m_transitionEdit.type == QStringLiteral("gate")
+         || m_transitionEdit.type == QStringLiteral("pivot")) && row == pivotRow) {
+        setStatus(QStringLiteral("The gate pivot follows its source and destination; edit a gate member to make an independent override."));
+        return;
+    }
     if (found->pathType == QStringLiteral("direct") || found->pathType == QStringLiteral("delayed")) {
         found->pathType = QStringLiteral("curved");
-        m_transitionEdit.type = QStringLiteral("curved");
+        if (m_transitionEdit.type == QStringLiteral("direct")
+            || m_transitionEdit.type == QStringLiteral("delayed"))
+            m_transitionEdit.type = QStringLiteral("curved");
     }
     pointIndex = qBound(0, pointIndex, found->pathPoints.size());
     found->pathPoints.insert(pointIndex, clampPosition({x, y}));
@@ -715,6 +1261,12 @@ void DrillProject::insertTransitionControlPoint(int row, int pointIndex, double 
     if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
         m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(found->pathPoints));
         rebuildTransitionEditPreview();
+    } else if (m_transitionEdit.type == QStringLiteral("follow")
+               || m_transitionEdit.type == QStringLiteral("gate")
+               || m_transitionEdit.type == QStringLiteral("pivot")) {
+        preserveTransitionEditOverride(row, true);
+    } else if (m_transitionEdit.type == QStringLiteral("stagger")) {
+        preserveTransitionEditOverride(row, false);
     }
     emit transitionEditChanged();
 }
@@ -740,6 +1292,12 @@ void DrillProject::removeTransitionControlPoint(int row, int pointIndex)
     auto found = m_transitionEdit.previewPlacements.find(m_performers[row].id);
     if (found == m_transitionEdit.previewPlacements.end()
         || pointIndex < 0 || pointIndex >= found->pathPoints.size()) return;
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
+    if ((m_transitionEdit.type == QStringLiteral("gate")
+         || m_transitionEdit.type == QStringLiteral("pivot")) && row == pivotRow) {
+        setStatus(QStringLiteral("The gate pivot follows its source and destination; edit a gate member to make an independent override."));
+        return;
+    }
     found->pathPoints.removeAt(pointIndex);
     if (found->pathType == QStringLiteral("curved") && found->pathPoints.isEmpty())
         found->pathType = QStringLiteral("direct");
@@ -747,6 +1305,12 @@ void DrillProject::removeTransitionControlPoint(int row, int pointIndex)
     if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
         m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(found->pathPoints));
         rebuildTransitionEditPreview();
+    } else if (m_transitionEdit.type == QStringLiteral("follow")
+               || m_transitionEdit.type == QStringLiteral("gate")
+               || m_transitionEdit.type == QStringLiteral("pivot")) {
+        preserveTransitionEditOverride(row, true);
+    } else if (m_transitionEdit.type == QStringLiteral("stagger")) {
+        preserveTransitionEditOverride(row, false);
     }
     emit transitionEditChanged();
 }
@@ -758,8 +1322,26 @@ void DrillProject::resetTransitionPath(int row)
     if (row < 0 || row >= m_performers.size()) return;
     auto found = m_transitionEdit.previewPlacements.find(m_performers[row].id);
     if (found == m_transitionEdit.previewPlacements.end()) return;
-    found->pathType = QStringLiteral("direct"); found->pathPoints.clear();
-    found->pathStartCount = -1.0; found->pathDurationCounts = -1.0;
+    const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
+    if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
+        m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), QVariantList{});
+        rebuildTransitionEditPreview();
+    } else if ((m_transitionEdit.type == QStringLiteral("gate")
+                || m_transitionEdit.type == QStringLiteral("pivot")) && row == pivotRow) {
+        rebuildTransitionEditPreview();
+    } else {
+        found->pathType = QStringLiteral("direct"); found->pathPoints.clear();
+        if (m_transitionEdit.type != QStringLiteral("stagger")) {
+            found->pathStartCount = -1.0; found->pathDurationCounts = -1.0;
+        }
+        if (m_transitionEdit.type == QStringLiteral("follow")
+            || m_transitionEdit.type == QStringLiteral("gate")
+            || m_transitionEdit.type == QStringLiteral("pivot"))
+            preserveTransitionEditOverride(row, true);
+        else if (m_transitionEdit.type == QStringLiteral("stagger"))
+            preserveTransitionEditOverride(row, false);
+    }
     emit transitionEditChanged();
 }
 
@@ -782,9 +1364,20 @@ void DrillProject::mirrorActiveTransitionPath(bool horizontal)
         point = clampPosition(origin + tangent * along + normal * offset);
     }
     const int leaderRow = m_transitionEdit.options.value(QStringLiteral("leaderRow"), -1).toInt();
+    const int pivotRow = m_transitionEdit.options.value(QStringLiteral("pivotRow"), -1).toInt();
     if (m_transitionEdit.type == QStringLiteral("follow") && row == leaderRow) {
         m_transitionEdit.options.insert(QStringLiteral("leaderPoints"), pointList(found->pathPoints));
         rebuildTransitionEditPreview();
+    } else if ((m_transitionEdit.type == QStringLiteral("gate")
+                || m_transitionEdit.type == QStringLiteral("pivot")) && row == pivotRow) {
+        setStatus(QStringLiteral("The gate pivot route is determined by its endpoints."));
+        rebuildTransitionEditPreview();
+    } else if (m_transitionEdit.type == QStringLiteral("follow")
+               || m_transitionEdit.type == QStringLiteral("gate")
+               || m_transitionEdit.type == QStringLiteral("pivot")) {
+        preserveTransitionEditOverride(row, true);
+    } else if (m_transitionEdit.type == QStringLiteral("stagger")) {
+        preserveTransitionEditOverride(row, false);
     }
     emit transitionEditChanged();
 }
@@ -793,6 +1386,7 @@ void DrillProject::copyActiveTransitionPathToSelection(bool mirrored)
 {
     const int sourceRow = transitionEditActiveRow();
     if (sourceRow < 0) return;
+    const QString sourceId = m_performers[sourceRow].id;
     const Placement source = transitionEditPlacement(sourceRow);
     const QPointF sourceOrigin = placementAt(sourceRow, m_transitionEdit.destinationSet - 1).position;
     const QPointF sourceDelta = source.position - sourceOrigin;
@@ -824,7 +1418,14 @@ void DrillProject::copyActiveTransitionPathToSelection(bool mirrored)
         target.pathStartCount = source.pathStartCount;
         target.pathDurationCounts = source.pathDurationCounts;
         m_transitionEdit.previewPlacements.insert(id, target);
+        if (m_transitionEdit.type == QStringLiteral("follow")
+            || m_transitionEdit.type == QStringLiteral("gate")
+            || m_transitionEdit.type == QStringLiteral("pivot"))
+            preserveTransitionEditOverride(row, true);
+        else if (m_transitionEdit.type == QStringLiteral("stagger"))
+            preserveTransitionEditOverride(row, false);
     }
+    m_transitionEdit.activePerformerId = sourceId;
     emit transitionEditChanged();
 }
 

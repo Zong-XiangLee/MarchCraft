@@ -284,6 +284,78 @@ struct Performer {
     }
 };
 
+// Persisted authoring intent for generated incoming transitions.  Per-performer
+// Placement data remains the playback-ready geometry/timing source of truth;
+// this metadata lets relationship tools be reopened and deterministically
+// regenerated when a source/destination formation or transition duration moves.
+struct TransitionRelationship {
+    QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
+    QString type;
+    QVector<QString> performerIds;
+    QVector<QString> manualOverrideIds;
+    QString leaderId;
+    QString pivotId;
+    QString order{QStringLiteral("selection")};
+    bool reversed = false;
+    QString direction{QStringLiteral("clockwise")};
+    QString spacingMode{QStringLiteral("sourceDistance")};
+    double intervalCounts = 1.0;
+    int groupSize = 1;
+    double baseDelayCounts = 0.0;
+    bool arriveTogether = true;
+    double authoredCounts = 0.0;
+
+    QJsonObject toJson() const
+    {
+        QJsonArray members;
+        for (const auto &performerId : performerIds) members.push_back(performerId);
+        QJsonArray manualOverrides;
+        for (const auto &performerId : manualOverrideIds) manualOverrides.push_back(performerId);
+        return {{QStringLiteral("id"), id}, {QStringLiteral("type"), type},
+                {QStringLiteral("performerIds"), members},
+                {QStringLiteral("manualOverrideIds"), manualOverrides},
+                {QStringLiteral("leaderId"), leaderId}, {QStringLiteral("pivotId"), pivotId},
+                {QStringLiteral("order"), order}, {QStringLiteral("reversed"), reversed},
+                {QStringLiteral("direction"), direction},
+                {QStringLiteral("spacingMode"), spacingMode},
+                {QStringLiteral("intervalCounts"), intervalCounts},
+                {QStringLiteral("groupSize"), groupSize},
+                {QStringLiteral("baseDelayCounts"), baseDelayCounts},
+                {QStringLiteral("arriveTogether"), arriveTogether},
+                {QStringLiteral("authoredCounts"), authoredCounts}};
+    }
+
+    static TransitionRelationship fromJson(const QJsonObject &object)
+    {
+        TransitionRelationship relationship;
+        relationship.id = object.value(QStringLiteral("id")).toString(relationship.id);
+        relationship.type = object.value(QStringLiteral("type")).toString();
+        for (const auto &member : object.value(QStringLiteral("performerIds")).toArray()) {
+            const QString id = member.toString();
+            if (!id.isEmpty() && !relationship.performerIds.contains(id))
+                relationship.performerIds.push_back(id);
+        }
+        for (const auto &member : object.value(QStringLiteral("manualOverrideIds")).toArray()) {
+            const QString id = member.toString();
+            if (relationship.performerIds.contains(id)
+                && !relationship.manualOverrideIds.contains(id))
+                relationship.manualOverrideIds.push_back(id);
+        }
+        relationship.leaderId = object.value(QStringLiteral("leaderId")).toString();
+        relationship.pivotId = object.value(QStringLiteral("pivotId")).toString();
+        relationship.order = object.value(QStringLiteral("order")).toString(QStringLiteral("selection"));
+        relationship.reversed = object.value(QStringLiteral("reversed")).toBool();
+        relationship.direction = object.value(QStringLiteral("direction")).toString(QStringLiteral("clockwise"));
+        relationship.spacingMode = object.value(QStringLiteral("spacingMode")).toString(QStringLiteral("sourceDistance"));
+        relationship.intervalCounts = qMax(0.0, object.value(QStringLiteral("intervalCounts")).toDouble(1.0));
+        relationship.groupSize = qMax(1, object.value(QStringLiteral("groupSize")).toInt(1));
+        relationship.baseDelayCounts = qMax(0.0, object.value(QStringLiteral("baseDelayCounts")).toDouble());
+        relationship.arriveTogether = object.value(QStringLiteral("arriveTogether")).toBool(true);
+        relationship.authoredCounts = qMax(0.0, object.value(QStringLiteral("authoredCounts")).toDouble());
+        return relationship;
+    }
+};
+
 struct SetVariant {
     QString id = QUuid::createUuid().toString(QUuid::WithoutBraces);
     QString label{QStringLiteral("A")};
@@ -292,6 +364,7 @@ struct SetVariant {
     QHash<QString, Placement> placements;
     QVector<FormationShape> shapes;
     QVector<PerformerGroup> groups;
+    QVector<TransitionRelationship> transitionRelationships;
 
     QJsonObject toJson() const
     {
@@ -302,12 +375,16 @@ struct SetVariant {
         for (const auto &shape : shapes) shapeArray.push_back(shape.toJson());
         QJsonArray groupArray;
         for (const auto &group : groups) groupArray.push_back(group.toJson());
+        QJsonArray relationshipArray;
+        for (const auto &relationship : transitionRelationships)
+            relationshipArray.push_back(relationship.toJson());
         return {{QStringLiteral("id"), id},
                 {QStringLiteral("label"), label},
                 {QStringLiteral("name"), name},
                 {QStringLiteral("caption"), caption},
                 {QStringLiteral("placements"), placementObject}, {QStringLiteral("shapes"), shapeArray},
-                {QStringLiteral("groups"), groupArray}};
+                {QStringLiteral("groups"), groupArray},
+                {QStringLiteral("transitionRelationships"), relationshipArray}};
     }
 
     static SetVariant fromJson(const QJsonObject &object)
@@ -325,6 +402,14 @@ struct SetVariant {
         for (const auto &value : object.value(QStringLiteral("groups")).toArray()) {
             auto group = PerformerGroup::fromJson(value.toObject());
             if (group.performerIds.size() >= 2) result.groups.push_back(std::move(group));
+        }
+        for (const auto &value : object.value(QStringLiteral("transitionRelationships")).toArray()) {
+            auto relationship = TransitionRelationship::fromJson(value.toObject());
+            const int minimumMembers = relationship.type == QStringLiteral("stagger") ? 1 : 2;
+            const int generatedMembers = relationship.performerIds.size()
+                - relationship.manualOverrideIds.size();
+            if (generatedMembers >= minimumMembers && !relationship.type.isEmpty())
+                result.transitionRelationships.push_back(std::move(relationship));
         }
         return result;
     }

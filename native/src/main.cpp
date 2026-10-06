@@ -17,6 +17,8 @@
 #include <QTimer>
 #include <QTextStream>
 
+#include <cmath>
+
 namespace {
 void writeApplicationLog(QtMsgType type, const QMessageLogContext &, const QString &message)
 {
@@ -27,6 +29,162 @@ void writeApplicationLog(QtMsgType type, const QMessageLogContext &, const QStri
            << (type == QtFatalMsg ? QStringLiteral("FATAL") : type == QtCriticalMsg ? QStringLiteral("CRITICAL")
                : type == QtWarningMsg ? QStringLiteral("WARNING") : QStringLiteral("INFO"))
            << QStringLiteral(": ") << message << QLatin1Char('\n');
+}
+
+QString transitionQaScene(const QStringList &arguments)
+{
+    const int sceneFlag = arguments.indexOf(QStringLiteral("--qa-transition-scene"));
+    if (sceneFlag >= 0 && sceneFlag + 1 < arguments.size())
+        return arguments.at(sceneFlag + 1).trimmed().toLower();
+    return arguments.contains(QStringLiteral("--qa-transition-authoring"))
+        ? QStringLiteral("curve") : QString{};
+}
+
+void configureTransitionQaScene(DrillProject &project, const QString &scene)
+{
+    auto selectRows = [&](int count) {
+        project.clearSelection();
+        for (int row = 0; row < qMin(count, project.performerCount()); ++row)
+            project.selectPerformerMode(row, 1);
+    };
+    auto beginRows = [&](int count) {
+        project.setCurrentSetIndex(qMin(1, project.setCount() - 1));
+        selectRows(count);
+        return project.beginTransitionEdit();
+    };
+    auto pointAlong = [](QPointF start, QPointF end, double progress, double offset) {
+        const QPointF delta = end - start;
+        const double length = std::hypot(delta.x(), delta.y());
+        const QPointF normal = length > 1e-6
+            ? QPointF{-delta.y() / length, delta.x() / length} : QPointF{0.0, 1.0};
+        return start + delta * progress + normal * offset;
+    };
+    auto setupFollowFixture = [&] {
+        project.newProject();
+        for (int row = 0; row < 6; ++row)
+            project.addPerformer(QStringLiteral("F%1").arg(row + 1), QStringLiteral("Trumpet"),
+                                 QStringLiteral("Brass"), 40.0 - row * 2.0, 28.0);
+        project.selectAll();
+        project.addSet(QStringLiteral("FTL destination"), 16);
+        project.nudgeSelected(36.0, 20.0);
+        selectRows(6);
+        project.beginTransitionEdit();
+        project.setTransitionEditType(QStringLiteral("follow"),
+            {{QStringLiteral("leaderRow"), 0}, {QStringLiteral("order"), QStringLiteral("roster")}});
+    };
+    auto setupGateFixture = [&](bool halfTurn) {
+        project.newProject();
+        project.addPerformer(QStringLiteral("P"), QStringLiteral("Trumpet"), QStringLiteral("Brass"), 60.0, 42.0);
+        for (int row = 1; row < 4; ++row)
+            project.addPerformer(QStringLiteral("G%1").arg(row), QStringLiteral("Trumpet"),
+                                 QStringLiteral("Brass"), 60.0 + row * 8.0, 42.0);
+        project.selectAll();
+        project.addSet(halfTurn ? QStringLiteral("180 degree gate")
+                                : QStringLiteral("90 degree gate"), 16);
+        for (int row = 1; row < 4; ++row) {
+            project.clearSelection();
+            project.selectPerformer(row, false);
+            if (halfTurn) project.nudgeSelected(-row * 16.0, 0.0);
+            else project.nudgeSelected(-row * 8.0, row * 8.0);
+        }
+        selectRows(4);
+        project.beginTransitionEdit();
+        project.setTransitionEditType(QStringLiteral("gate"),
+            {{QStringLiteral("pivotRow"), 0},
+             {QStringLiteral("direction"), QStringLiteral("counterclockwise")}});
+    };
+    auto setupStaggerFixture = [&] {
+        project.newProject();
+        for (int row = 0; row < 8; ++row)
+            project.addPerformer(QStringLiteral("S%1").arg(row + 1), QStringLiteral("Clarinet"),
+                                 QStringLiteral("Woodwinds"), 48.0 + row * 4.0, 24.0);
+        project.selectAll();
+        project.addSet(QStringLiteral("Stagger destination"), 16);
+        project.nudgeSelected(0.0, 32.0);
+        selectRows(8);
+        project.beginTransitionEdit();
+        project.setTransitionEditType(QStringLiteral("stagger"),
+            {{QStringLiteral("order"), QStringLiteral("roster")},
+             {QStringLiteral("groupSize"), 2}, {QStringLiteral("intervalCounts"), 2.0},
+             {QStringLiteral("arriveTogether"), true}});
+    };
+    auto setupCurveFixture = [&](int performerCount) {
+        project.newProject();
+        const double firstX = performerCount == 1 ? 62.0 : 42.0;
+        for (int row = 0; row < performerCount; ++row)
+            project.addPerformer(QStringLiteral("C%1").arg(row + 1), QStringLiteral("Mellophone"),
+                                 QStringLiteral("Brass"), firstX + row * 5.0, 30.0);
+        project.selectAll();
+        project.addSet(QStringLiteral("Curve destination"), 16);
+        project.nudgeSelected(36.0, 24.0);
+        selectRows(performerCount);
+        project.beginTransitionEdit();
+        project.setTransitionEditType(QStringLiteral("curved"));
+    };
+
+    if (scene == QStringLiteral("follow-corner") || scene == QStringLiteral("follow-s")) {
+        setupFollowFixture();
+        const QVariantList samples = project.transitionPathSamples(0, 32);
+        if (samples.size() >= 2) {
+            const QPointF start = samples.first().toPointF();
+            const QPointF end = samples.last().toPointF();
+            if (scene == QStringLiteral("follow-corner")) {
+                project.moveTransitionControlPoint(0, 0, end.x(), start.y());
+            } else {
+                const QPointF first = pointAlong(start, end, 0.25, 10.0);
+                const QPointF middle = pointAlong(start, end, 0.50, -10.0);
+                const QPointF last = pointAlong(start, end, 0.75, 10.0);
+                project.moveTransitionControlPoint(0, 0, first.x(), first.y());
+                project.insertTransitionControlPoint(0, 1, middle.x(), middle.y());
+                project.insertTransitionControlPoint(0, 2, last.x(), last.y());
+            }
+        }
+    } else if (scene == QStringLiteral("gate-90")) {
+        setupGateFixture(false);
+    } else if (scene == QStringLiteral("gate-180")) {
+        setupGateFixture(true);
+    } else if (scene == QStringLiteral("stagger") || scene == QStringLiteral("stagger-retimed")) {
+        setupStaggerFixture();
+        if (scene == QStringLiteral("stagger-retimed")) {
+            project.applyTransitionEdit();
+            project.setTransitionCounts(1, 24);
+            selectRows(8);
+            project.beginTransitionEdit();
+        }
+    } else if (scene == QStringLiteral("204")) {
+        if (beginRows(project.performerCount()))
+            project.setTransitionEditType(QStringLiteral("curved"));
+    } else {
+        const int count = scene == QStringLiteral("curves") ? 12 : 1;
+        setupCurveFixture(count);
+        if (project.transitionEditActive()) {
+            if (scene == QStringLiteral("multi-curve")) {
+                const QVariantList samples = project.transitionPathSamples(0, 32);
+                if (samples.size() >= 2) {
+                    const QPointF start = samples.first().toPointF();
+                    const QPointF end = samples.last().toPointF();
+                    const QPointF first = pointAlong(start, end, 0.22, 9.0);
+                    const QPointF middle = pointAlong(start, end, 0.52, -8.0);
+                    const QPointF last = pointAlong(start, end, 0.78, 7.0);
+                    project.moveTransitionControlPoint(0, 0, first.x(), first.y());
+                    project.insertTransitionControlPoint(0, 1, middle.x(), middle.y());
+                    project.insertTransitionControlPoint(0, 2, last.x(), last.y());
+                }
+            } else if (scene == QStringLiteral("curves")) {
+                for (int row = 0; row < qMin(12, project.performerCount()); ++row) {
+                    project.selectTransitionEditPerformer(row, false);
+                    const QVariantList points = project.transitionEditControlPoints();
+                    if (points.isEmpty()) continue;
+                    const QVariantMap point = points.first().toMap();
+                    project.moveTransitionControlPoint(row, 0,
+                        point.value(QStringLiteral("x")).toDouble() + (row % 3 - 1) * 2.5,
+                        point.value(QStringLiteral("y")).toDouble() + (row % 2 ? 5.0 : -5.0));
+                }
+                project.selectTransitionEditPerformer(qMin(3, project.performerCount() - 1), false);
+            }
+        }
+    }
+    project.setPlayhead(0.5);
 }
 }
 
@@ -69,17 +227,23 @@ int main(int argc, char *argv[])
     const bool qaNewProject = arguments.contains(QStringLiteral("--qa-new-project"));
     const bool qaShapes = arguments.contains(QStringLiteral("--qa-shapes"));
     const bool qaMovements = arguments.contains(QStringLiteral("--qa-movements"));
-    const bool qaTransitionAuthoring = arguments.contains(QStringLiteral("--qa-transition-authoring"));
+    const QString qaTransitionScene = transitionQaScene(arguments);
     const bool qaMinimum = arguments.contains(QStringLiteral("--qa-minimum"));
     const QStringList editorFlags{
         QStringLiteral("--screenshot"), QStringLiteral("--3d"), QStringLiteral("--3d-view"),
         QStringLiteral("--qa-set-drag-preview"), QStringLiteral("--qa-current-transition"),
         QStringLiteral("--qa-transition-authoring"),
+        QStringLiteral("--qa-transition-scene"),
         QStringLiteral("--qa-timeline"), QStringLiteral("--qa-timeline-zoom"),
         QStringLiteral("--qa-timeline-fit"), QStringLiteral("--qa-timeline-selection"),
         QStringLiteral("--qa-selected-transition"),
         QStringLiteral("--qa-transition-resize"), QStringLiteral("--qa-set-plan"),
         QStringLiteral("--qa-music-impacts"),
+        QStringLiteral("--qa-editor-clean"), QStringLiteral("--qa-editor-selected"),
+        QStringLiteral("--qa-editor-expanded"),
+        QStringLiteral("--qa-paste-special"), QStringLiteral("--qa-field-context"),
+        QStringLiteral("--qa-edit-menu"), QStringLiteral("--qa-view-menu"),
+        QStringLiteral("--qa-previous-formation"),
         QStringLiteral("--qa-midi-synth"), QStringLiteral("--qa-coordinate-pdf"), QStringLiteral("--qa-export"),
         QStringLiteral("--qa-roster-workspace"), QStringLiteral("--qa-music-workspace"),
         QStringLiteral("--qa-review-workspace"), QStringLiteral("--qa-export-workspace"),
@@ -96,14 +260,7 @@ int main(int argc, char *argv[])
         project.loadDemo();
     if (qaShapes)
         project.selectAll();
-    if (qaTransitionAuthoring) {
-        project.setCurrentSetIndex(qMin(1, project.setCount() - 1));
-        project.clearSelection();
-        for (int row = 0; row < qMin(6, project.performerCount()); ++row)
-            project.selectPerformerMode(row, 1);
-        project.beginTransitionEdit();
-        project.setTransitionEditType(QStringLiteral("curved"));
-    }
+    if (!qaTransitionScene.isEmpty()) configureTransitionQaScene(project, qaTransitionScene);
     const int fieldPresetFlag = arguments.indexOf(QStringLiteral("--field-preset"));
     if (fieldPresetFlag >= 0 && fieldPresetFlag + 1 < arguments.size())
         project.setFieldPreset(arguments.at(fieldPresetFlag + 1));
@@ -268,6 +425,17 @@ int main(int argc, char *argv[])
     }
     if (qaShapes && !engine.rootObjects().isEmpty())
         engine.rootObjects().first()->setProperty("qaShapePalette", true);
+    QString editorQaState;
+    if (arguments.contains(QStringLiteral("--qa-editor-clean"))) editorQaState = QStringLiteral("clean");
+    else if (arguments.contains(QStringLiteral("--qa-editor-selected"))) editorQaState = QStringLiteral("selected");
+    else if (arguments.contains(QStringLiteral("--qa-editor-expanded"))) editorQaState = QStringLiteral("expanded");
+    else if (arguments.contains(QStringLiteral("--qa-paste-special"))) editorQaState = QStringLiteral("paste");
+    else if (arguments.contains(QStringLiteral("--qa-field-context"))) editorQaState = QStringLiteral("context");
+    else if (arguments.contains(QStringLiteral("--qa-edit-menu"))) editorQaState = QStringLiteral("editMenu");
+    else if (arguments.contains(QStringLiteral("--qa-view-menu"))) editorQaState = QStringLiteral("viewMenu");
+    else if (arguments.contains(QStringLiteral("--qa-previous-formation"))) editorQaState = QStringLiteral("previous");
+    if (!editorQaState.isEmpty() && !engine.rootObjects().isEmpty())
+        engine.rootObjects().first()->setProperty("qaEditorState", editorQaState);
     for (const auto &surface : {QStringLiteral("export-dialog"), QStringLiteral("preferences"),
                                 QStringLiteral("performer"), QStringLiteral("music"),
                                 QStringLiteral("formation"), QStringLiteral("roster-workspace"),
