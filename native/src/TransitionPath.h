@@ -11,6 +11,8 @@ public:
     TransitionPath() = default;
     TransitionPath(QPointF origin, const Placement &destination, double transitionCounts = 1.0);
     QPointF position(double progress) const;
+    QPointF geometryPosition(double progress) const;
+    QPointF tangent(double progress) const;
     double distance() const { return m_cumulative.isEmpty() ? 0.0 : m_cumulative.last(); }
     double startCount() const { return m_startCount; }
     double durationCounts() const { return m_durationCounts; }

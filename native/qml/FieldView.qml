@@ -364,6 +364,46 @@ Item {
                     }
                     if ((!root.showPaths && !drillProject.transitionEditActive)
                             || drillProject.playbackSetIndex <= 0) return
+                    if (drillProject.transitionEditActive
+                            && (drillProject.transitionEditType === "gate"
+                                || drillProject.transitionEditType === "pivot")) {
+                        const pivotRow = Number(drillProject.transitionEditOptions.pivotRow)
+                        const pivotPath = drillProject.transitionPathSamples(pivotRow, 24)
+                        if (pivotPath.length >= 2) {
+                            const sourcePivot = pivotPath[0]
+                            const destinationPivot = pivotPath[pivotPath.length - 1]
+                            ctx.lineWidth = 1.2
+                            for (let guideRow = 0; guideRow < performerRepeater.count; ++guideRow) {
+                                if (guideRow === pivotRow) continue
+                                const guideInfo = drillProject.transitionEditPathInfo(guideRow)
+                                if (!guideInfo.selected || guideInfo.detached) continue
+                                const guidePath = drillProject.transitionPathSamples(guideRow, 24)
+                                if (guidePath.length < 2) continue
+                                ctx.globalAlpha = 0.42
+                                ctx.strokeStyle = "#67e8f9"
+                                ctx.setLineDash([4, 4])
+                                ctx.beginPath()
+                                ctx.moveTo(root.toCanvasX(sourcePivot.x), root.toCanvasY(sourcePivot.y))
+                                ctx.lineTo(root.toCanvasX(guidePath[0].x), root.toCanvasY(guidePath[0].y))
+                                ctx.stroke()
+                                ctx.globalAlpha = 0.64
+                                ctx.strokeStyle = "#fbbf24"
+                                ctx.setLineDash([])
+                                ctx.beginPath()
+                                ctx.moveTo(root.toCanvasX(destinationPivot.x), root.toCanvasY(destinationPivot.y))
+                                ctx.lineTo(root.toCanvasX(guidePath[guidePath.length - 1].x),
+                                           root.toCanvasY(guidePath[guidePath.length - 1].y))
+                                ctx.stroke()
+                            }
+                            ctx.globalAlpha = 1
+                            ctx.fillStyle = "#22d3ee"
+                            ctx.font = "700 10px sans-serif"
+                            ctx.textAlign = "left"; ctx.textBaseline = "bottom"
+                            ctx.fillText("PIVOT · " + (drillProject.transitionEditOptions.direction === "counterclockwise" ? "CCW" : "CW"),
+                                         root.toCanvasX(sourcePivot.x) + 8,
+                                         root.toCanvasY(sourcePivot.y) - 7)
+                        }
+                    }
                     for (let row = 0; row < performerRepeater.count; ++row) {
                         const marcher = performerRepeater.itemAt(row)
                         if (!marcher) continue
@@ -397,6 +437,26 @@ Item {
                             ctx.beginPath(); ctx.arc(startX, startY, 4.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
                             ctx.beginPath(); ctx.arc(endX, endY, 5.5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
 
+                            const previewPoint = drillProject.transitionEditPosition(row, drillProject.playhead)
+                            const previewX = root.toCanvasX(previewPoint.x)
+                            const previewY = root.toCanvasY(previewPoint.y)
+                            ctx.fillStyle = active ? "#22d3ee" : "#fbbf24"
+                            ctx.strokeStyle = "#07110d"
+                            ctx.lineWidth = 2
+                            ctx.beginPath(); ctx.arc(previewX, previewY, active ? 7 : 5, 0, Math.PI * 2); ctx.fill(); ctx.stroke()
+                            if (active) {
+                                ctx.font = "700 9px sans-serif"
+                                ctx.textAlign = "center"; ctx.textBaseline = "middle"
+                                ctx.fillStyle = "#07110d"
+                                ctx.fillText("▶", previewX + 0.5, previewY)
+                                ctx.font = "600 9px sans-serif"
+                                ctx.textAlign = "left"; ctx.textBaseline = "top"
+                                ctx.fillStyle = "#a5f3fc"
+                                ctx.fillText("S", startX + 6, startY + 4)
+                                ctx.fillStyle = "#fde68a"
+                                ctx.fillText("D", endX + 7, endY + 4)
+                            }
+
                             const arrowIndex = Math.max(1, Math.min(points.length - 1,
                                 Math.floor(points.length * 0.68)))
                             const arrowFrom = points[arrowIndex - 1]
@@ -426,6 +486,7 @@ Item {
                     function onShapesChanged() { geometryCanvas.requestPaint() }
                     function onCurrentSetChanged() { geometryCanvas.requestPaint() }
                     function onPlaybackFrameChanged() { geometryCanvas.requestPaint() }
+                    function onPlayheadChanged() { geometryCanvas.requestPaint() }
                     function onProjectChanged() { geometryCanvas.requestPaint() }
                     function onSelectionChanged() { geometryCanvas.requestPaint() }
                     function onTransitionEditChanged() { geometryCanvas.requestPaint() }

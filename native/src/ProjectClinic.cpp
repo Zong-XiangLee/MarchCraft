@@ -63,8 +63,10 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
     };
 
     QVector<int> strideRows, cautionStrideRows; double maximumStride = 0.0, requiredCounts = 0.0;
+    double longestPath = 0.0;
     for (int row = 0; row < m_performers.size(); ++row) {
         const double distance = transitionDistance(row, destinationSet);
+        longestPath = qMax(longestPath, distance);
         const double stride = distance
             / qMax(0.001, transitionPath(row, destinationSet).durationCounts());
         maximumStride = qMax(maximumStride, stride);
@@ -89,7 +91,10 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
             {action(QStringLiteral("optimize"), QStringLiteral("Try rehearsal-safe reassignment"))});
     }
 
-    const int samples = qBound(8, counts * 4, 128); QVector<int> collisionRows, nearRows, equipmentRows;
+    const int distanceSamples = qCeil(longestPath
+        / qMax(0.05, m_capability.collisionClearance * 0.125));
+    const int samples = qBound(16, qMax(counts * 8, distanceSamples), 512);
+    QVector<int> collisionRows, nearRows, equipmentRows;
     QStringList equipmentPairs;
     double smallestClearance = std::numeric_limits<double>::max(), firstCollisionCount = -1;
     QVector<double> clearanceRadii;
@@ -195,8 +200,12 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
 
     QVector<int> directionRows; double largestDirection = 0.0;
     if (destinationSet + 1 < m_sets.size()) for (int row = 0; row < m_performers.size(); ++row) {
-        const QPointF incoming = placementAt(row, destinationSet).position - placementAt(row, destinationSet - 1).position;
-        const QPointF outgoing = placementAt(row, destinationSet + 1).position - placementAt(row, destinationSet).position;
+        QPointF incoming = transitionPath(row, destinationSet).tangent(1.0);
+        QPointF outgoing = transitionPath(row, destinationSet + 1).tangent(0.0);
+        if (pointDistance({}, incoming) <= 0.001)
+            incoming = placementAt(row, destinationSet).position - placementAt(row, destinationSet - 1).position;
+        if (pointDistance({}, outgoing) <= 0.001)
+            outgoing = placementAt(row, destinationSet + 1).position - placementAt(row, destinationSet).position;
         const double lengths = pointDistance({}, incoming) * pointDistance({}, outgoing); if (lengths < 0.01) continue;
         const double cosine = qBound(-1.0, QPointF::dotProduct(incoming, outgoing) / lengths, 1.0);
         const double angle = std::acos(cosine) * 180.0 / std::numbers::pi; largestDirection = qMax(largestDirection, angle);
@@ -210,7 +219,7 @@ QVariantList DrillProject::analyzeTransition(int destinationSet)
          action(QStringLiteral("gate"), QStringLiteral("Try gate / pivot"))});
 
     QVector<int> complexPathRows; double sharpestPathTurn = 0.0, firstPathTurnCount = -1.0;
-    const int directionSamples = qBound(12, counts * 4, 96);
+    const int directionSamples = qBound(24, qMax(counts * 8, qCeil(longestPath * 4.0)), 256);
     for (int row = 0; row < m_performers.size(); ++row) {
         QPointF previous = pathPosition(row, destinationSet, 0.0), previousDirection;
         bool hasDirection = false;

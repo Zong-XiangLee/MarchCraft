@@ -148,6 +148,9 @@ class DrillProject final : public QAbstractListModel
     Q_PROPERTY(QVariantList transitionEditControlPoints READ transitionEditControlPoints NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantList transitionEditPerformers READ transitionEditPerformers NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantMap transitionEditMetrics READ transitionEditMetrics NOTIFY transitionEditChanged)
+    Q_PROPERTY(QVariantMap transitionEditOptions READ transitionEditOptions NOTIFY transitionEditChanged)
+    Q_PROPERTY(bool transitionEditValid READ transitionEditValid NOTIFY transitionEditChanged)
+    Q_PROPERTY(QString transitionEditWarning READ transitionEditWarning NOTIFY transitionEditChanged)
     Q_PROPERTY(QVariantList clinicIssues READ clinicIssues NOTIFY clinicChanged)
     Q_PROPERTY(int clinicIssueCount READ clinicIssueCount NOTIFY clinicChanged)
     Q_PROPERTY(QString capabilityProfile READ capabilityProfile WRITE setCapabilityProfile NOTIFY clinicChanged)
@@ -359,6 +362,9 @@ public:
     QVariantList transitionEditControlPoints() const;
     QVariantList transitionEditPerformers() const;
     QVariantMap transitionEditMetrics() const;
+    QVariantMap transitionEditOptions() const { return m_transitionEdit.options; }
+    bool transitionEditValid() const { return m_transitionEdit.valid; }
+    QString transitionEditWarning() const { return m_transitionEdit.warning; }
     QVariantList clinicIssues() const { return m_clinicIssues; }
     int clinicIssueCount() const { return m_clinicIssues.size(); }
     QString capabilityProfile() const { return m_capability.name; }
@@ -588,6 +594,8 @@ public:
     Q_INVOKABLE void mirrorActiveTransitionPath(bool horizontal = true);
     Q_INVOKABLE void copyActiveTransitionPathToSelection(bool mirrored = false);
     Q_INVOKABLE QVariantMap transitionEditPathInfo(int row) const;
+    Q_INVOKABLE QPointF transitionEditPosition(int row, double progress) const;
+    Q_INVOKABLE double transitionEditFacing(int row, double progress) const;
     Q_INVOKABLE void setSelectedTransitionPath(const QString &type, const QVariantList &controlPoints = {});
     Q_INVOKABLE QVariantList transitionPathSamples(int performerRow, int samples = 24) const;
     Q_INVOKABLE QVariantMap shapeInfo(int index) const;
@@ -673,6 +681,14 @@ private:
     MarchCraft::Placement transitionEditPlacement(int performerIndex) const;
     QVector<int> orderedTransitionEditRows(const QString &order, bool reversed = false) const;
     void rebuildTransitionEditPreview();
+    bool materializeTransitionRelationship(int destinationSet, MarchCraft::SetVariant &variant,
+                                           MarchCraft::TransitionRelationship &relationship,
+                                           QString *warning = nullptr) const;
+    bool reconcileTransitionRelationships(int destinationSet = -1);
+    void detachFromTransitionRelationships(MarchCraft::SetVariant &variant,
+                                           const QSet<QString> &performerIds);
+    void preserveTransitionEditOverride(int performerRow, bool detachRelationship);
+    void validateTransitionEdit();
     QPointF clampPosition(QPointF point) const;
     void ensurePlacements();
     int pulsesBetween(qint64 startTick, qint64 endTick) const;
@@ -719,8 +735,13 @@ private:
         QVector<QString> performerIds;
         QSet<QString> initialSelectedIds;
         QString activePerformerId;
+        QString relationshipId;
         QHash<QString, MarchCraft::Placement> originalPlacements;
         QHash<QString, MarchCraft::Placement> previewPlacements;
+        QHash<QString, MarchCraft::Placement> detachedPlacements;
+        QSet<QString> detachedPerformerIds;
+        bool valid = true;
+        QString warning;
     };
 
     struct MusicSection {
@@ -825,6 +846,7 @@ private:
     QString m_measurementUnit{QStringLiteral("steps")};
     FormationPreviewState m_formationPreview;
     TransitionEditState m_transitionEdit;
+    QString m_transitionReconcileWarning;
     bool m_generatingFormationPreview = false;
     int m_formationPreviewSourceSet = -1;
     bool m_formationPreviewInsertsNext = false;

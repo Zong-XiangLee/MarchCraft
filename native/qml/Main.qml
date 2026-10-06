@@ -104,7 +104,10 @@ ApplicationWindow {
 
     function activateWorkspace(workspace) {
         if (!workspaceState.isWorkspace(workspace)) return
-        if (workspaceState.currentWorkspace !== workspace) transport.pause()
+        if (workspaceState.currentWorkspace !== workspace) {
+            transport.pause()
+            if (drillProject.transitionEditActive) drillProject.cancelTransitionEdit()
+        }
         workspaceState.switchWorkspace(workspace)
         if (workspace !== "export" && drillProject.projectPath)
             workspaceController.rememberWorkspace(drillProject.projectPath, workspace)
@@ -115,6 +118,7 @@ ApplicationWindow {
         if (!workspaceState.workspaceActive)
             workspaceState.enteredProject(workspace)
         if (workspace === "export") {
+            if (drillProject.transitionEditActive) drillProject.cancelTransitionEdit()
             exportPanel.enter()
             return
         }
@@ -338,7 +342,7 @@ ApplicationWindow {
         onTriggered: pasteSpecialDialog.open()
     }
     Action { id: selectAllAction; text: "Select all"; shortcut: "Ctrl+A"; enabled: workspaceState.currentWorkspace === "editor"; onTriggered: drillProject.selectAll() }
-    Action { id: clearSelectionAction; text: "Clear selection"; shortcut: "Esc"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.selectedCount > 0; onTriggered: drillProject.clearSelection() }
+    Action { id: clearSelectionAction; text: "Clear selection"; shortcut: "Esc"; enabled: workspaceState.currentWorkspace === "editor" && !drillProject.transitionEditActive && drillProject.selectedCount > 0; onTriggered: drillProject.clearSelection() }
     Action { id: deleteSelectedAction; text: "Delete performers"; shortcut: "Delete"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.selectedCount > 0; onTriggered: drillProject.removeSelectedPerformers() }
     Action { id: groupAction; text: "Group selection"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.canGroupSelection; onTriggered: drillProject.groupSelected() }
     Action { id: ungroupAction; text: "Ungroup selection"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.canUngroupSelection; onTriggered: drillProject.ungroupSelected() }
@@ -350,10 +354,11 @@ ApplicationWindow {
     Action {
         id: transitionEditAction; text: drillProject.transitionEditActive ? "Apply transition paths" : "Edit incoming transition…"
         enabled: workspaceState.currentWorkspace === "editor"
-                 && (drillProject.transitionEditActive
+                 && ((drillProject.transitionEditActive && drillProject.transitionEditValid)
                      || (drillProject.selectedCount > 0 && drillProject.currentSetIndex > 0))
         onTriggered: drillProject.transitionEditActive ? drillProject.applyTransitionEdit() : drillProject.beginTransitionEdit()
     }
+    Action { id: cancelTransitionEditAction; text: "Cancel transition edit"; shortcut: "Esc"; enabled: workspaceState.currentWorkspace === "editor" && drillProject.transitionEditActive; onTriggered: drillProject.cancelTransitionEdit() }
     Action { id: view2DAction; text: "2D drill editor"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: !window.threeD; shortcut: "Ctrl+1"; onTriggered: window.threeD = false }
     Action { id: view3DAction; text: "3D preview"; enabled: workspaceState.currentWorkspace === "editor" || workspaceState.currentWorkspace === "review"; checkable: true; checked: window.threeD; shortcut: "Ctrl+2"; onTriggered: window.threeD = true }
     Action { id: rosterPanelAction; text: "Roster"; enabled: workspaceState.currentWorkspace === "editor"; checkable: true; checked: !workspaceSettings.rosterCollapsed; shortcut: "Ctrl+Shift+R"; onTriggered: workspaceSettings.rosterCollapsed = !workspaceSettings.rosterCollapsed }

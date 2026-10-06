@@ -31,20 +31,34 @@ TransitionPath::TransitionPath(QPointF origin, const Placement &destination, dou
         ? std::clamp(destination.pathDurationCounts, 0.001, availableCounts)
         : availableCounts;
 
-    m_points.push_back(origin);
+    const auto finitePoint = [](QPointF point) {
+        return std::isfinite(point.x()) && std::isfinite(point.y());
+    };
+    if (!finitePoint(origin)) origin = {};
+    const QPointF endpoint = finitePoint(destination.position) ? destination.position : origin;
+    auto appendPoint = [&](QPointF point) {
+        if (!finitePoint(point)) return;
+        if (m_points.isEmpty() || std::hypot(point.x() - m_points.last().x(),
+                                             point.y() - m_points.last().y()) > 1e-9)
+            m_points.push_back(point);
+    };
+
+    appendPoint(origin);
     if (destination.pathType == QStringLiteral("curved") && !destination.pathPoints.isEmpty()) {
         QVector<QPointF> controlPolygon{origin};
-        controlPolygon += destination.pathPoints;
-        controlPolygon.push_back(destination.position);
-        const int samples = std::clamp(int(controlPolygon.size() - 1) * 24, 32, 256);
+        for (const auto &point : destination.pathPoints)
+            if (finitePoint(point)) controlPolygon.push_back(point);
+        controlPolygon.push_back(endpoint);
+        const int samples = std::clamp(int(controlPolygon.size() - 1) * 48, 64, 512);
         for (int sample = 1; sample < samples; ++sample)
-            m_points.push_back(bezierPoint(controlPolygon, double(sample) / samples));
+            appendPoint(bezierPoint(controlPolygon, double(sample) / samples));
     } else if (destination.pathType == QStringLiteral("follow")
                || destination.pathType == QStringLiteral("gate")
                || destination.pathType == QStringLiteral("pivot")) {
-        m_points += destination.pathPoints;
+        for (const auto &point : destination.pathPoints) appendPoint(point);
     }
-    m_points.push_back(destination.position);
+    appendPoint(endpoint);
+    if (m_points.size() == 1) m_points.push_back(endpoint);
     m_cumulative.push_back(0.0);
     for (int i = 1; i < m_points.size(); ++i) {
         const auto delta = m_points[i] - m_points[i - 1];
@@ -58,6 +72,13 @@ QPointF TransitionPath::position(double progress) const
     progress = std::clamp(progress, 0.0, 1.0);
     const double elapsedCounts = progress * m_transitionCounts;
     progress = std::clamp((elapsedCounts - m_startCount) / m_durationCounts, 0.0, 1.0);
+    return geometryPosition(progress);
+}
+
+QPointF TransitionPath::geometryPosition(double progress) const
+{
+    if (m_points.isEmpty()) return {};
+    progress = std::clamp(progress, 0.0, 1.0);
     if (progress >= 1.0) return m_points.last();
     const double target = progress * distance();
     const auto found = std::lower_bound(m_cumulative.cbegin() + 1, m_cumulative.cend(), target);
@@ -66,6 +87,18 @@ QPointF TransitionPath::position(double progress) const
     const double length = m_cumulative[segment] - m_cumulative[segment - 1];
     const double t = length <= 0.0 ? 0.0 : (target - m_cumulative[segment - 1]) / length;
     return m_points[segment - 1] + (m_points[segment] - m_points[segment - 1]) * t;
+}
+
+QPointF TransitionPath::tangent(double progress) const
+{
+    if (m_points.size() < 2 || distance() <= 1e-9) return {};
+    constexpr double radius = 0.0025;
+    const double before = std::max(0.0, progress - radius);
+    const double after = std::min(1.0, progress + radius);
+    QPointF delta = geometryPosition(after) - geometryPosition(before);
+    const double length = std::hypot(delta.x(), delta.y());
+    if (length <= 1e-9) return {};
+    return delta / length;
 }
 
 }

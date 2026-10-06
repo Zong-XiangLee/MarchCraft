@@ -53,6 +53,10 @@ Frame {
                 return index === 1 ? "formation" : index === 2 ? "leftToRight"
                     : index === 3 ? "rightToLeft" : index === 4 ? "roster" : "selection"
             }
+            function transitionOrderIndex(order) {
+                return order === "formation" ? 1 : order === "leftToRight" ? 2
+                    : order === "rightToLeft" ? 3 : order === "roster" ? 4 : 0
+            }
             function chooseTransitionType(index) {
                 const types = ["direct", "curved", "follow", "gate", "stagger"]
                 drillProjectContext.setTransitionEditType(types[index])
@@ -238,7 +242,7 @@ Frame {
                                 textRole: "label"
                                 currentIndex: {
                                     for (let i = 0; i < model.length; ++i)
-                                        if (model[i].row === drillProjectContext.transitionEditActiveRow) return i
+                                        if (model[i].row === Number(drillProjectContext.transitionEditOptions.leaderRow)) return i
                                     return 0
                                 }
                                 onActivated: drillProjectContext.updateTransitionEditOptions({"leaderRow": model[currentIndex].row})
@@ -249,14 +253,37 @@ Frame {
                                 id: followOrder
                                 Layout.fillWidth: true
                                 model: ["Selected order", "Formation order", "Left to right", "Right to left", "Roster order"]
+                                currentIndex: inspector.transitionOrderIndex(drillProjectContext.transitionEditOptions.order)
                                 onActivated: drillProjectContext.updateTransitionEditOptions({"order": inspector.transitionOrder(currentIndex)})
                             }
                             CheckBox {
                                 text: "Reverse"
-                                onToggled: drillProjectContext.updateTransitionEditOptions({"reversed": checked})
+                                checked: Boolean(drillProjectContext.transitionEditOptions.reversed)
+                                onClicked: drillProjectContext.updateTransitionEditOptions({"reversed": checked})
                             }
                         }
-                        Label { text: "Followers reuse the leader route with arc-length count offsets."; color: MarchCraftTheme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
+                        Label { text: "Spacing is physical distance along the shared route; retiming preserves that distance."; color: MarchCraftTheme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 2
+                            Repeater {
+                                model: Math.min(10, drillProjectContext.transitionEditPerformers.length)
+                                delegate: Label {
+                                    required property int index
+                                    property var orderedPerformer: drillProjectContext.transitionEditPerformers[index]
+                                    Layout.fillWidth: true
+                                    text: (index + 1) + ". " + orderedPerformer.label
+                                        + (orderedPerformer.detached ? " · independent override" : "")
+                                        + " · starts " + Number(orderedPerformer.startCount || 0).toFixed(1)
+                                    color: orderedPerformer.detached ? MarchCraftTheme.warning : MarchCraftTheme.textSecondary
+                                    font.pixelSize: 10; elide: Text.ElideRight
+                                }
+                            }
+                            Label {
+                                visible: drillProjectContext.transitionEditPerformers.length > 10
+                                text: "+ " + (drillProjectContext.transitionEditPerformers.length - 10) + " more"
+                                color: MarchCraftTheme.textMuted; font.pixelSize: 10
+                            }
+                        }
                     }
 
                     ColumnLayout {
@@ -269,14 +296,21 @@ Frame {
                                 Layout.fillWidth: true
                                 model: drillProjectContext.transitionEditPerformers
                                 textRole: "label"
+                                currentIndex: {
+                                    for (let i = 0; i < model.length; ++i)
+                                        if (model[i].row === Number(drillProjectContext.transitionEditOptions.pivotRow)) return i
+                                    return 0
+                                }
                                 onActivated: drillProjectContext.updateTransitionEditOptions({"pivotRow": model[currentIndex].row})
                             }
                         }
                         ComboBox {
                             Layout.fillWidth: true
                             model: ["Clockwise", "Counterclockwise"]
+                            currentIndex: drillProjectContext.transitionEditOptions.direction === "counterclockwise" ? 1 : 0
                             onActivated: drillProjectContext.updateTransitionEditOptions({"direction": currentIndex === 0 ? "clockwise" : "counterclockwise"})
                         }
+                        Label { text: "The pivot and radial guides are highlighted on the field. Radius mismatches use a smooth spiral and are reported below."; color: MarchCraftTheme.textMuted; font.pixelSize: 10; wrapMode: Text.Wrap; Layout.fillWidth: true }
                     }
 
                     ColumnLayout {
@@ -287,28 +321,86 @@ Frame {
                             id: staggerOrder
                             Layout.fillWidth: true
                             model: ["Selected order", "Formation order", "Left to right", "Right to left", "Roster order"]
+                            currentIndex: inspector.transitionOrderIndex(drillProjectContext.transitionEditOptions.order)
                             onActivated: drillProjectContext.updateTransitionEditOptions({"order": inspector.transitionOrder(currentIndex)})
                         }
                         GridLayout { columns: 2; Layout.fillWidth: true
                             Label { text: "Interval"; color: MarchCraftTheme.textSecondary }
                             SpinBox {
                                 id: staggerInterval
-                                from: 0; to: 128; value: 4; stepSize: 1; editable: true
+                                from: 0; to: 128; value: Math.round(Number(drillProjectContext.transitionEditOptions.intervalCounts || 0) * 4); stepSize: 1; editable: true
                                 textFromValue: function(value) { return (value / 4).toFixed(value % 4 ? 2 : 0) + " counts" }
                                 valueFromText: function(text) { return Math.round(Number(text.replace(/[^0-9.]/g, "")) * 4) }
                                 onValueModified: drillProjectContext.updateTransitionEditOptions({"intervalCounts": value / 4})
                             }
                             Label { text: "Pod size"; color: MarchCraftTheme.textSecondary }
                             SpinBox {
-                                from: 1; to: Math.max(1, drillProjectContext.transitionEditPerformers.length); value: 1
+                                from: 1; to: Math.max(1, drillProjectContext.transitionEditPerformers.length); value: Math.max(1, Number(drillProjectContext.transitionEditOptions.groupSize || 1))
                                 onValueModified: drillProjectContext.updateTransitionEditOptions({"groupSize": value})
+                            }
+                            Label { text: "First start"; color: MarchCraftTheme.textSecondary }
+                            SpinBox {
+                                from: 0; to: 8192; value: Math.round(Number(drillProjectContext.transitionEditOptions.baseDelayCounts || 0) * 4); stepSize: 1; editable: true
+                                textFromValue: function(value) { return (value / 4).toFixed(value % 4 ? 2 : 0) + " counts" }
+                                valueFromText: function(text) { return Math.round(Number(text.replace(/[^0-9.]/g, "")) * 4) }
+                                onValueModified: drillProjectContext.updateTransitionEditOptions({"baseDelayCounts": value / 4})
                             }
                         }
                         CheckBox {
                             text: "Synchronized arrival"
-                            checked: true
-                            onToggled: drillProjectContext.updateTransitionEditOptions({"arriveTogether": checked})
+                            checked: Boolean(drillProjectContext.transitionEditOptions.arriveTogether)
+                            onClicked: drillProjectContext.updateTransitionEditOptions({"arriveTogether": checked})
                         }
+                        ColumnLayout {
+                            Layout.fillWidth: true; spacing: 3
+                            Repeater {
+                                model: Math.min(8, drillProjectContext.transitionEditPerformers.length)
+                                delegate: RowLayout {
+                                    required property int index
+                                    property var timing: drillProjectContext.transitionEditPerformers[index]
+                                    property real totalCounts: Math.max(0.25, Number(drillProjectContext.transitionEditMetrics.transitionCounts || 1))
+                                    Layout.fillWidth: true; spacing: 5
+                                    Label { text: timing.label; color: MarchCraftTheme.textSecondary; font.pixelSize: 9; Layout.preferredWidth: 32; elide: Text.ElideRight }
+                                    Rectangle {
+                                        Layout.fillWidth: true; height: 7; radius: 3.5; color: "#26343b"
+                                        Rectangle {
+                                            x: parent.width * Number(timing.startCount || 0) / totalCounts
+                                            width: Math.max(2, parent.width * (Number(timing.arrivalCount || 0) - Number(timing.startCount || 0)) / totalCounts)
+                                            height: parent.height; radius: parent.radius
+                                            color: timing.active ? "#22d3ee" : "#fbbf24"
+                                        }
+                                    }
+                                    Label { text: Number(timing.startCount || 0).toFixed(1) + " → " + Number(timing.arrivalCount || 0).toFixed(1); color: MarchCraftTheme.textMuted; font.pixelSize: 9; Layout.preferredWidth: 62; horizontalAlignment: Text.AlignRight }
+                                }
+                            }
+                            Label { visible: drillProjectContext.transitionEditPerformers.length > 8; text: "+ " + (drillProjectContext.transitionEditPerformers.length - 8) + " more performers"; color: MarchCraftTheme.textMuted; font.pixelSize: 9 }
+                        }
+                    }
+
+                    ColumnLayout {
+                        Layout.fillWidth: true; spacing: 2
+                        RowLayout { Layout.fillWidth: true
+                            Label { text: "COUNT PREVIEW"; color: MarchCraftTheme.textSecondary; font.bold: true; font.pixelSize: 9; Layout.fillWidth: true }
+                            Label {
+                                text: (drillProjectContext.playhead * Number(drillProjectContext.transitionEditMetrics.transitionCounts || 0)).toFixed(1)
+                                    + " / " + Number(drillProjectContext.transitionEditMetrics.transitionCounts || 0).toFixed(0)
+                                color: "#67e8f9"; font.bold: true; font.pixelSize: 10
+                            }
+                        }
+                        Slider {
+                            Layout.fillWidth: true; from: 0; to: 1; stepSize: 0.001
+                            value: drillProjectContext.playhead
+                            onMoved: drillProjectContext.setPlayhead(value)
+                            ToolTip.visible: hovered || pressed
+                            ToolTip.text: "Scrub the exact 2D / 3D authored position"
+                        }
+                    }
+
+                    Label {
+                        visible: drillProjectContext.transitionEditWarning.length > 0
+                        text: drillProjectContext.transitionEditWarning
+                        color: drillProjectContext.transitionEditValid ? MarchCraftTheme.warning : MarchCraftTheme.danger
+                        font.pixelSize: 10; wrapMode: Text.Wrap; Layout.minimumWidth: 0; Layout.fillWidth: true
                     }
 
                     GridLayout {
@@ -339,7 +431,7 @@ Frame {
                     RowLayout { Layout.fillWidth: true
                         AppButton { Layout.minimumWidth: 0; text: "Cancel"; onClicked: drillProjectContext.cancelTransitionEdit() }
                         Item { Layout.fillWidth: true }
-                        AppButton { Layout.minimumWidth: 0; text: "Apply"; highlighted: true; onClicked: drillProjectContext.applyTransitionEdit() }
+                        AppButton { Layout.minimumWidth: 0; text: "Apply"; highlighted: true; enabled: drillProjectContext.transitionEditValid; onClicked: drillProjectContext.applyTransitionEdit() }
                     }
                 }
             }

@@ -179,7 +179,69 @@ bool DrillProject::applyTransitionCounts(int destinationSet, int counts, const Q
         selectTimelineTransition(destinationSet);
         return true;
     }
+    const int previousCounts = qMax(1, m_sets[destinationSet].counts);
+    auto staggerFits = [counts](const MarchCraft::SetVariant &variant) {
+        for (const auto &relationship : variant.transitionRelationships) {
+            if (relationship.type != QStringLiteral("stagger") || relationship.performerIds.isEmpty())
+                continue;
+            const int lastGroup = (relationship.performerIds.size() - 1)
+                / qMax(1, relationship.groupSize);
+            if (relationship.baseDelayCounts + lastGroup * qMax(0.0, relationship.intervalCounts)
+                >= counts - 0.249)
+                return false;
+        }
+        return true;
+    };
+    for (const auto &variant : m_sets[destinationSet].variants) {
+        if (!staggerFits(variant)) {
+            setStatus(QStringLiteral("Cannot resize transition: the authored stagger would start after the available counts."));
+            return false;
+        }
+    }
+    for (const auto &variant : m_sets[destinationSet].archivedVariants) {
+        if (!staggerFits(variant)) {
+            setStatus(QStringLiteral("Cannot resize transition: an archived variant contains a stagger that would not fit."));
+            return false;
+        }
+    }
     const auto before = toJson();
+    auto retimeVariant = [previousCounts, counts](MarchCraft::SetVariant &variant) {
+        const double scale = double(counts) / previousCounts;
+        for (auto placement = variant.placements.begin(); placement != variant.placements.end(); ++placement) {
+            if (placement->pathStartCount < 0.0 && placement->pathDurationCounts < 0.0)
+                continue;
+            const double oldStart = qMax(0.0, placement->pathStartCount);
+            const bool automaticDuration = placement->pathDurationCounts < 0.0;
+            const double oldDuration = automaticDuration
+                ? qMax(0.25, previousCounts - oldStart)
+                : qMax(0.25, placement->pathDurationCounts);
+            const double oldArrival = oldStart + oldDuration;
+
+            // Count offsets are absolute marching counts.  A movement authored
+            // to arrive on the set continues to arrive on the set after a
+            // resize.  When a shortened transition cannot contain a partial
+            // window, scale that entire window proportionally instead of
+            // silently clipping it.
+            if (oldStart >= counts - 0.249) {
+                placement->pathStartCount = qBound(0.0, oldStart * scale, counts - 0.25);
+                if (!automaticDuration)
+                    placement->pathDurationCounts = qMax(0.25,
+                        qMin(oldDuration * scale, counts - placement->pathStartCount));
+            } else if (!automaticDuration && qAbs(oldArrival - previousCounts) < 0.001) {
+                placement->pathStartCount = oldStart;
+                placement->pathDurationCounts = qMax(0.25, counts - oldStart);
+            } else if (oldArrival > counts + 0.001) {
+                placement->pathStartCount = qBound(0.0, oldStart * scale, counts - 0.25);
+                if (!automaticDuration)
+                    placement->pathDurationCounts = qMax(0.25,
+                        qMin(oldDuration * scale, counts - placement->pathStartCount));
+            }
+        }
+        for (auto &relationship : variant.transitionRelationships)
+            relationship.authoredCounts = counts;
+    };
+    for (auto &variant : m_sets[destinationSet].variants) retimeVariant(variant);
+    for (auto &variant : m_sets[destinationSet].archivedVariants) retimeVariant(variant);
     QVector<int> durations;
     durations.reserve(m_sets.size());
     for (const auto &set : std::as_const(m_sets)) durations.push_back(qMax(1, set.counts));

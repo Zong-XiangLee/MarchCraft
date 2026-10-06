@@ -64,7 +64,7 @@ QJsonObject DrillProject::toJson() const
     std::sort(selectedIndices.begin(), selectedIndices.end());
     for (int index : selectedIndices) selectedSets.push_back(index);
     QJsonObject result{{QStringLiteral("format"), QStringLiteral("marchcraft")},
-            {QStringLiteral("version"), 12},
+            {QStringLiteral("version"), 13},
             {QStringLiteral("showName"), m_showName},
             {QStringLiteral("fieldPreset"), m_fieldPreset},
             {QStringLiteral("audioSource"), m_audioSource},
@@ -115,7 +115,7 @@ QJsonObject DrillProject::toJson() const
 bool DrillProject::restoreJson(const QJsonObject &object, bool preservePath)
 {
     if (object.value(QStringLiteral("format")).toString() != QStringLiteral("marchcraft")
-        || object.value(QStringLiteral("version")).toInt() > 12) {
+        || object.value(QStringLiteral("version")).toInt() > 13) {
         setStatus(QStringLiteral("Unsupported MarchCraft project format"));
         return false;
     }
@@ -933,6 +933,7 @@ QString DrillProject::currentMovementName() const
 void DrillProject::activateMovement(int index)
 {
     if (index < 0 || index >= m_movements.size() || index == m_currentMovement) return;
+    const bool canceledTransitionEdit = m_transitionEdit.active;
     auto snapshot = toJson();
     auto entries = snapshot.value(QStringLiteral("movements")).toArray();
     auto leaving = entries[m_currentMovement].toObject();
@@ -945,7 +946,9 @@ void DrillProject::activateMovement(int index)
     clearSelection(); cancelFormationPreview();
     // Workspace navigation must not create undo entries or dirty a saved show.
     if (!wasDirty) { m_dirty = false; m_autosaveTimer.stop(); emit dirtyChanged(); }
-    setStatus(QStringLiteral("Editing %1").arg(currentMovementName()));
+    setStatus(canceledTransitionEdit
+        ? QStringLiteral("Transition edit canceled; editing %1").arg(currentMovementName())
+        : QStringLiteral("Editing %1").arg(currentMovementName()));
 }
 
 bool DrillProject::createMovement(const QString &name, bool duplicate)
@@ -1032,6 +1035,25 @@ void DrillProject::synchronizeMovementRoster()
                     for (auto &shape : variant.shapes)
                         shape.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
                     variant.shapes.removeIf([](const auto &shape) { return shape.performerIds.size() < 2; });
+                    for (auto &relationship : variant.transitionRelationships) {
+                        relationship.performerIds.removeIf([&](const QString &id) { return !ids.contains(id); });
+                        relationship.manualOverrideIds.removeIf([&](const QString &id) {
+                            return !relationship.performerIds.contains(id);
+                        });
+                    }
+                    variant.transitionRelationships.removeIf([](const auto &relationship) {
+                        const int minimumMembers = relationship.type == QStringLiteral("stagger") ? 1 : 2;
+                        int generatedMembers = 0;
+                        for (const auto &id : relationship.performerIds)
+                            if (!relationship.manualOverrideIds.contains(id)) ++generatedMembers;
+                        const bool missingAnchor = (relationship.type == QStringLiteral("follow")
+                                                    && (!relationship.performerIds.contains(relationship.leaderId)
+                                                        || relationship.manualOverrideIds.contains(relationship.leaderId)))
+                            || (relationship.type == QStringLiteral("gate")
+                                && (!relationship.performerIds.contains(relationship.pivotId)
+                                    || relationship.manualOverrideIds.contains(relationship.pivotId)));
+                        return missingAnchor || generatedMembers < minimumMembers;
+                    });
                 };
                 for (auto &variant : set.variants) synchronize(variant);
                 for (auto &variant : set.archivedVariants) synchronize(variant);
