@@ -314,7 +314,8 @@ bool DrillProject::commitSetGenerationPlan(const QVariantList &segments)
         const int source = qBound(0, insertAt - 1, m_sets.size() - 1);
         DrillSet set;
         set.startTick = tick; set.stepMultiplier = multiplier; set.measure = measureText;
-        set.activeVariant().name = QStringLiteral("Music set %1").arg(insertAt + 1);
+        set.title = QStringLiteral("Music set %1").arg(insertAt + 1);
+        set.activeVariant().name = QStringLiteral("Set variant A");
         if (!m_sets.isEmpty()) set.activeVariant().placements = m_sets[source].activeVariant().placements;
         m_sets.insert(insertAt, set); return insertAt;
     };

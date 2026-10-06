@@ -133,7 +133,7 @@ Rectangle {
                             anchors.fill: parent; anchors.margins: 16; spacing: 5
                             Label { text: "BUNDLED SAMPLE"; color: MarchCraftTheme.accentHover; font.bold: true; font.pixelSize: 9; font.letterSpacing: 1.2 }
                             Label { text: "Rancho Bernardo 2025"; color: MarchCraftTheme.textPrimary; font.bold: true; font.pixelSize: 16 }
-                            Label { text: "204 performers · 97 sets · Opens as an editable copy"; color: MarchCraftTheme.textSecondary; font.pixelSize: 11 }
+                            Label { text: "204 performers · 112 set entries · Opens as an editable copy"; color: MarchCraftTheme.textSecondary; font.pixelSize: 11 }
                         }
                     }
                 }

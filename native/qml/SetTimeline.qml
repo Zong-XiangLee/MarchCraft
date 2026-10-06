@@ -321,8 +321,8 @@ Frame {
                     visible: drillProjectContext.timelineSelectionKind === "set"
                     Label {
                         text: drillProjectContext.selectedSetIndices.length === 1
-                            ? "SET " + (timelinePanel.selectedSetDetails.number || "") + " · "
-                                + (timelinePanel.selectedSetDetails.name || "")
+                            ? "SET " + (timelinePanel.selectedSetDetails.number || "")
+                                + (timelinePanel.selectedSetDetails.name ? " · " + timelinePanel.selectedSetDetails.name : "")
                             : drillProjectContext.selectedSetIndices.length + " sets selected"
                         color: MarchCraftTheme.textPrimary
                         font.bold: true
@@ -515,7 +515,8 @@ Frame {
                         anchors.rightMargin: 8
                         Label { text: setData.number + (setData.subset ? " · SUB" : ""); font.bold: true; Layout.preferredWidth: 54 }
                         Label {
-                            text: setData.name + (setData.caption ? " · " + setData.caption : "")
+                            text: (setData.name || "") + (setData.caption
+                                ? (setData.name ? " · " : "") + setData.caption : "")
                             elide: Text.ElideRight
                             Layout.fillWidth: true
                         }

@@ -11,13 +11,15 @@ Rectangle {
     property bool initialized: false
     property bool customFilename: false
     property bool brandingEdited: false
-    property string presetTitle: "Drill diagrams"
+    property string presetTitle: "Director Drill Book"
     property real previewSeconds: 0
     property real zoom: 1
     readonly property bool video: String(options.format).startsWith("video")
     readonly property bool folderOutput: options.format === "png" || (options.format === "pdf" && (options.split || options.content === "both"))
     readonly property string destination: folder.text + (folderOutput ? "" : "/" + filename.text)
-    readonly property var builtins: ["Drill diagrams", "Performer coordinates", "Coordinates + drill diagrams", "PNG charts", "2D video", "3D video"]
+    readonly property var builtins: ["Director Drill Book", "Director Drill Book + Paths",
+        "Performer Coordinates - Standard", "Performer Coordinates - Compact",
+        "Performer Coordinates - Large", "Coordinates + Drill Book", "PNG charts", "2D video", "3D video"]
     function invalidate() {
         prepared = false;
         playback.stop();
@@ -54,7 +56,8 @@ Rectangle {
         invalidate();
     }
     function applyPreset(name) {
-        if (builtins.indexOf(name) >= 0) {
+        const legacy = ["Drill diagrams", "Performer coordinates", "Coordinates + drill diagrams"];
+        if (builtins.indexOf(name) >= 0 || legacy.indexOf(name) >= 0) {
             const next = Object.assign({}, options, {
                 format: "pdf",
                 content: "charts",
@@ -80,12 +83,41 @@ Rectangle {
                 companyLogo: true,
                 marchcraftLogo: true,
                 monochrome: false,
-                framing: "field"
+                framing: "field",
+                range: "all",
+                density: "standard",
+                performerScope: "all",
+                performerSort: "roster",
+                holdMode: "hold",
+                setNames: true,
+                measures: false,
+                transitionPaths: false
             });
-            if (name === "Performer coordinates")
+            if (name.indexOf("Performer Coordinates") === 0 || name === "Performer coordinates") {
                 next.content = "coordinates";
-            if (name === "Coordinates + drill diagrams")
+                next.paper = "Letter";
+                next.landscape = false;
+                next.scope = "active";
+                next.range = "timeline";
+                next.margin = 8;
+                next.companyLogo = false;
+                next.marchcraftLogo = false;
+                next.monochrome = true;
+                if (name.indexOf("Compact") >= 0)
+                    next.density = "compact";
+                else if (name.indexOf("Large") >= 0)
+                    next.density = "large";
+            }
+            if (name === "Coordinates + Drill Book" || name === "Coordinates + drill diagrams") {
                 next.content = "both";
+                next.scope = "active";
+                next.range = "timeline";
+                next.landscape = true;
+                next.margin = 8;
+                next.monochrome = true;
+            }
+            if (name === "Director Drill Book + Paths")
+                next.transitionPaths = true;
             if (name === "PNG charts")
                 next.format = "png";
             if (name === "2D video")
@@ -162,6 +194,24 @@ Rectangle {
             });
         change(key, values);
     }
+    function optionListText(value) {
+        if (value === undefined || value === null)
+            return "";
+        if (typeof value === "string")
+            return value;
+        return typeof value.join === "function" ? value.join(", ") : String(value);
+    }
+    function firstOptionValue(value) {
+        const text = optionListText(value);
+        return text.split(",")[0].trim();
+    }
+    function performerChoiceIndex(value) {
+        const id = firstOptionValue(value);
+        for (let index = 0; index < exportController.performerChoices.length; ++index)
+            if (exportController.performerChoices[index].id === id)
+                return index;
+        return 0;
+    }
     function openFor(content, format) {
         workspaceRequested();
         if (exportController.busy)
@@ -176,15 +226,16 @@ Rectangle {
             invalidate();
             return;
         }
-        presetTitle = format === "csv" ? "Custom" : format === "video2d" ? "2D video" : format === "video3d" ? "3D video" : format === "png" ? "PNG charts" : content === "coordinates" ? "Performer coordinates" : "Drill diagrams";
+        presetTitle = format === "csv" ? "Custom" : format === "video2d" ? "2D video" : format === "video3d" ? "3D video" : format === "png" ? "PNG charts" : content === "coordinates" ? "Performer Coordinates - Standard" : "Director Drill Book";
         initialized = true;
         options = {
             content: content,
             format: format,
-            scope: "all",
+            scope: content === "coordinates" ? "active" : "all",
+            range: content === "coordinates" ? "timeline" : "all",
             variants: "active",
             paper: "Letter",
-            landscape: true,
+            landscape: content !== "coordinates",
             grid: true,
             labels: true,
             props: true,
@@ -192,18 +243,26 @@ Rectangle {
             headings: true,
             numbers: true,
             subsets: true,
-            companyLogo: true,
-            marchcraftLogo: true,
+            companyLogo: content !== "coordinates",
+            marchcraftLogo: content !== "coordinates",
+            monochrome: content === "coordinates",
             framing: "field",
             dpi: 300,
             fontSize: 9,
             performerLabelSize: 6,
             markerSize: 2,
-            margin: 10,
+            margin: content === "coordinates" ? 8 : 10,
             fps: 30,
             height: 1080,
             audio: "silent",
-            camera: "director"
+            camera: "director",
+            density: "standard",
+            performerScope: "all",
+            performerSort: "roster",
+            holdMode: "hold",
+            setNames: true,
+            measures: false,
+            transitionPaths: false
         };
         logoPath = "";
         removeLogo = false;
@@ -369,18 +428,31 @@ Rectangle {
                                 onToggled: root.toggleId("movements", modelData.id, checked)
                             }
                         }
+                        Choice {
+                            keyName: "range"
+                            caption: "Rehearsal range"
+                            values: ["all", "current", "timeline", "custom"]
+                            captions: ["All sets", "Current set", "Timeline selection", "Custom set range"]
+                        }
                         Label {
-                            text: "Sets: blank = all; numbers, ranges or individual selections"
+                            visible: root.options.range === "timeline"
+                            text: drillProject.timelineSelectionKind === "set"
+                                ? drillProject.selectedSetIndices.length + " timeline set(s) selected"
+                                : drillProject.timelineSelectionKind === "time" || drillProject.timelineSelectionKind === "measure"
+                                    ? "Current timeline time/measure selection"
+                                    : "No range selected; the current set will be used"
+                            color: MarchCraftTheme.textSecondary
                             wrapMode: Text.WordWrap
                             Layout.fillWidth: true
                         }
                         TextField {
+                            visible: root.options.range === "custom"
                             placeholderTextColor: "#929caa"
                             implicitHeight: 32
                             font.pixelSize: 12
                             Layout.fillWidth: true
-                            placeholderText: "Examples: 1-8, 12, 14A"
-                            text: typeof root.options.sets === "string" ? root.options.sets : ""
+                            placeholderText: "Examples: 31-42, 47A"
+                            text: root.optionListText(root.options.sets)
                             onTextEdited: root.change("sets", text)
                         }
                         Toggle {
@@ -420,23 +492,62 @@ Rectangle {
                                 }
                             }
                         }
-                        TextField {
-                            placeholderTextColor: "#929caa"
+                        Choice {
+                            keyName: "performerScope"
+                            caption: "Performers"
+                            values: ["all", "section", "instrument", "selected", "single", "custom"]
+                            captions: ["Entire roster", "One section", "One instrument", "Editor selection", "Single performer", "Custom labels"]
+                        }
+                        ComboBox {
+                            visible: root.options.performerScope === "section"
+                            Layout.fillWidth: true
                             implicitHeight: 32
                             font.pixelSize: 12
+                            model: exportController.sectionChoices
+                            currentIndex: Math.max(0, model.indexOf(root.firstOptionValue(root.options.sections)))
+                            onActivated: root.change("sections", [currentText])
+                        }
+                        ComboBox {
+                            visible: root.options.performerScope === "instrument"
                             Layout.fillWidth: true
-                            placeholderText: "Performer labels, comma separated (blank = all)"
-                            text: root.options.performers || ""
-                            onTextEdited: root.change("performers", text)
+                            implicitHeight: 32
+                            font.pixelSize: 12
+                            model: exportController.instrumentChoices
+                            currentIndex: Math.max(0, model.indexOf(root.firstOptionValue(root.options.instruments)))
+                            onActivated: root.change("instruments", [currentText])
+                        }
+                        ComboBox {
+                            visible: root.options.performerScope === "single"
+                            Layout.fillWidth: true
+                            implicitHeight: 32
+                            font.pixelSize: 12
+                            model: exportController.performerChoices
+                            textRole: "display"
+                            currentIndex: root.performerChoiceIndex(root.options.performers)
+                            onActivated: root.change("performers", [model[currentIndex].id])
+                        }
+                        Label {
+                            visible: root.options.performerScope === "selected"
+                            text: drillProject.selectedCount + " performer(s) selected in the editor"
+                            color: drillProject.selectedCount > 0 ? MarchCraftTheme.textSecondary : "#e5a45f"
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
                         }
                         TextField {
+                            visible: root.options.performerScope === "custom"
                             placeholderTextColor: "#929caa"
                             implicitHeight: 32
                             font.pixelSize: 12
                             Layout.fillWidth: true
-                            placeholderText: "Sections, comma separated (blank = all)"
-                            text: root.options.sections || ""
-                            onTextEdited: root.change("sections", text)
+                            placeholderText: "Performer labels, comma separated"
+                            text: root.optionListText(root.options.performers)
+                            onTextEdited: root.change("performers", text)
+                        }
+                        Choice {
+                            keyName: "performerSort"
+                            caption: "Sheet order"
+                            values: ["roster", "label", "section", "instrument", "name"]
+                            captions: ["Roster order", "Label", "Section then label", "Instrument then label", "Name then label"]
                         }
                     }
                     Section {
@@ -508,10 +619,46 @@ Rectangle {
                             caption: "Paper"
                             values: ["Letter", "Legal", "Tabloid", "A4", "A3"]
                             captions: values
+                            visible: root.options.content === "charts"
                         }
                         Toggle {
                             keyName: "landscape"
                             text: "Landscape"
+                            visible: root.options.content === "charts"
+                        }
+                        Label {
+                            visible: root.options.content === "coordinates" || root.options.content === "both"
+                            text: "Performer sheets are fixed to one portrait Letter (8.5 × 11 in) page."
+                            color: MarchCraftTheme.textSecondary
+                            wrapMode: Text.WordWrap
+                            Layout.fillWidth: true
+                        }
+                        Choice {
+                            keyName: "density"
+                            caption: "Sheet density"
+                            values: ["standard", "compact", "large"]
+                            captions: ["Standard", "Compact", "Large"]
+                            visible: root.options.content === "coordinates" || root.options.content === "both"
+                        }
+                        Rectangle {
+                            visible: (root.options.content === "coordinates" || root.options.content === "both") && root.prepared
+                            Layout.fillWidth: true
+                            implicitHeight: capacityText.implicitHeight + 16
+                            radius: 4
+                            color: exportController.canExport ? "#21392d" : "#4a3026"
+                            border.color: exportController.canExport ? "#478565" : "#bb784f"
+                            Label {
+                                id: capacityText
+                                anchors.fill: parent
+                                anchors.margins: 8
+                                wrapMode: Text.WordWrap
+                                color: MarchCraftTheme.textPrimary
+                                text: exportController.capacityInfo.selectedRows + " selected rows · "
+                                    + exportController.capacityInfo.capacity + " fit at " + root.options.density
+                                    + " density (Standard " + exportController.capacityInfo.standard
+                                    + ", Compact " + exportController.capacityInfo.compact
+                                    + ", Large " + exportController.capacityInfo.large + ")"
+                            }
                         }
                         NumberInput {
                             keyName: "margin"
@@ -526,6 +673,7 @@ Rectangle {
                             minimum: 6
                             maximum: 18
                             defaultValue: 9
+                            visible: root.options.content === "charts"
                         }
                         NumberInput {
                             keyName: "performerLabelSize"
@@ -533,6 +681,7 @@ Rectangle {
                             minimum: 4
                             maximum: 18
                             defaultValue: 6
+                            visible: root.options.content === "charts"
                         }
                         NumberInput {
                             keyName: "markerSize"
@@ -540,15 +689,17 @@ Rectangle {
                             minimum: 1
                             maximum: 6
                             defaultValue: 2
+                            visible: root.options.content === "charts"
                         }
                         Choice {
                             keyName: "framing"
                             caption: "Field framing"
                             values: ["field", "fit", "custom"]
                             captions: ["Full field + off-field positions", "Fit selected performers", "Custom region (steps)"]
+                            visible: root.options.content === "charts"
                         }
                         GridLayout {
-                            visible: root.options.framing === "custom"
+                            visible: root.options.content === "charts" && root.options.framing === "custom"
                             columns: 2
                             Repeater {
                                 model: [
@@ -589,9 +740,24 @@ Rectangle {
                                 }
                             }
                         }
+                        ColumnLayout {
+                            visible: root.options.content === "coordinates" || root.options.content === "both"
+                            Layout.fillWidth: true
+                            Label { text: "Coordinate sheet columns"; font.bold: true }
+                            Toggle { keyName: "setNames"; text: "Set Name" }
+                            Toggle { keyName: "measures"; text: "Measure" }
+                            Toggle { keyName: "notes"; text: "Notes" }
+                            Choice {
+                                keyName: "holdMode"
+                                caption: "Stationary sets"
+                                values: ["hold", "repeat"]
+                                captions: ["Print Hold", "Repeat coordinate"]
+                            }
+                        }
                         Flow {
                             Layout.fillWidth: true
                             Layout.preferredHeight: childrenRect.height
+                            visible: root.options.content === "charts" || root.options.content === "both"
                             Toggle {
                                 keyName: "grid"
                                 text: "Grid"
@@ -611,6 +777,7 @@ Rectangle {
                             Toggle {
                                 keyName: "notes"
                                 text: "Instructions"
+                                visible: root.options.content === "charts"
                             }
                             Toggle {
                                 keyName: "headings"
@@ -624,6 +791,10 @@ Rectangle {
                                 keyName: "monochrome"
                                 text: "Monochrome"
                             }
+                            Toggle {
+                                keyName: "transitionPaths"
+                                text: "Transition paths"
+                            }
                         }
                     }
                     Section {
@@ -632,7 +803,7 @@ Rectangle {
                         Toggle {
                             keyName: "split"
                             text: "Separate PDF per movement"
-                            visible: root.options.format === "pdf"
+                            visible: root.options.format === "pdf" && root.options.content !== "coordinates"
                         }
                         Choice {
                             keyName: "dpi"
@@ -827,6 +998,11 @@ Rectangle {
                     RowLayout {
                         visible: !root.video && root.options.format !== "csv"
                         enabled: root.prepared && !exportController.busy
+                        Label {
+                            visible: root.options.content === "coordinates"
+                            text: "Performer"
+                            color: MarchCraftTheme.textSecondary
+                        }
                         Button {
                             implicitHeight: 32
                             font.pixelSize: 12
@@ -1020,7 +1196,7 @@ Rectangle {
                 font.pixelSize: 12
                 text: root.options.format === "print" ? "Print…" : "Export"
                 highlighted: true
-                enabled: root.prepared && !exportController.busy
+                enabled: root.prepared && exportController.canExport && !exportController.busy
                 onClicked: {
                     playback.stop();
                     exportController.start(root.destination, overwrite.checked);

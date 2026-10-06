@@ -227,7 +227,14 @@ void fitPathToField(QVector<QPointF> &path, QPointF &anchor,
 
 QString compactNumber(double value)
 {
-    return QString::number(value, 'f', std::abs(value - std::round(value)) < 0.01 ? 0 : 2);
+    if (std::abs(value) < 0.005) value = 0.0;
+    QString result = QString::number(value, 'f',
+                                     std::abs(value - std::round(value)) < 0.005 ? 0 : 2);
+    if (result.contains(QLatin1Char('.'))) {
+        while (result.endsWith(QLatin1Char('0'))) result.chop(1);
+        if (result.endsWith(QLatin1Char('.'))) result.chop(1);
+    }
+    return result;
 }
 
 double pointDistance(QPointF a, QPointF b)

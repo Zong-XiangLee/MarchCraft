@@ -97,10 +97,12 @@ TestCase {
         wait(300);
         compare(workspace.options.sets, "2-4");
         compare(workspace.options.content, "both");
+        compare(workspace.options.landscape, true);
         verify(workspace.folderOutput);
         compare(findChild(workspace, "exportFilename").text, "Test Show");
         workspace.applyPreset("Performer coordinates");
         wait(300);
+        compare(workspace.optionListText(["P01", "P02"]), "P01, P02");
         verify(findChild(workspace, "exportFilename").text.endsWith(".pdf"));
     }
     function test_destinationDoesNotRebuildPreviewAndCustomStemSurvives() {

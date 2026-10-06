@@ -3,6 +3,7 @@
 #include "MidiSynthEngine.h"
 #include "ProjectAlgorithms.h"
 #include <QBuffer>
+#include <QCollator>
 #include <QDateTime>
 #include <QDesktopServices>
 #include <QDir>
@@ -10,6 +11,7 @@
 #include <QImageReader>
 #include <QJsonArray>
 #include <QPainter>
+#include <QPainterPath>
 #include <QPdfWriter>
 #include <QPrintDialog>
 #include <QPrinter>
@@ -106,6 +108,66 @@ QFont font(double size, bool bold = false)
     f.setBold(bold);
     return f;
 }
+
+QVector<int> selectedSetIndices(DrillProject &project, const ExportOptions &options)
+{
+    QSet<int> selected;
+    auto add = [&](int index) {
+        if (index >= 0 && index < project.setCount()) selected.insert(index);
+    };
+    if (options.range == QStringLiteral("current")) {
+        add(project.currentSetIndex());
+    } else if (options.range == QStringLiteral("timeline")) {
+        const QString kind = project.timelineSelectionKind();
+        if (kind == QStringLiteral("set")) {
+            for (const auto &value : project.selectedSetIndices()) add(value.toInt());
+        } else if (kind == QStringLiteral("transition")) {
+            add(project.selectedTransitionIndex() - 1);
+            add(project.selectedTransitionIndex());
+        } else if (kind == QStringLiteral("time") || kind == QStringLiteral("measure")) {
+            const qint64 firstTick = qMin(project.timelineRangeStartTick(), project.timelineRangeEndTick());
+            const qint64 lastTick = qMax(project.timelineRangeStartTick(), project.timelineRangeEndTick());
+            int startingSet = 0;
+            for (int index = 0; index < project.setCount(); ++index) {
+                const qint64 tick = project.setInfo(index).value(QStringLiteral("startTick")).toLongLong();
+                if (tick <= firstTick) startingSet = index;
+                if (tick >= firstTick && tick <= lastTick) add(index);
+            }
+            add(startingSet);
+        }
+        if (selected.isEmpty()) add(project.currentSetIndex());
+    } else if (options.range == QStringLiteral("custom") && !options.sets.isEmpty()) {
+        auto indexFor = [&](const QString &token) {
+            for (int index = 0; index < project.setCount(); ++index) {
+                const auto info = project.setInfo(index);
+                if (info.value(QStringLiteral("id")).toString().compare(token, Qt::CaseInsensitive) == 0
+                    || info.value(QStringLiteral("number")).toString().compare(token, Qt::CaseInsensitive) == 0)
+                    return index;
+            }
+            return -1;
+        };
+        for (QString token : options.sets) {
+            token = token.trimmed();
+            const int exact = indexFor(token);
+            if (exact >= 0) {
+                add(exact);
+                continue;
+            }
+            const QRegularExpressionMatch match =
+                QRegularExpression(QStringLiteral("^(.+?)\\s*-\\s*(.+)$")).match(token);
+            if (!match.hasMatch()) continue;
+            const int first = indexFor(match.captured(1).trimmed());
+            const int last = indexFor(match.captured(2).trimmed());
+            if (first < 0 || last < 0) continue;
+            for (int index = qMin(first, last); index <= qMax(first, last); ++index) add(index);
+        }
+    } else {
+        for (int index = 0; index < project.setCount(); ++index) add(index);
+    }
+    QVector<int> result(selected.begin(), selected.end());
+    std::sort(result.begin(), result.end());
+    return result;
+}
 } // namespace
 
 ExportOptions ExportOptions::fromMap(const QVariantMap &m)
@@ -118,17 +180,31 @@ ExportOptions ExportOptions::fromMap(const QVariantMap &m)
     o.content = m.value(QStringLiteral("content"), QStringLiteral("charts")).toString();
     o.paper = m.value(QStringLiteral("paper"), QStringLiteral("Letter")).toString();
     o.scope = m.value(QStringLiteral("scope"), QStringLiteral("all")).toString();
+    o.range = m.value(QStringLiteral("range"),
+                      m.contains(QStringLiteral("sets")) ? QStringLiteral("custom")
+                                                          : QStringLiteral("all"))
+                  .toString().toLower();
+    o.density = m.value(QStringLiteral("density"), QStringLiteral("standard")).toString().toLower();
+    if (!QStringList{QStringLiteral("standard"), QStringLiteral("compact"), QStringLiteral("large")}
+             .contains(o.density))
+        o.density = QStringLiteral("standard");
+    o.performerScope = m.contains(QStringLiteral("performerScope"))
+        ? m.value(QStringLiteral("performerScope")).toString()
+        : QStringLiteral("legacy");
+    o.performerSort = m.value(QStringLiteral("performerSort"), QStringLiteral("roster")).toString();
+    o.holdMode = m.value(QStringLiteral("holdMode"), QStringLiteral("hold")).toString();
     o.variants = m.value(QStringLiteral("variants"), QStringLiteral("active")).toString();
     o.framing = m.value(QStringLiteral("framing"), QStringLiteral("field")).toString();
     o.audio = m.value(QStringLiteral("audio"), QStringLiteral("silent")).toString();
     o.camera = m.value(QStringLiteral("camera"), QStringLiteral("director")).toString();
     o.movements = list(m.value(QStringLiteral("movements")));
-    o.sets = list(m.value(QStringLiteral("sets")), true);
+    o.sets = list(m.value(QStringLiteral("sets")));
     o.performers = list(m.value(QStringLiteral("performers")));
     o.sections = list(m.value(QStringLiteral("sections")));
+    o.instruments = list(m.value(QStringLiteral("instruments")));
     o.variantIds = list(m.value(QStringLiteral("variantIds")));
     auto b = [&](const QString &key, bool def = true) { return m.value(key, def).toBool(); };
-    o.landscape = b(QStringLiteral("landscape"));
+    o.landscape = b(QStringLiteral("landscape"), o.content != QStringLiteral("coordinates"));
     o.monochrome = b(QStringLiteral("monochrome"), false);
     o.grid = b(QStringLiteral("grid"));
     o.labels = b(QStringLiteral("labels"));
@@ -141,7 +217,12 @@ ExportOptions ExportOptions::fromMap(const QVariantMap &m)
     o.marchcraftLogo = b(QStringLiteral("marchcraftLogo"));
     o.subsets = b(QStringLiteral("subsets"));
     o.split = b(QStringLiteral("split"), false);
-    o.margin = qBound(5.0, m.value(QStringLiteral("margin"), 10).toDouble(), 35.0);
+    o.setNames = b(QStringLiteral("setNames"));
+    o.measures = b(QStringLiteral("measures"), false);
+    o.transitionPaths = b(QStringLiteral("transitionPaths"), false);
+    const double defaultMargin = o.content == QStringLiteral("coordinates")
+            || o.content == QStringLiteral("both") ? 8.0 : 10.0;
+    o.margin = qBound(5.0, m.value(QStringLiteral("margin"), defaultMargin).toDouble(), 35.0);
     o.performerLabelSize = qBound(4.0, m.value(QStringLiteral("performerLabelSize"), 6).toDouble(), 18.0);
     o.fontSize = qBound(6.0, m.value(QStringLiteral("fontSize"), 9).toDouble(), 18.0);
     o.markerSize = qBound(1.0, m.value(QStringLiteral("markerSize"), 2).toDouble(), 6.0);
@@ -257,6 +338,33 @@ QVariantMap ExportController::loadPreset(const QString &name) const
     auto preset = QSettings().value(QStringLiteral("export/presets/") + safeName(name)).toMap();
     if (!preset.contains(QStringLiteral("performerLabelSize")) && preset.contains(QStringLiteral("fontSize")))
         preset.insert(QStringLiteral("performerLabelSize"), preset.value(QStringLiteral("fontSize")));
+    if (!preset.contains(QStringLiteral("range")))
+        preset.insert(QStringLiteral("range"),
+                      list(preset.value(QStringLiteral("sets"))).isEmpty()
+                          ? QStringLiteral("all") : QStringLiteral("custom"));
+    if (!preset.contains(QStringLiteral("density")))
+        preset.insert(QStringLiteral("density"), QStringLiteral("standard"));
+    if (!preset.contains(QStringLiteral("performerScope"))) {
+        const bool hasPerformers = !list(preset.value(QStringLiteral("performers"))).isEmpty();
+        const bool hasSections = !list(preset.value(QStringLiteral("sections"))).isEmpty();
+        const bool hasInstruments = !list(preset.value(QStringLiteral("instruments"))).isEmpty();
+        const int filterKinds = int(hasPerformers) + int(hasSections) + int(hasInstruments);
+        preset.insert(QStringLiteral("performerScope"),
+                      filterKinds > 1 || hasPerformers ? QStringLiteral("custom")
+                      : hasSections ? QStringLiteral("section")
+                      : hasInstruments ? QStringLiteral("instrument")
+                                       : QStringLiteral("all"));
+    }
+    if (!preset.contains(QStringLiteral("performerSort")))
+        preset.insert(QStringLiteral("performerSort"), QStringLiteral("roster"));
+    if (!preset.contains(QStringLiteral("holdMode")))
+        preset.insert(QStringLiteral("holdMode"), QStringLiteral("hold"));
+    if (!preset.contains(QStringLiteral("setNames")))
+        preset.insert(QStringLiteral("setNames"), true);
+    if (!preset.contains(QStringLiteral("measures")))
+        preset.insert(QStringLiteral("measures"), false);
+    if (!preset.contains(QStringLiteral("transitionPaths")))
+        preset.insert(QStringLiteral("transitionPaths"), false);
     return preset;
 }
 bool ExportController::setBranding(const QString &name, const QString &logo, bool removeLogo)
@@ -332,6 +440,38 @@ QVariantList ExportController::choices() const
     }
     return result;
 }
+QVariantList ExportController::performerChoices() const
+{
+    QVariantList result;
+    for (const auto &performer : m_project->m_performers)
+        result << QVariantMap{{QStringLiteral("id"), performer.id},
+                              {QStringLiteral("label"), performer.label},
+                              {QStringLiteral("name"), performer.name},
+                              {QStringLiteral("instrument"), performer.instrument},
+                              {QStringLiteral("section"), performer.section},
+                              {QStringLiteral("display"), performer.label
+                                   + (performer.name.trimmed().isEmpty() ? QString{}
+                                      : QStringLiteral(" - ") + performer.name)}};
+    return result;
+}
+QStringList ExportController::sectionChoices() const
+{
+    QSet<QString> values;
+    for (const auto &performer : m_project->m_performers)
+        if (!performer.section.trimmed().isEmpty()) values.insert(performer.section.trimmed());
+    QStringList result(values.begin(), values.end());
+    result.sort(Qt::CaseInsensitive);
+    return result;
+}
+QStringList ExportController::instrumentChoices() const
+{
+    QSet<QString> values;
+    for (const auto &performer : m_project->m_performers)
+        if (!performer.instrument.trimmed().isEmpty()) values.insert(performer.instrument.trimmed());
+    QStringList result(values.begin(), values.end());
+    result.sort(Qt::CaseInsensitive);
+    return result;
+}
 QSizeF ExportController::pageSize() const
 {
     QPageSize::PageSizeId id = QPageSize::Letter;
@@ -348,14 +488,31 @@ QSizeF ExportController::pageSize() const
         size.transpose();
     return size;
 }
+
+QSizeF ExportController::pageSizeForPage(int page) const
+{
+    if (page >= 0 && page < m_pages.size() && m_pages[page].coordinatePage)
+        return QPageSize(QPageSize::Letter).size(QPageSize::Point);
+    return pageSize();
+}
+
 bool ExportController::prepare(const QVariantMap &options)
 {
-    if (m_busy)
-        return false;
+    if (m_busy) return false;
     ++m_previewRevision;
     m_tableRows.clear();
+    m_capacityInfo.clear();
+    m_canExport = true;
     m_totalFrames = 0;
     m_options = ExportOptions::fromMap(options);
+    const bool physicalCoordinates =
+        (m_options.content == QStringLiteral("coordinates") || m_options.content == QStringLiteral("both"))
+        && m_options.format != QStringLiteral("csv") && !m_options.format.startsWith(QStringLiteral("video"));
+    // Coordinate pages use a fixed portrait Letter layout. In a paired export,
+    // chart pages retain the user's chart paper and orientation in their own
+    // document instead of inheriting the performer-sheet geometry.
+    m_exportIdentifier = QStringLiteral("Export %1")
+                             .arg(QDateTime::currentDateTime().toString(QStringLiteral("yyyy-MM-dd HH:mm")));
     m_activeChart = -1;
     emit renderProjectChanged();
     m_clones.clear();
@@ -383,6 +540,10 @@ bool ExportController::prepare(const QVariantMap &options)
         fail(QStringLiteral("Crop width and height must be between 1 and 1000 steps."));
         return false;
     }
+    QSet<QString> selectedPerformerIds;
+    for (const auto &performer : m_project->m_performers)
+        if (performer.selected) selectedPerformerIds.insert(performer.id);
+
     auto snapshot = m_project->toJson();
     auto branding = m_project->m_exportBranding;
     if (options.contains(QStringLiteral("brandingCompany")))
@@ -416,6 +577,15 @@ bool ExportController::prepare(const QVariantMap &options)
         branding.insert(QStringLiteral("logo"), QString::fromLatin1(data.toBase64()));
     }
 
+    auto containsInsensitive = [](const QStringList &values, const QString &candidate) {
+        return std::any_of(values.cbegin(), values.cend(), [&](const QString &value) {
+            return value.compare(candidate, Qt::CaseInsensitive) == 0;
+        });
+    };
+    QCollator collator;
+    collator.setCaseSensitivity(Qt::CaseInsensitive);
+    collator.setNumericMode(true);
+
     const auto moves = snapshot.value(QStringLiteral("movements")).toArray();
     for (int i = 0; i < moves.size(); ++i)
     {
@@ -438,32 +608,83 @@ bool ExportController::prepare(const QVariantMap &options)
             fail(QStringLiteral("Could not read movement snapshot."));
             return false;
         }
-        clone->m_performers.erase(std::remove_if(clone->m_performers.begin(), clone->m_performers.end(),
-                                                 [&](const auto &p)
-                                                 {
-                                                     return (!m_options.performers.isEmpty() &&
-                                                             !m_options.performers.contains(p.id) &&
-                                                             !m_options.performers.contains(p.label)) ||
-                                                            (!m_options.sections.isEmpty() &&
-                                                             !m_options.sections.contains(p.section));
-                                                 }),
-                                  clone->m_performers.end());
+        QStringList performerFilters = m_options.performers;
+        QStringList sectionFilters = m_options.sections;
+        QStringList instrumentFilters = m_options.instruments;
+        if (m_options.performerScope == QStringLiteral("single") && performerFilters.isEmpty()
+            && !clone->m_performers.isEmpty())
+            performerFilters << clone->m_performers.first().id;
+        if (m_options.performerScope == QStringLiteral("section") && sectionFilters.isEmpty()) {
+            for (const auto &performer : std::as_const(clone->m_performers))
+                if (!performer.section.trimmed().isEmpty()) {
+                    sectionFilters << performer.section;
+                    break;
+                }
+        }
+        if (m_options.performerScope == QStringLiteral("instrument") && instrumentFilters.isEmpty()) {
+            for (const auto &performer : std::as_const(clone->m_performers))
+                if (!performer.instrument.trimmed().isEmpty()) {
+                    instrumentFilters << performer.instrument;
+                    break;
+                }
+        }
+        clone->m_performers.erase(
+            std::remove_if(clone->m_performers.begin(), clone->m_performers.end(), [&](const auto &performer) {
+                if (m_options.performerScope == QStringLiteral("selected"))
+                    return !selectedPerformerIds.contains(performer.id);
+                if (m_options.performerScope == QStringLiteral("section"))
+                    return sectionFilters.isEmpty()
+                        || !containsInsensitive(sectionFilters, performer.section);
+                if (m_options.performerScope == QStringLiteral("instrument"))
+                    return instrumentFilters.isEmpty()
+                        || !containsInsensitive(instrumentFilters, performer.instrument);
+                if (m_options.performerScope == QStringLiteral("single"))
+                    return performerFilters.isEmpty()
+                        || (!containsInsensitive(performerFilters, performer.id)
+                            && !containsInsensitive(performerFilters, performer.label));
+                if (m_options.performerScope == QStringLiteral("custom") && performerFilters.isEmpty()
+                    && sectionFilters.isEmpty() && instrumentFilters.isEmpty())
+                    return true;
+                if (m_options.performerScope == QStringLiteral("all"))
+                    return false;
+                return (!performerFilters.isEmpty()
+                        && !containsInsensitive(performerFilters, performer.id)
+                        && !containsInsensitive(performerFilters, performer.label))
+                    || (!sectionFilters.isEmpty()
+                        && !containsInsensitive(sectionFilters, performer.section))
+                    || (!instrumentFilters.isEmpty()
+                        && !containsInsensitive(instrumentFilters, performer.instrument));
+            }), clone->m_performers.end());
+        auto sortKey = [&](const auto &performer) {
+            if (m_options.performerSort == QStringLiteral("section"))
+                return performer.section + QChar(0x1f) + performer.label;
+            if (m_options.performerSort == QStringLiteral("instrument"))
+                return performer.instrument + QChar(0x1f) + performer.label;
+            if (m_options.performerSort == QStringLiteral("name"))
+                return performer.name + QChar(0x1f) + performer.label;
+            return performer.label;
+        };
+        if (m_options.performerSort != QStringLiteral("roster"))
+            std::stable_sort(clone->m_performers.begin(), clone->m_performers.end(),
+                             [&](const auto &a, const auto &b) {
+                                 return collator.compare(sortKey(a), sortKey(b)) < 0;
+                             });
         clone->m_exportBranding = branding;
         clone->m_exportRendering = true;
         for (auto &p : clone->m_performers)
             p.selected = false;
         if (clone->m_performers.isEmpty())
             continue;
-        for (int s = 0; s < clone->m_sets.size(); ++s)
-        {
+        const QVector<int> includedSets = selectedSetIndices(*clone, m_options);
+        QSet<int> includedSetLookup(includedSets.begin(), includedSets.end());
+        QVector<Chart> cloneCharts;
+        const int cloneIndex = int(m_clones.size());
+        for (int s = 0; s < clone->m_sets.size(); ++s) {
             const auto &set = clone->m_sets[s];
+            if (!includedSetLookup.contains(s)) continue;
             if (!m_options.subsets && set.subset)
                 continue;
-            if (!m_options.sets.isEmpty() && !m_options.sets.contains(set.id) &&
-                !m_options.sets.contains(set.number))
-                continue;
-            for (const auto &v : set.variants)
-            {
+            for (const auto &v : set.variants) {
                 if (m_options.variants == QStringLiteral("active") && v.id != set.activeVariantId)
                     continue;
                 if (m_options.variants == QStringLiteral("selected") && !m_options.variantIds.contains(v.id))
@@ -474,14 +695,16 @@ bool ExportController::prepare(const QVariantMap &options)
                 const double duration = s == 0 ? clone->openingDurationMs() : clone->transitionDurationMs(s);
                 if (m_options.format.startsWith(QStringLiteral("video")) && duration <= 0)
                     continue;
-                m_charts.push_back({int(m_clones.size()), s, v.id, start, duration});
+                cloneCharts.push_back({cloneIndex, s, v.id, start, duration});
             }
         }
+        if (cloneCharts.isEmpty()) continue;
         QStringList originalVariants;
         for (const auto &set : clone->m_sets)
             originalVariants << set.activeVariantId;
         m_originalVariants << originalVariants;
         m_clones.push_back(std::move(clone));
+        m_charts += cloneCharts;
     }
     if (m_charts.isEmpty())
     {
@@ -491,46 +714,207 @@ bool ExportController::prepare(const QVariantMap &options)
     const auto size = pageSize();
     const double margin = m_options.margin * 72 / 25.4;
     const double width = size.width() - 2 * margin;
-    for (int c = 0; c < m_charts.size(); ++c)
-    {
+    if (m_options.format != QStringLiteral("csv"))
+    for (int c = 0; c < m_charts.size(); ++c) {
         activateChart(c);
         auto &p = *m_clones[m_charts[c].clone];
         const auto &set = p.m_sets[m_charts[c].set];
         QStringList lines = m_options.notes
                                 ? wrap(set.activeVariant().caption, font(m_options.fontSize), width - 8)
                                 : QStringList{};
-        if (m_options.content == QStringLiteral("coordinates") && m_options.format != QStringLiteral("csv") &&
-            !m_options.format.startsWith(QStringLiteral("video")))
+        if (m_options.content == QStringLiteral("coordinates")
+            && !m_options.format.startsWith(QStringLiteral("video")))
             continue;
         const int chartLines = qMax(1, int(65 / (m_options.fontSize + 3)));
         const int continuationLines =
             qMax(1, int((size.height() - 2 * margin - 110) / (m_options.fontSize + 3)));
-        m_pages.push_back({c, lines.mid(0, chartLines), false, -1, {}});
+        Page page;
+        page.chart = c;
+        page.notes = lines.mid(0, chartLines);
+        m_pages.push_back(page);
         lines = lines.mid(chartLines);
-        while (!lines.isEmpty())
-        {
-            m_pages.push_back({c, lines.mid(0, continuationLines), true, -1, {}});
+        while (!lines.isEmpty()) {
+            Page continuation;
+            continuation.chart = c;
+            continuation.notes = lines.mid(0, continuationLines);
+            continuation.continuation = true;
+            m_pages.push_back(continuation);
             lines = lines.mid(continuationLines);
         }
     }
-    if ((m_options.content == QStringLiteral("coordinates") || m_options.content == QStringLiteral("both")) &&
-        m_options.format != QStringLiteral("csv") && !m_options.format.startsWith(QStringLiteral("video")))
-    {
-        const int rows = qMax(1, int((size.height() - 2 * margin - 110) / (m_options.fontSize * 3 + 10)));
-        for (int clone = 0; clone < int(m_clones.size()); ++clone)
-            for (int person = 0; person < m_clones[clone]->m_performers.size(); ++person)
-            {
-                QVector<int> charts;
-                for (int c = 0; c < m_charts.size(); ++c)
-                    if (m_charts[c].clone == clone)
-                        charts << c;
-                for (int r = 0; r < charts.size(); r += rows)
-                    m_pages.push_back({charts[r], {}, false, person, charts.mid(r, rows)});
-            }
+
+    QSet<int> movementIds;
+    for (const auto &chart : std::as_const(m_charts)) movementIds.insert(chart.clone);
+    const bool multipleMovements = movementIds.size() > 1;
+    QString movementLabel;
+    QString rangeLabel;
+    if (!multipleMovements) {
+        const int clone = m_charts.first().clone;
+        movementLabel = m_clones[clone]->m_movements[0].name;
+        QVector<int> indices;
+        QStringList labels;
+        for (const auto &chart : std::as_const(m_charts)) {
+            if (chart.clone != clone || indices.contains(chart.set)) continue;
+            indices << chart.set;
+            labels << m_clones[clone]->m_sets[chart.set].number;
+        }
+        bool contiguous = true;
+        for (int index = 1; index < indices.size(); ++index)
+            contiguous &= indices[index] == indices[index - 1] + 1;
+        if (labels.size() == 1) rangeLabel = QStringLiteral("Set %1").arg(labels.first());
+        else if (contiguous) rangeLabel = QStringLiteral("Sets %1-%2").arg(labels.first(), labels.last());
+        else if (labels.size() <= 5) rangeLabel = QStringLiteral("Sets %1").arg(labels.join(QStringLiteral(", ")));
+        else rangeLabel = QStringLiteral("%1 selected sets").arg(labels.size());
+    } else {
+        movementLabel = QStringLiteral("%1 movements").arg(movementIds.size());
+        QSet<QString> entries;
+        for (const auto &chart : std::as_const(m_charts))
+            entries.insert(QStringLiteral("%1:%2").arg(chart.clone).arg(chart.set));
+        rangeLabel = QStringLiteral("%1 selected sets").arg(entries.size());
     }
-    if (m_options.split && m_options.content == QStringLiteral("both"))
-        std::stable_sort(m_pages.begin(), m_pages.end(), [&](const Page &a, const Page &b)
-                         { return m_charts[a.chart].clone < m_charts[b.chart].clone; });
+
+    QVector<QHash<QString, int>> performerRows(m_clones.size());
+    QVector<MarchCraft::Performer> performers;
+    QSet<QString> performerIds;
+    for (int clone = 0; clone < int(m_clones.size()); ++clone) {
+        for (int row = 0; row < m_clones[clone]->m_performers.size(); ++row) {
+            const auto &performer = m_clones[clone]->m_performers[row];
+            performerRows[clone].insert(performer.id, row);
+            if (!performerIds.contains(performer.id)) {
+                performerIds.insert(performer.id);
+                performers.push_back(performer);
+            }
+        }
+    }
+
+    MarchCraft::CoordinateSheetOptions sheetOptions;
+    sheetOptions.density = m_options.density;
+    sheetOptions.marginPoints = margin;
+    sheetOptions.showSetNames = m_options.setNames;
+    sheetOptions.showMeasures = m_options.measures;
+    sheetOptions.showNotes = m_options.notes;
+    sheetOptions.companyLogo = m_options.companyLogo;
+    sheetOptions.marchcraftLogo = m_options.marchcraftLogo;
+    sheetOptions.monochrome = m_options.monochrome;
+    const QSizeF coordinateSize = QPageSize(QPageSize::Letter).size(QPageSize::Point);
+    const int selectedCapacity = MarchCraft::CoordinateSheetLayout::capacity(coordinateSize, sheetOptions);
+    auto capacityFor = [&](const QString &density) {
+        auto candidate = sheetOptions;
+        candidate.density = density;
+        return MarchCraft::CoordinateSheetLayout::capacity(coordinateSize, candidate);
+    };
+
+    QVector<MarchCraft::CoordinateSheetData> coordinateSheets;
+    bool longTextWarning = false;
+    if (physicalCoordinates || m_options.format == QStringLiteral("csv"))
+    for (const auto &performer : std::as_const(performers)) {
+        MarchCraft::CoordinateSheetData sheet;
+        sheet.showName = m_project->showName();
+        sheet.movement = movementLabel;
+        sheet.rehearsalRange = rangeLabel;
+        sheet.performerLabel = performer.label;
+        sheet.performerName = performer.name;
+        sheet.instrument = performer.instrument;
+        sheet.section = performer.section;
+        sheet.company = branding.value(QStringLiteral("company")).toString();
+        sheet.revision = m_exportIdentifier;
+        sheet.companyLogo = QImage::fromData(
+            QByteArray::fromBase64(branding.value(QStringLiteral("logo")).toString().toLatin1()));
+
+        int previousChart = -1;
+        QPointF previousPosition;
+        bool previousValid = false;
+        for (int chartIndex = 0; chartIndex < m_charts.size(); ++chartIndex) {
+            activateChart(chartIndex);
+            const auto &chart = m_charts[chartIndex];
+            auto &project = *m_clones[chart.clone];
+            const auto &set = project.m_sets[chart.set];
+            MarchCraft::CoordinateSheetRow row;
+            row.movement = project.m_movements[0].name;
+            row.set = (multipleMovements ? QString::number(chart.clone + 1) + QLatin1Char('.') : QString{})
+                + set.number;
+            if (m_options.variants != QStringLiteral("active") && set.variants.size() > 1)
+                row.set += QLatin1Char('/') + set.activeVariant().label;
+            row.variant = set.activeVariant().label;
+            row.setName = set.title;
+            row.measure = set.measure;
+            row.counts = QString::number(
+                project.setInfo(chart.set).value(QStringLiteral("counts")).toInt());
+
+            const int personRow = performerRows[chart.clone].value(performer.id, -1);
+            const bool valid = personRow >= 0
+                && set.activeVariant().placements.contains(performer.id);
+            const QPointF position = valid
+                ? set.activeVariant().placements.value(performer.id).position : QPointF{};
+            const bool hold = valid && previousValid && previousChart >= 0
+                && m_charts[previousChart].clone == chart.clone
+                && m_charts[previousChart].set + 1 == chart.set
+                && QLineF(previousPosition, position).length() < 0.01;
+            const auto coordinate = valid
+                ? MarchCraft::formatCoordinate(position, MarchCraft::fieldGeometry(project.fieldPreset()),
+                                               project.fieldWidthSteps())
+                : MarchCraft::CoordinateText{QStringLiteral("Coordinate unavailable"),
+                                             QStringLiteral("Coordinate unavailable"), false};
+            if (hold && m_options.holdMode != QStringLiteral("repeat")) {
+                row.sideToSide = QStringLiteral("Hold");
+                row.frontToBack = QStringLiteral("Hold");
+            } else {
+                row.sideToSide = coordinate.sideToSide;
+                row.frontToBack = coordinate.frontToBack;
+            }
+
+            QStringList notes;
+            if (!valid) notes << QStringLiteral("Coordinate unavailable");
+            else if (hold) notes << QStringLiteral("Hold");
+            if (valid && chart.set > 0 && !hold) {
+                const auto &placement = set.activeVariant().placements.value(performer.id);
+                const auto &path = project.transitionPath(personRow, chart.set);
+                if (path.startCount() > 0.01)
+                    notes << QStringLiteral("Delay %1").arg(
+                        MarchCraft::ProjectAlgorithms::compactNumber(path.startCount()));
+                if (placement.pathType == QStringLiteral("follow")) notes << QStringLiteral("FTL");
+                else if (placement.pathType == QStringLiteral("gate")) notes << QStringLiteral("Gate");
+                else if (placement.pathType == QStringLiteral("pivot")) notes << QStringLiteral("Pivot");
+                else if (placement.pathType == QStringLiteral("curved")) notes << QStringLiteral("Curved path");
+            }
+            const QString caption = set.activeVariant().caption.simplified();
+            if (m_options.notes && !caption.isEmpty()) notes << caption;
+            notes.removeDuplicates();
+            row.notes = notes.join(QStringLiteral("; "));
+            longTextWarning |= row.setName.size() > 28 || row.notes.size() > 42;
+            sheet.rows << row;
+            previousChart = chartIndex;
+            previousPosition = position;
+            previousValid = valid;
+        }
+        coordinateSheets << sheet;
+    }
+
+    if (physicalCoordinates) {
+        const bool overflow = !coordinateSheets.isEmpty()
+            && coordinateSheets.first().rows.size() > selectedCapacity;
+        m_canExport = !overflow;
+        for (int performer = 0; performer < coordinateSheets.size(); ++performer) {
+            Page page;
+            page.chart = 0;
+            page.performer = performer;
+            page.performerId = performers[performer].id;
+            page.coordinateSheet = coordinateSheets[performer];
+            page.coordinatePage = true;
+            page.capacityExceeded = overflow;
+            m_pages.push_back(std::move(page));
+        }
+        const int rowCount = coordinateSheets.isEmpty() ? 0 : coordinateSheets.first().rows.size();
+        m_capacityInfo = {{QStringLiteral("selectedRows"), rowCount},
+                          {QStringLiteral("capacity"), selectedCapacity},
+                          {QStringLiteral("standard"), capacityFor(QStringLiteral("standard"))},
+                          {QStringLiteral("compact"), capacityFor(QStringLiteral("compact"))},
+                          {QStringLiteral("large"), capacityFor(QStringLiteral("large"))},
+                          {QStringLiteral("exceeded"), overflow},
+                          {QStringLiteral("longTextWarning"), longTextWarning},
+                          {QStringLiteral("performers"), coordinateSheets.size()}};
+    }
+
     m_frameEnds.clear();
     m_totalFrames = 0;
     for (const auto &chart : m_charts)
@@ -541,52 +925,60 @@ bool ExportController::prepare(const QVariantMap &options)
     m_tableRows << QVariant(QStringList{
         QStringLiteral("Movement"), QStringLiteral("Performer"), QStringLiteral("Name"),
         QStringLiteral("Instrument"), QStringLiteral("Section"), QStringLiteral("Set"),
-        QStringLiteral("Variant"), QStringLiteral("Measure"), QStringLiteral("Counts"),
-        QStringLiteral("Coordinate"), QStringLiteral("Move steps"), QStringLiteral("Instructions")});
+        QStringLiteral("Set Name"), QStringLiteral("Variant"), QStringLiteral("Measure"),
+        QStringLiteral("Counts"), QStringLiteral("Side-to-Side"), QStringLiteral("Front-to-Back"),
+        QStringLiteral("Notes")});
     if (m_options.format == QStringLiteral("csv"))
-        for (int c = 0; c < m_charts.size(); ++c)
-        {
-            activateChart(c);
-            auto &p = *m_clones[m_charts[c].clone];
-            const auto &set = p.m_sets[m_charts[c].set];
-            for (int r = 0; r < p.m_performers.size(); ++r)
-            {
-                const auto &person = p.m_performers[r];
+        for (const auto &sheet : std::as_const(coordinateSheets))
+            for (const auto &row : sheet.rows)
                 m_tableRows << QVariant(QStringList{
-                    p.m_movements[0].name, person.label, person.name, person.instrument, person.section,
-                    set.number, set.activeVariant().label, set.measure,
-                    QString::number(p.setInfo(m_charts[c].set).value(QStringLiteral("counts")).toInt()),
-                    p.coordinateFor(r, m_charts[c].set),
-                    QString::number(p.transitionDistance(r, m_charts[c].set), 'f', 2),
-                    set.activeVariant().caption});
-            }
-        }
+                    row.movement, sheet.performerLabel, sheet.performerName, sheet.instrument, sheet.section,
+                    row.set, row.setName, row.variant, row.measure, row.counts,
+                    row.sideToSide, row.frontToBack, row.notes});
     for (const auto &page : m_pages)
     {
+        if (page.coordinatePage) {
+            m_pageNames << QStringLiteral("Coordinates / %1 / %2")
+                               .arg(page.coordinateSheet.performerLabel,
+                                    page.coordinateSheet.rehearsalRange);
+            continue;
+        }
         activateChart(page.chart);
         const auto &p = *m_clones[m_charts[page.chart].clone];
         const auto &s = p.m_sets[m_charts[page.chart].set];
-        QString title = p.m_movements[0].name + QStringLiteral(" / Set ") + s.number + QStringLiteral(" / ") +
-                        s.activeVariant().label + QStringLiteral(" ") + s.activeVariant().name;
+        QString title = p.m_movements[0].name + QStringLiteral(" / Set ") + s.number;
+        if (!s.title.isEmpty()) title += QStringLiteral(" / ") + s.title;
+        if (s.variants.size() > 1)
+            title += QStringLiteral(" / Variant ") + s.activeVariant().label + QStringLiteral(" ")
+                + s.activeVariant().name;
         if (page.continuation)
             title += QStringLiteral(" / Instructions continued");
-        if (page.performer >= 0)
-            title += QStringLiteral(" / ") + p.m_performers[page.performer].label;
-        m_pageNames << (page.performer >= 0 ? QStringLiteral("Coordinates / ")
-                                            : QStringLiteral("Diagram / ")) +
-                           title;
+        m_pageNames << QStringLiteral("Diagram / ") + title;
     }
     m_activeChart = -1;
     emit renderProjectChanged();
     m_message = QStringLiteral("%1 pages, %2 selected set variants").arg(m_pages.size()).arg(m_charts.size());
     if (m_options.format == QStringLiteral("csv"))
-        m_message = QStringLiteral("%1 data rows, 12 columns").arg(m_tableRows.size() - 1);
+        m_message = QStringLiteral("%1 data rows, 13 columns").arg(m_tableRows.size() - 1);
     else if (m_options.format.startsWith(QStringLiteral("video")))
         m_message = QStringLiteral("%1 seconds · %2 frames · %3 fps")
                         .arg(duration(), 0, 'f', 2)
                         .arg(m_totalFrames)
                         .arg(m_options.fps);
-    if (m_options.framing == QStringLiteral("custom"))
+    else if (physicalCoordinates) {
+        const int rows = m_capacityInfo.value(QStringLiteral("selectedRows")).toInt();
+        const int capacity = m_capacityInfo.value(QStringLiteral("capacity")).toInt();
+        if (!m_canExport)
+            m_message = QStringLiteral("Capacity warning: %1 selected rows; %2 fit at %3 density. "
+                                       "Choose Compact or narrow the set range. Export is disabled.")
+                            .arg(rows).arg(capacity).arg(m_options.density);
+        else
+            m_message = QStringLiteral("%1 performer sheets, exactly one page each; %2 of %3 rows used.")
+                            .arg(coordinateSheets.size()).arg(rows).arg(capacity);
+        if (longTextWarning)
+            m_message += QStringLiteral(" Long set names or notes may be shortened in print.");
+    }
+    if (m_options.framing == QStringLiteral("custom") && !physicalCoordinates)
     {
         bool clipped = false;
         for (int c = 0; c < m_charts.size(); ++c)
@@ -601,7 +993,7 @@ bool ExportController::prepare(const QVariantMap &options)
     }
     if (m_options.format.startsWith(QStringLiteral("video")))
         previewTime(0);
-    else
+    else if (m_options.format != QStringLiteral("csv") && !m_pages.isEmpty())
         preview(0);
     emit changed();
     return true;
@@ -776,6 +1168,24 @@ void ExportController::drawChart(QPainter &p, const QRectF &area, DrillProject &
             p.drawRect(QRectF(-w / 2, -h / 2, w, h));
             p.restore();
         }
+    if (m_options.transitionPaths && project.currentSetIndex() > 0 && !animated) {
+        p.save();
+        p.setBrush(Qt::NoBrush);
+        p.setPen(QPen(QColor(QStringLiteral("#707070")), 0.65, Qt::DashLine));
+        for (int performer = 0; performer < project.m_performers.size(); ++performer) {
+            const auto &path = project.transitionPath(performer, project.currentSetIndex());
+            if (path.distance() < 0.01) continue;
+            QPainterPath rendered;
+            const QPointF first = path.position(0.0);
+            rendered.moveTo(point(first.x(), first.y()));
+            for (int sample = 1; sample <= 24; ++sample) {
+                const QPointF value = path.position(double(sample) / 24.0);
+                rendered.lineTo(point(value.x(), value.y()));
+            }
+            p.drawPath(rendered);
+        }
+        p.restore();
+    }
     p.setFont(font(m_options.performerLabelSize));
     QVector<QRectF> occupied;
     for (const auto &pt : points)
@@ -840,11 +1250,25 @@ void ExportController::drawChart(QPainter &p, const QRectF &area, DrillProject &
 void ExportController::drawPage(QPainter &p, const QRectF &target, int index, bool animated)
 {
     const auto &page = m_pages[index];
+    const QSizeF size = pageSizeForPage(index);
+    if (page.coordinatePage) {
+        MarchCraft::CoordinateSheetOptions options;
+        options.density = m_options.density;
+        options.marginPoints = m_options.margin * 72 / 25.4;
+        options.showSetNames = m_options.setNames;
+        options.showMeasures = m_options.measures;
+        options.showNotes = m_options.notes;
+        options.companyLogo = m_options.companyLogo;
+        options.marchcraftLogo = m_options.marchcraftLogo;
+        options.monochrome = m_options.monochrome;
+        MarchCraft::CoordinateSheetLayout::draw(p, target, size, page.coordinateSheet, options,
+                                                page.capacityExceeded);
+        return;
+    }
     if (!animated)
         activateChart(page.chart);
     auto &project = *m_clones[m_charts[page.chart].clone];
     const auto &set = project.m_sets[m_charts[page.chart].set];
-    const QSizeF size = pageSize();
     p.save();
     const double pageScale = qMin(target.width() / size.width(), target.height() / size.height());
     p.translate(target.center() - QPointF(size.width() * pageScale / 2, size.height() * pageScale / 2));
@@ -899,12 +1323,20 @@ void ExportController::drawPage(QPainter &p, const QRectF &target, int index, bo
             y += 16;
         }
         p.setFont(font(m_options.fontSize + 1, true));
+        QString chartIdentity = QStringLiteral("SET %1").arg(set.number);
+        if (set.variants.size() > 1)
+            chartIdentity += QStringLiteral("  VARIANT %1").arg(set.activeVariant().label);
         p.drawText(QRectF(body.left(), y, body.width(), 30), Qt::TextWordWrap,
-                   QStringLiteral("SET %1 %2  COUNTS: %3  MEASURES: %4  %5%6")
-                       .arg(set.number, set.activeVariant().label)
+                   QStringLiteral("%1  COUNTS: %2  MEASURES: %3  %4%5")
+                       .arg(chartIdentity)
                        .arg(project.setInfo(m_charts[page.chart].set)[QStringLiteral("counts")].toInt())
                        .arg(set.measure,
-                            project.m_movements[0].name + QStringLiteral(" / ") + set.activeVariant().name,
+                            project.m_movements[0].name
+                                + (set.title.isEmpty() ? QString{} : QStringLiteral(" / ") + set.title)
+                                + (set.variants.size() > 1
+                                       ? QStringLiteral(" / Variant ") + set.activeVariant().label
+                                             + QStringLiteral(" ") + set.activeVariant().name
+                                       : QString{}),
                             page.continuation ? QStringLiteral(" - Instructions continued") : QString{}));
         y += 32;
         p.setFont(font(m_options.fontSize));
@@ -933,7 +1365,7 @@ void ExportController::preview(int page)
 {
     if (m_busy || page < 0 || page >= m_pages.size())
         return;
-    const auto size = pageSize();
+    const auto size = pageSizeForPage(page);
     QImage image((size * 1.6).toSize(), QImage::Format_RGB32);
     image.fill(Qt::white);
     QPainter painter(&image);
@@ -967,13 +1399,14 @@ QStringList ExportController::plannedFiles(const QString &destination) const
                 continue;
             const auto &p = *m_clones[m_charts[m_pages[page].chart].clone];
             QString name = m_options.basename;
-            if (m_options.split)
+            if (m_pages[page].coordinatePage) {
+                name += QStringLiteral(" - Coordinates");
+            } else if (m_options.split)
                 name += QStringLiteral(" - %1-%2")
                             .arg(m_charts[m_pages[page].chart].clone + 1)
                             .arg(safeName(p.m_movements[0].name));
-            if (m_options.content == QStringLiteral("both"))
-                name += m_pages[page].performer >= 0 ? QStringLiteral(" - Coordinates")
-                                                     : QStringLiteral(" - Drill Charts");
+            if (m_options.content == QStringLiteral("both") && !m_pages[page].coordinatePage)
+                name += QStringLiteral(" - Drill Charts");
             files << QDir(path).filePath(name + QStringLiteral(".pdf"));
         }
     }
@@ -989,8 +1422,14 @@ QStringList ExportController::plannedFiles(const QString &destination) const
 }
 bool ExportController::start(const QString &destination, bool overwrite)
 {
-    if (m_busy || m_pages.isEmpty())
+    if (m_busy || (m_options.format == QStringLiteral("csv") ? m_tableRows.size() <= 1 : m_pages.isEmpty()))
         return false;
+    if (!m_canExport) {
+        m_message = QStringLiteral("Export is disabled because the selected rehearsal range does not fit "
+                                   "on one performer sheet. Choose Compact or narrow the range.");
+        emit changed();
+        return false;
+    }
     m_files = plannedFiles(destination);
     m_staged.clear();
     m_encoderError.clear();
@@ -1020,7 +1459,7 @@ bool ExportController::start(const QString &destination, bool overwrite)
     if (m_options.format == QStringLiteral("print"))
     {
         m_printer = std::make_unique<QPrinter>(QPrinter::HighResolution);
-        m_printer->setPageSize(QPageSize(pageSize(), QPageSize::Point));
+        m_printer->setPageSize(QPageSize(pageSizeForPage(0), QPageSize::Point));
         m_printer->setFullPage(true);
         QPrintDialog dialog(m_printer.get());
         dialog.setMinMax(1, m_pages.size());
@@ -1030,6 +1469,10 @@ bool ExportController::start(const QString &destination, bool overwrite)
             m_printer.reset();
             return false;
         }
+        const int firstPrintedPage = qBound(0, m_printer->fromPage() - 1, m_pages.size() - 1);
+        if (m_pages[firstPrintedPage].coordinatePage)
+            m_printer->setPageSize(QPageSize(pageSizeForPage(firstPrintedPage), QPageSize::Point));
+        m_printer->setFullPage(true);
         m_painter = std::make_unique<QPainter>(m_printer.get());
         if (!m_painter->isActive())
         {
@@ -1160,7 +1603,7 @@ void ExportController::tick()
     }
     if (m_options.format == QStringLiteral("png"))
     {
-        const QSize pixels = (pageSize() * (m_options.dpi / 72.0)).toSize();
+        const QSize pixels = (pageSizeForPage(m_nextPage) * (m_options.dpi / 72.0)).toSize();
         QImage image(pixels, QImage::Format_RGB32);
         image.setDotsPerMeterX(qRound(m_options.dpi / 0.0254));
         image.setDotsPerMeterY(qRound(m_options.dpi / 0.0254));
@@ -1192,7 +1635,7 @@ void ExportController::tick()
                 if (documentForPage(p) != documentForPage(p - 1))
                     ++output;
             m_pdf = std::make_unique<QPdfWriter>(m_staged[output]);
-            m_pdf->setPageSize(QPageSize(pageSize(), QPageSize::Point));
+            m_pdf->setPageSize(QPageSize(pageSizeForPage(m_nextPage), QPageSize::Point));
             m_pdf->setPageMargins(QMarginsF(0, 0, 0, 0));
             m_pdf->setResolution(144);
             m_pdf->setCreator(QStringLiteral("MarchCraft"));
@@ -1205,6 +1648,9 @@ void ExportController::tick()
         }
         else if (m_nextPage > 0 && (!m_printer || m_nextPage > qMax(0, m_printer->fromPage() - 1)))
         {
+            if (m_printer && (m_pages[m_nextPage].coordinatePage
+                              || m_pages[m_nextPage - 1].coordinatePage != m_pages[m_nextPage].coordinatePage))
+                m_printer->setPageSize(QPageSize(pageSizeForPage(m_nextPage), QPageSize::Point));
             bool ok = m_printer ? m_printer->newPage() : m_pdf->newPage();
             if (!ok)
             {
@@ -1511,8 +1957,10 @@ void ExportController::beginMux()
 
 int ExportController::documentForPage(int page) const
 {
-    return (m_options.split ? m_charts[m_pages[page].chart].clone * 2 : 0) +
-           (m_options.content == QStringLiteral("both") && m_pages[page].performer >= 0 ? 1 : 0);
+    if (m_pages[page].coordinatePage)
+        return m_options.content == QStringLiteral("both")
+            ? (m_options.split ? int(m_clones.size()) : 1) : 0;
+    return m_options.split ? m_charts[m_pages[page].chart].clone : 0;
 }
 double ExportController::duration() const
 {
@@ -1640,6 +2088,14 @@ int ExportController::firstPageForFile(int file) const
         if (document == file)
             return page;
     }
+    return 0;
+}
+
+int ExportController::firstPageForPerformer(const QString &performerId) const
+{
+    for (int page = 0; page < m_pages.size(); ++page)
+        if (m_pages[page].coordinatePage && m_pages[page].performerId == performerId)
+            return page;
     return 0;
 }
 

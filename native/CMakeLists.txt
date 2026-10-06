@@ -43,12 +43,17 @@ qt_add_executable(marchcraft
     src/TransportController.h
     src/ExportController.cpp
     src/ExportController.h
+    src/CoordinateSheet.cpp
+    src/CoordinateSheet.h
     src/WorkspaceController.cpp
     src/WorkspaceController.h
     src/SceneTypes.h
     src/AssetCatalog.cpp
     src/AssetCatalog.h
 )
+# The expanded Qt 6 include list exceeds Windows' command-line limit in
+# AUTOMOC's optional compiler-predefine probe under some CMake installations.
+set_target_properties(marchcraft PROPERTIES AUTOMOC_COMPILER_PREDEFINES OFF)
 
 qt_add_qml_module(marchcraft
     URI MarchCraft
@@ -232,12 +237,18 @@ if(BUILD_TESTING)
         src/TransportController.h
         src/ExportController.cpp
         src/ExportController.h
+        src/CoordinateSheet.cpp
+        src/CoordinateSheet.h
         src/WorkspaceController.cpp
         src/WorkspaceController.h
         src/SceneTypes.h
         src/AssetCatalog.cpp
         src/AssetCatalog.h
     )
+    # MinGW's command-line limit can be exceeded by AUTOMOC's compiler
+    # predefine probe once the QtTest target's include paths are expanded.
+    # MOC does not require those compiler predefines for this target.
+    set_target_properties(marchcraft_tests PROPERTIES AUTOMOC_COMPILER_PREDEFINES OFF)
     target_include_directories(marchcraft_tests PRIVATE src)
     target_link_libraries(marchcraft_tests PRIVATE
         Qt6::Core Qt6::Concurrent Qt6::Gui Qt6::Widgets Qt6::PrintSupport Qt6::Quick Qt6::QuickControls2 Qt6::Multimedia Qt6::Xml Qt6::Sql Qt6::Test)
